@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<parametros>
+
+    <!-- Copiar este arquivo para parametros-agforms.xml e proteger os valores antes da execução. -->
+    <DatabaseDriver>org.postgresql.Driver</DatabaseDriver>
+    <NomeUsuarioMaster>CONFIGURAR</NomeUsuarioMaster>
+    <SenhaUsuarioMaster>CONFIGURAR</SenhaUsuarioMaster>
+    <DbUrl>CONFIGURAR</DbUrl>
+
+    <CodigoDoCliente>ARGOUSFORMS</CodigoDoCliente>
+    <NomeDoCliente>ArgousForms</NomeDoCliente>
+
+</parametros>

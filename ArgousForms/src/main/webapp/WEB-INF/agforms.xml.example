@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+	<comment>Modelo de parâmetros do sistema ArgousForms</comment>
+	<!-- Copiar este arquivo para agforms.xml e configurar os valores da instalação. -->
+	<entry key="keystore.arquivo">keystore.p12</entry>
+	<entry key="keystore.senha">CONFIGURAR</entry>
+	<entry key="keystore.alias.ativo">CONFIGURAR</entry>
+	<entry key="argous-api-url"></entry>
+	<entry key="argous-api-codigo-cliente"></entry>
+	<entry key="argous-api-codigo-token"></entry>
+	<entry key="argous-api-key"></entry>
+	<!-- OIDC: habilitar somente depois de cadastrar os callbacks nos provedores. -->
+	<entry key="frontend-url"></entry>
+	<entry key="google-login-enabled">false</entry>
+	<entry key="google-client-id"></entry>
+	<entry key="google-client-secret"></entry>
+	<entry key="google-redirect-uri"></entry>
+	<entry key="microsoft-login-enabled">false</entry>
+	<entry key="microsoft-client-id"></entry>
+	<entry key="microsoft-client-secret"></entry>
+	<entry key="microsoft-tenant-id"></entry>
+	<entry key="microsoft-redirect-uri"></entry>
+</properties>
