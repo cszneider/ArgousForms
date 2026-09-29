@@ -1,0 +1,131 @@
+/* Dark-mode semantic colors; light mode keeps each existing CSS fallback. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --theme-canvas: #101925;
+  --theme-surface: #182533;
+  --theme-surface-muted: #1e2d3d;
+  --theme-surface-raised: #293e50;
+  --theme-surface-green: #19392f;
+  --theme-surface-warning: #392f1f;
+  --theme-surface-blue: #203549;
+  --theme-surface-purple: #332b43;
+  --theme-text-strong: #e3edf6;
+  --theme-text-secondary: #bdccdb;
+  --theme-text-muted: #a4b6c7;
+  --theme-accent: #87d3b4;
+  --theme-warning-text: #e3be7d;
+  --theme-purple-text: #c5afe8;
+  --theme-border: #304455;
+  --theme-border-green: #3b6252;
+  --theme-border-warning: #695437;
+  --theme-grid: #2e4050;
+  --theme-focus: #507f6c;
+  --flow-return-bg: #392f1f;
+  --flow-return-text: #e3be7d;
+}
+:root {
+  --flow-return-bg: #fff5e8;
+  --flow-return-text: #985b18;
+}
+html[data-theme] body {
+  background: var(--background);
+  color: var(--foreground);
+}
+/* A document remains a paper preview in either application theme. */
+.document-paper {
+  --background: #fff;
+  --foreground: #172b41;
+  --primary: #12665b;
+  --border: #e1e7ed;
+  --theme-canvas: initial;
+  --theme-surface: initial;
+  --theme-surface-muted: initial;
+  --theme-surface-raised: initial;
+  --theme-surface-green: initial;
+  --theme-surface-warning: initial;
+  --theme-surface-blue: initial;
+  --theme-surface-purple: initial;
+  --theme-text-strong: initial;
+  --theme-text-secondary: initial;
+  --theme-text-muted: initial;
+  --theme-accent: initial;
+  --theme-warning-text: initial;
+  --theme-purple-text: initial;
+  --theme-border: initial;
+  --theme-border-green: initial;
+  --theme-border-warning: initial;
+  --theme-grid: initial;
+  --theme-focus: initial;
+  color-scheme: light;
+}
+.landing-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.landing-login-short {
+  display: none;
+}
+.login-form > .login-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.theme-toggle.MuiIconButton-root:hover {
+  background: var(--theme-surface-raised, #edf4f1);
+}
+@media (max-width: 600px) {
+  .landing-actions {
+    gap: 8px;
+  }
+  .landing-login-full {
+    display: none;
+  }
+  .landing-login-short {
+    display: inline;
+  }
+  .participant-picker {
+    gap: 7px;
+  }
+  .participant-picker .theme-toggle {
+    width: 36px;
+    height: 36px;
+  }
+}
+@media print {
+  :root {
+    --theme-canvas: initial !important;
+    --theme-surface: initial !important;
+    --theme-surface-muted: initial !important;
+    --theme-surface-raised: initial !important;
+    --theme-surface-green: initial !important;
+    --theme-surface-warning: initial !important;
+    --theme-surface-blue: initial !important;
+    --theme-surface-purple: initial !important;
+    --theme-text-strong: initial !important;
+    --theme-text-secondary: initial !important;
+    --theme-text-muted: initial !important;
+    --theme-accent: initial !important;
+    --theme-warning-text: initial !important;
+    --theme-purple-text: initial !important;
+    --theme-border: initial !important;
+    --theme-border-green: initial !important;
+    --theme-border-warning: initial !important;
+    --theme-grid: initial !important;
+    --theme-focus: initial !important;
+    --background: #fff !important;
+    --foreground: #172b41 !important;
+    color-scheme: light !important;
+  }
+  html[data-theme] body {
+    background: #fff !important;
+    color: #172b41 !important;
+  }
+  .theme-toggle {
+    display: none !important;
+  }
+}
