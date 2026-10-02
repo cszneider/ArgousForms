@@ -136,3 +136,22 @@ Em **Documentos → Novo documento → Criar no editor ou importar modelo**, cri
 - Assinaturas são imagens PNG/JPEG/WebP e não constituem assinatura com certificado digital.
 - Os originais ficam no IndexedDB deste navegador. Documentos guardam uma cópia do modelo e a referência ao original daquela versão. Não existe sincronização de arquivos entre máquinas; limpar os dados do navegador remove esses arquivos.
 - Documentos criados no editor podem ser impressos ou salvos como PDF pelo diálogo de impressão. Modelos PDF possuem o botão **Baixar PDF preenchido**.
+
+## Desenvolvimento e envio ao GitHub
+
+Esta pasta é a fonte principal do frontend. A pasta antiga ArgousDocs fica apenas como backup.
+
+```sh
+npm ci
+npm run dev
+```
+
+A aplicação usa a porta 3002. Para enviar alterações, instale o GitHub CLI e autentique sua conta uma vez:
+
+```sh
+gh auth login --hostname github.com --git-protocol ssh --web
+npm run enviar -- --check
+npm run enviar -- "Descrição das alterações"
+```
+
+O comando testa e compila antes de registrar as alterações desta pasta, envia para o remoto `principal` (`cszneider/ArgousForms`) e abre ou atualiza um pull request. Não faz merge automático. Revise o conteúdo local antes de executar; não armazene segredos no código. Se a branch já tiver um PR encerrado, atualize a main e crie uma nova branch antes do próximo envio. Falhas interrompem o processo e preservam as alterações locais.

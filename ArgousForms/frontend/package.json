@@ -11,7 +11,8 @@
     "start": "vinext start --port 3002",
     "lint": "oxlint",
     "format": "oxfmt",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "enviar": "node scripts/enviar.js"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

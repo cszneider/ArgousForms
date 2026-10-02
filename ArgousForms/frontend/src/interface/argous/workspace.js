@@ -1,5 +1,11 @@
 'use client';
-import { useI18n, LanguageSelect } from '../../components/i18n/i18n.js';
+import UserSettings from '../configuracoes/index.js';
+import {
+  sessionRole,
+  isEnabled,
+  PLATFORM_KEY,
+} from '../../programas/plataforma/access.js';
+import { useI18n } from '../../components/i18n/i18n.js';
 import { useEffect, useState } from 'react';
 import {
   Button,
@@ -125,21 +131,28 @@ function WorkspaceInner() {
   const [personRole, setPersonRole] = useState('participant');
   useEffect(() => {
     try {
-      if (sessionStorage.getItem('argousdocs:session') !== 'demo') {
-        window.location.replace('/login');
+      if (sessionRole() !== 'company') {
+        window.location.replace(
+          sessionRole() === 'platform' ? '/plataforma' : '/login',
+        );
         return;
       }
       const data = readStore();
       writeStore(data);
       setState(data);
       const saved = sessionStorage.getItem('argousdocs:actor');
-      if (saved && data.people.some((p) => p.id === saved)) setActorId(saved);
+      if (saved && isEnabled(saved) && data.people.some((p) => p.id === saved))
+        setActorId(saved);
     } catch (e) {
       setLoadError(e.message);
     }
   }, []);
   const commit = (next) => {
     try {
+      if (sessionRole() !== 'company' || !isEnabled(actorId))
+        throw Error(
+          'Usuário desativado. Contate o administrador da plataforma.',
+        );
       writeStore(next, state || undefined);
       setState(next);
       return true;
@@ -160,6 +173,15 @@ function WorkspaceInner() {
   }, [dirty]);
   useEffect(() => {
     const handler = (e) => {
+      if (e.key === PLATFORM_KEY) {
+        setState((current) => (current ? { ...current } : current));
+        if (sessionRole() !== 'company') window.location.replace('/login');
+        else if (!isEnabled(actorId)) {
+          setActorId('admin');
+          sessionStorage.removeItem('argousdocs:actor');
+          setEditor(null);
+        }
+      }
       if (e.key === 'argousdocs:workspace:v1')
         setToast({
           text: 'Os dados foram alterados em outra aba. Recarregue esta página antes de continuar.',
@@ -168,7 +190,7 @@ function WorkspaceInner() {
     };
     window.addEventListener('storage', handler);
     return () => window.removeEventListener('storage', handler);
-  }, []);
+  }, [actorId]);
   useEffect(() => {
     if (!state) return;
     const context = document.modelContext;
@@ -326,36 +348,48 @@ function WorkspaceInner() {
           ))}
       </nav>
       <div className="sidebar-bottom">
-        <div className="demo-note">
-          <span className="dot" />
-          <strong>{tr('Ambiente de demonstração')}</strong>
-          <p>{tr('Explore o fluxo com diferentes participantes.')}</p>
-        </div>
-        <button
-          className="profile-exit"
-          onClick={() => {
-            if (!mayLeave()) return;
-            sessionStorage.removeItem('argousdocs:session');
-            window.location.href = '/login';
-          }}
-        >
-          <Avatar
+        <div className="profile-exit">
+          <Button
+            onClick={() => navigate('settings')}
+            aria-label={tr('Configurações do usuário')}
             sx={{
-              width: 34,
-              height: 34,
-              bgcolor: 'action.selected',
-              color: 'text.primary',
-              fontSize: 13,
+              display: 'flex',
+              gap: 1.25,
+              textTransform: 'none',
+              color: 'inherit',
+              textAlign: 'left',
+              justifyContent: 'flex-start',
+              flex: 1,
+              minWidth: 0,
             }}
           >
-            {initials(person.name)}
-          </Avatar>
-          <div>
-            <strong>{person.name}</strong>
-            <small>{tr(roleLabel(person))}</small>
-          </div>
-          <LogOut size={17} />
-        </button>
+            <Avatar
+              sx={{
+                width: 34,
+                height: 34,
+                bgcolor: 'action.selected',
+                color: 'text.primary',
+                fontSize: 13,
+              }}
+            >
+              {initials(person.name)}
+            </Avatar>
+            <div>
+              <strong>{person.name}</strong>
+              <small>{tr(roleLabel(person))}</small>
+            </div>
+          </Button>
+          <IconButton
+            aria-label={tr('Sair')}
+            onClick={() => {
+              if (!mayLeave()) return;
+              sessionStorage.removeItem('argousdocs:session');
+              window.location.href = '/login';
+            }}
+          >
+            <LogOut size={17} />
+          </IconButton>
+        </div>
       </div>
     </div>
   );
@@ -527,44 +561,18 @@ function WorkspaceInner() {
             >
               <Menu size={22} />
             </IconButton>
-            <span>{tr('Espaço de trabalho')}</span>
+            <span>{tr('Empresa de teste')}</span>
             <ChevronRight size={14} />
-            <strong>{tr(nav.find((n) => n[0] === view)?.[1] || '')}</strong>
+            <strong>
+              {tr(
+                view === 'settings'
+                  ? 'Configurações do usuário'
+                  : nav.find((n) => n[0] === view)?.[1] || '',
+              )}
+            </strong>
           </div>
           <div className="participant-picker">
-            <LanguageSelect />
             <ThemeToggle />
-            <span>{tr('Participante')}</span>
-            <TextField
-              select
-              value={person.id}
-              onChange={(e) => {
-                if (!mayLeave()) return;
-                setActorId(e.target.value);
-                sessionStorage.setItem('argousdocs:actor', e.target.value);
-                setEditor(null);
-                if (!documentId) setView('home');
-              }}
-              aria-label={tr('Participante de demonstração')}
-              sx={{ minWidth: 165 }}
-            >
-              {state.people.map((p) => (
-                <MenuItem key={p.id} value={p.id}>
-                  {p.name} · {tr(roleLabel(p))}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Avatar
-              sx={{
-                width: 34,
-                height: 34,
-                fontSize: 13,
-                bgcolor: 'action.selected',
-                color: 'text.primary',
-              }}
-            >
-              {initials(person.name)}
-            </Avatar>
           </div>
         </header>
         <main className="workspace-main">
@@ -695,6 +703,17 @@ function WorkspaceInner() {
             />
           ) : (
             <>
+              {view === 'settings' && (
+                <>
+                  <div className="page-heading">
+                    <h1>{tr('Configurações do usuário')}</h1>
+                    <Button variant="outlined" onClick={() => navigate('home')}>
+                      {tr('Visão geral')}
+                    </Button>
+                  </div>
+                  <UserSettings />
+                </>
+              )}
               {view === 'dashboards' && (
                 <Dashboards
                   store={state}
