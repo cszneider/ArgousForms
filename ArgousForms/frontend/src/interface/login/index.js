@@ -1,6 +1,7 @@
 'use client';
-import { useI18n, LanguageSelect } from '../../components/i18n/i18n.js';
+import { useI18n } from '../../components/i18n/i18n.js';
 import { useState } from 'react';
+import { loginDemo } from '../../programas/plataforma/access.js';
 import {
   Button,
   TextField,
@@ -67,7 +68,6 @@ export default function Login() {
             <a className="back-link" href="/">
               <ArrowLeft size={16} /> {tr('Voltar ao início')}
             </a>
-            <LanguageSelect />
             <ThemeToggle />
           </div>
           <div>
@@ -77,22 +77,10 @@ export default function Login() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (
-                  email.trim().toLowerCase() !== 'teste@argous.com.br' ||
-                  password !== '123'
-                ) {
-                  setError(
-                    'E-mail ou senha incorretos. Use o acesso de demonstração abaixo.',
-                  );
-                  return;
-                }
                 try {
-                  sessionStorage.setItem('argousdocs:session', 'demo');
-                  window.location.href = '/app';
-                } catch {
-                  setError(
-                    'Permita o armazenamento do navegador para entrar na demonstração.',
-                  );
+                  window.location.href = loginDemo(email, password);
+                } catch (error) {
+                  setError(error.message);
                 }
               }}
             >
@@ -151,6 +139,17 @@ export default function Login() {
                 }}
               >
                 {tr('Preencher acesso de teste')}
+              </Button>
+              <p>{tr('Administrador da plataforma')}: adm@argous.com.br</p>
+              <Button
+                size="small"
+                onClick={() => {
+                  setEmail('adm@argous.com.br');
+                  setPassword('123');
+                  setError('');
+                }}
+              >
+                {tr('Preencher acesso de administrador')}
               </Button>
               <small>
                 {tr('Ambiente simulado. Os dados ficam neste navegador.')}

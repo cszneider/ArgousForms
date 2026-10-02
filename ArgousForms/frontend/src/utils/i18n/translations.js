@@ -1,5 +1,92 @@
 // Interface copy only. User-authored document content is never translated.
 export const translations = {
+  'Usuário não encontrado.': ['User not found.', 'Usuario no encontrado.'],
+  'O cadastro mudou. Reabra o usuário antes de salvar.': [
+    'The profile changed. Reopen it before saving.',
+    'Los datos cambiaron. Vuelva a abrir el usuario antes de guardar.',
+  ],
+  'O usuário possui vínculos com grupos, modelos ou documentos.': [
+    'This user is linked to groups, templates or documents.',
+    'Este usuario tiene vínculos con grupos, modelos o documentos.',
+  ],
+  'O último administrador ativo deve ser preservado.': [
+    'The last active administrator must be preserved.',
+    'Se debe conservar el último administrador activo.',
+  ],
+  'Não é permitido excluir a própria conta.': [
+    'You cannot delete your own account.',
+    'No puede eliminar su propia cuenta.',
+  ],
+  'Descartar alterações não salvas?': [
+    'Discard unsaved changes?',
+    '¿Descartar cambios sin guardar?',
+  ],
+  'Confirma a exclusão deste usuário? Esta ação não pode ser desfeita.': [
+    'Delete this user? This action cannot be undone.',
+    '¿Confirma eliminar este usuario? Esta acción no se puede deshacer.',
+  ],
+  'Excluir usuário': ['Delete user', 'Eliminar usuario'],
+  Reativar: ['Reactivate', 'Reactivar'],
+  Inativar: ['Deactivate', 'Desactivar'],
+  'Voltar à lista': ['Back to list', 'Volver a la lista'],
+  'O e-mail cadastral não altera o login de demonstração.': [
+    'Your contact email does not change the demo login.',
+    'El correo de contacto no cambia el acceso de demostración.',
+  ],
+  'Não foi possível salvar seu cadastro. Tente novamente.': [
+    'Could not save your profile. Try again.',
+    'No se pudieron guardar sus datos. Intente nuevamente.',
+  ],
+  'Não foi possível carregar seu cadastro.': [
+    'Could not load your profile.',
+    'No se pudieron cargar sus datos.',
+  ],
+  'Cadastro salvo.': ['Profile saved.', 'Datos guardados.'],
+  'Informe uma data de nascimento válida, não futura.': [
+    'Enter a valid birth date that is not in the future.',
+    'Ingrese una fecha de nacimiento válida, no futura.',
+  ],
+  'Informe um CPF válido.': ['Enter a valid CPF.', 'Ingrese un CPF válido.'],
+  'Informe um e-mail válido.': [
+    'Enter a valid email.',
+    'Ingrese un correo válido.',
+  ],
+  'Informe o nome.': ['Enter your name.', 'Ingrese su nombre.'],
+  'Prefiro não informar': ['Prefer not to say', 'Prefiero no informar'],
+  Outro: ['Other', 'Otro'],
+  'Não binário': ['Non-binary', 'No binario'],
+  Masculino: ['Male', 'Masculino'],
+  Feminino: ['Female', 'Femenino'],
+  Telefone: ['Phone', 'Teléfono'],
+  Gênero: ['Gender', 'Género'],
+  'Data de nascimento': ['Date of birth', 'Fecha de nacimiento'],
+  'Dados cadastrais': ['Personal details', 'Datos personales'],
+  Empresa: ['Company', 'Empresa'],
+  Inativo: ['Inactive', 'Inactivo'],
+  Todos: ['All', 'Todos'],
+  'Não configurado': ['Not configured', 'No configurado'],
+  'Nenhum usuário encontrado para os filtros selecionados.': [
+    'No users match the selected filters.',
+    'No hay usuarios para los filtros seleccionados.',
+  ],
+  Plataforma: ['Platform', 'Plataforma'],
+  'Configurações do usuário': ['User settings', 'Configuración del usuario'],
+  'Preferências do usuário': ['User preferences', 'Preferencias del usuario'],
+  'A preferência de idioma é salva neste navegador.': [
+    'Your language preference is saved in this browser.',
+    'La preferencia de idioma se guarda en este navegador.',
+  ],
+  'AMBIENTE ADMINISTRADOR': ['ADMINISTRATOR AREA', 'ENTORNO ADMINISTRADOR'],
+  'Base de conhecimento': ['Knowledge base', 'Base de conocimiento'],
+  'Nenhum conteúdo cadastrado nesta seção.': [
+    'No content in this section yet.',
+    'Todavía no hay contenido en esta sección.',
+  ],
+  'Fechar navegação': ['Close navigation', 'Cerrar navegación'],
+  'Preencher acesso de administrador': [
+    'Fill administrator login',
+    'Completar acceso de administrador',
+  ],
   'Como funciona': ['How it works', 'Cómo funciona'],
   Recursos: ['Features', 'Funciones'],
   'Entrar na plataforma': [
@@ -1443,4 +1530,53 @@ export const translations = {
       'Seleccione un grupo con integrantes o un usuario válido para cada campo.',
     ],
   'Salvar meus campos': ['Save my fields', 'Guardar mis campos'],
+
+  'Administração da plataforma': [
+    'Platform administration',
+    'Administración de la plataforma',
+  ],
+  'Administrador da plataforma': [
+    'Platform administrator',
+    'Administrador de la plataforma',
+  ],
+  'Administrador da empresa': [
+    'Company administrator',
+    'Administrador de la empresa',
+  ],
+  'Empresa de teste': ['Test company', 'Empresa de prueba'],
+  Clientes: ['Clients', 'Clientes'],
+  'Usuários ativos': ['Active users', 'Usuarios activos'],
+  'Acessos da empresa': ['Company logins', 'Accesos de la empresa'],
+  'Ambiente local': ['Local environment', 'Entorno local'],
+  'Último acesso': ['Last login', 'Último acceso'],
+  'Nenhum acesso registrado': [
+    'No logins recorded',
+    'Ningún acceso registrado',
+  ],
+  'Controle de usuários': ['User management', 'Control de usuarios'],
+  'Acessos recentes': ['Recent logins', 'Accesos recientes'],
+  'Data e hora': ['Date and time', 'Fecha y hora'],
+  Ativo: ['Active', 'Activo'],
+  'E-mail ou senha incorretos.': [
+    'Incorrect email or password.',
+    'Correo o contraseña incorrectos.',
+  ],
+  'Usuário desativado. Contate o administrador da plataforma.': [
+    'User disabled. Contact the platform administrator.',
+    'Usuario desactivado. Contacte al administrador de la plataforma.',
+  ],
+  'Não foi possível ler os dados da plataforma.': [
+    'Platform data could not be read.',
+    'No se pudieron leer los datos de la plataforma.',
+  ],
+  'Demonstração local: os indicadores consideram apenas acessos registrados neste navegador. Não há conexão com instalações de clientes.':
+    [
+      'Local demo: metrics only include logins recorded in this browser. There is no connection to client installations.',
+      'Demostración local: los indicadores solo incluyen accesos registrados en este navegador. No hay conexión con instalaciones de clientes.',
+    ],
+  'Desativar impede o acesso de teste ou a seleção do participante na empresa. Os dados e as responsabilidades são preservados.':
+    [
+      'Disabling prevents test login or participant selection in the company. Data and responsibilities are preserved.',
+      'Desactivar impide el acceso de prueba o la selección del participante en la empresa. Se conservan los datos y las responsabilidades.',
+    ],
 };

@@ -1,4 +1,8 @@
 'use client';
+import {
+  accountId,
+  USER_LANGUAGE_PREFIX,
+} from '../../programas/plataforma/users.js';
 import { Select, MenuItem } from '@mui/material';
 import { Check, ChevronDown } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
@@ -20,12 +24,24 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     const sync = () => {
       try {
-        updateLocale(resolveLocale(localStorage.getItem(LANGUAGE_STORAGE_KEY)));
+        const id = accountId(sessionStorage.getItem('argousdocs:session'));
+        updateLocale(
+          resolveLocale(
+            localStorage.getItem(
+              id ? USER_LANGUAGE_PREFIX + id : LANGUAGE_STORAGE_KEY,
+            ),
+          ),
+        );
       } catch {}
     };
     sync();
     const storage = (event) => {
-      if (event.key === LANGUAGE_STORAGE_KEY || event.key === null) sync();
+      if (
+        event.key === LANGUAGE_STORAGE_KEY ||
+        event.key?.startsWith(USER_LANGUAGE_PREFIX) ||
+        event.key === null
+      )
+        sync();
     };
     window.addEventListener('storage', storage);
     return () => window.removeEventListener('storage', storage);
@@ -39,7 +55,11 @@ export function LanguageProvider({ children }) {
       setLocale: (next) => {
         updateLocale(next);
         try {
-          localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+          const id = accountId(sessionStorage.getItem('argousdocs:session'));
+          localStorage.setItem(
+            id ? USER_LANGUAGE_PREFIX + id : LANGUAGE_STORAGE_KEY,
+            next,
+          );
         } catch {}
       },
       t: (message, values) => translate(locale, message, values),
