@@ -5,6 +5,8 @@
 - O usuário é o gestor do projeto e possui a decisão final sobre todas as escolhas funcionais, técnicas e arquiteturais.
 - Recomendações, alternativas, inferências e análises do agente não constituem decisões aprovadas.
 - Não criar nem alterar código-fonte, documentação, configuração, dependências, estrutura do workspace, banco de dados ou ambiente sem autorização explícita do gestor para a atividade.
+- Quando o gestor solicitar explicitamente uma criação, alteração, correção, exclusão ou execução, a própria solicitação constitui autorização suficiente para a atividade descrita. Não pedir uma confirmação adicional para agir dentro desse escopo.
+- Pedir autorização somente quando a ação pretendida não tiver sido informada ao gestor, estiver fora do escopo solicitado, atingir outros arquivos ou projetos sem necessidade direta, ou produzir impacto material adicional que não esteja implícito na solicitação.
 - Uma autorização deve ser interpretada dentro do escopo solicitado. Não ampliar a alteração para assuntos relacionados sem nova autorização.
 - Inspeções em modo somente leitura diretamente necessárias para atender ao pedido são permitidas. Não consultar outros projetos, inclusive UniService, Argous e ArgousIA, sem solicitação ou autorização expressa.
 - Antes de atividade que possa consumir quantidade significativa de tokens, informar objetivo, escopo e resultado esperado e aguardar autorização. Isso inclui pesquisa extensa, auditoria ampla, geração de grandes artefatos e trabalho paralelo com múltiplos agentes.
@@ -90,6 +92,25 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 - `ArgousForms/src/main/webapp/WEB-INF/web.xml` configura o `quatro.util.StartupServlet` e aponta para o arquivo de parâmetros na aplicação explodida de desenvolvimento.
 - Não inserir credenciais reais nesses arquivos nem substituir valores pendentes sem autorização e sem definir a forma segura de proteção.
 
+## Estilo do código Java
+
+- Ao criar uma classe Java ou interagir materialmente com uma classe existente, aplicar progressivamente o estilo definido pelo gestor à parte tocada, sem promover uma reformatação ampla de arquivos não relacionados.
+- Manter a declaração de parâmetros dos métodos em uma única linha sempre que permanecer legível.
+- Manter chamadas, construções e condições simples em uma única linha sempre que permanecerem legíveis.
+- Usar linhas vazias para separar blocos lógicos e facilitar a leitura humana do método.
+- Preservar quebras de linha quando a expressão for genuinamente longa ou complexa e a compactação prejudicar a interpretação.
+- Não deixar espaços ou tabulações no final das linhas.
+
+## Persistência e transações com o framework Quatro
+
+- Inclusões, alterações e exclusões devem ser executadas pela respectiva classe `*Negocio`, para que as verificações de consistência e regras de negócio sejam aplicadas.
+- Não usar diretamente classes `*Persistor` em serviços, resolvers ou demais classes da aplicação. O uso de `*Persistor` deve permanecer restrito à implementação interna das classes de negócio geradas.
+- Consultas podem utilizar `Localizador`, `Query` ou consultas específicas parametrizadas, conforme a necessidade.
+- A transação deve pertencer ao método que representa a operação externa completa e sua unidade atômica de trabalho.
+- Métodos auxiliares que recebem uma conexão com transação em andamento devem participar dessa transação e não devem executar `beginTransaction()`, `commit()` ou `rollback()` próprios.
+- Não criar transações aninhadas. O framework Quatro 0.0.8 não as suporta.
+- O método externo responsável pela transação deve confirmar a operação somente após todas as gravações terem sido concluídas e deve executar `rollback()` em caso de falha, verificando antes se a conexão permanece em transação.
+
 ## Forma de trabalho
 
 - Antes de implementar uma etapa com impacto em modelo de dados, autenticação, autorização, assinatura, auditoria, workflow, armazenamento documental ou infraestrutura, apresentar as decisões necessárias e aguardar aprovação.
@@ -98,4 +119,3 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 - Não executar migrações, conectar o ArgousForms à base de outro sistema nem realizar escritas em serviços externos sem autorização específica.
 - Não modificar arquivos gerados em `target/` diretamente.
 - Enquanto o Maven não estiver disponível no shell, orientar ou solicitar ao gestor a execução dos builds pelo Eclipse quando necessária; não afirmar que um build foi validado sem evidência.
-
