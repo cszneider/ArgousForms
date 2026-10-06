@@ -190,7 +190,7 @@ export function RichEditor({
           {!!fields.length && (
             <TextField
               select
-              size="small"
+              size="medium"
               label={t('Inserir campo')}
               value=""
               sx={{ width: 180 }}

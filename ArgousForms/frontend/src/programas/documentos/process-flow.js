@@ -1,6 +1,7 @@
 'use client';
 import { useI18n } from '../../components/i18n/i18n.js';
-import { useId, useState, useEffect } from 'react';
+import { useId, useContext, useEffect } from 'react';
+import { DocumentViewContext } from './document-view.js';
 import { Button } from '@mui/material';
 import {
   ArrowDown,
@@ -13,17 +14,24 @@ import {
   UserRound,
 } from 'lucide-react';
 import { processEvents, stageAppearance } from './process-history.js';
-import { stageTimings, durationLabel } from './stage-timing.js';
+import { durationLabel } from './stage-timing.js';
 import { TimingSummary, TimingComparison } from './stage-timing-panel.js';
-export function ProcessFlow({ doc, groups, people, selected, onSelect }) {
+export function ProcessFlow() {
+  const {
+    value,
+    dispatch,
+    selectHistoryStage: onSelect,
+  } = useContext(DocumentViewContext);
+  const { doc, groups, people, historyStage: selected, analysis } = value;
   const { t: tr, locale, system } = useI18n();
   const marker = useId().replace(/:/g, '');
-  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
+    const updateNow = () =>
+      dispatch({ field: 'historyNow', value: Date.now() });
+    updateNow();
+    const timer = setInterval(updateNow, 30000);
     return () => clearInterval(timer);
-  }, []);
-  const analysis = stageTimings(doc, Math.max(now, Date.now()));
+  }, [dispatch]);
   const events = processEvents(doc);
   const stages = doc.template.stages;
   const returns = events.filter((e) => e.kind === 'returned');
@@ -77,7 +85,7 @@ export function ProcessFlow({ doc, groups, people, selected, onSelect }) {
           </span>
         </div>
       </div>
-      <TimingSummary analysis={analysis} doc={doc} onSelect={onSelect} />
+      <TimingSummary />
       <div
         className="process-scroll"
         role="region"
@@ -279,12 +287,7 @@ export function ProcessFlow({ doc, groups, people, selected, onSelect }) {
           </span>
         </div>
       )}
-      <TimingComparison
-        analysis={analysis}
-        doc={doc}
-        selected={selected}
-        onSelect={onSelect}
-      />
+      <TimingComparison />
       <div className="process-records">
         <div className="process-records-heading">
           <div>

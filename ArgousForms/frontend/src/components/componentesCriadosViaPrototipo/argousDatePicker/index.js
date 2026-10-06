@@ -256,7 +256,7 @@ export default function ArgousDatePicker({
               {!competence && (
                 <TextField
                   select
-                  size="small"
+                  size="medium"
                   variant="outlined"
                   value={visibleMonth.getMonth()}
                   onChange={(event) =>
@@ -279,7 +279,7 @@ export default function ArgousDatePicker({
               )}
               <TextField
                 select
-                size="small"
+                size="medium"
                 variant="outlined"
                 value={visibleMonth.getFullYear()}
                 onChange={(event) =>

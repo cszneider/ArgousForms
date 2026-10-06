@@ -1,4 +1,6 @@
 'use client';
+import { useContext } from 'react';
+import { DocumentViewContext } from './document-view.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import {
   Button,
@@ -13,7 +15,11 @@ import {
 } from '@mui/material';
 import { Clock, ArrowUpRight } from 'lucide-react';
 import { durationLabel } from './stage-timing.js';
-export function TimingSummary({ analysis, doc, onSelect }) {
+export function TimingSummary() {
+  const {
+    value: { analysis, doc },
+    selectHistoryStage: onSelect,
+  } = useContext(DocumentViewContext);
   const { t: tr, locale } = useI18n();
   const longest = analysis.stages.filter((r) =>
     analysis.longestIds.includes(r.stageId),
@@ -58,7 +64,11 @@ export function TimingSummary({ analysis, doc, onSelect }) {
     </div>
   );
 }
-export function TimingComparison({ analysis, doc, selected, onSelect }) {
+export function TimingComparison() {
+  const {
+    value: { analysis, doc, historyStage: selected },
+    selectHistoryStage: onSelect,
+  } = useContext(DocumentViewContext);
   const { t: tr, locale } = useI18n();
   const hasUnknown = analysis.stages.some((r) => r.unknownMs > 0);
   return (
