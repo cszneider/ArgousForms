@@ -1,5 +1,12 @@
 // Interface copy only. User-authored document content is never translated.
 export const translations = {
+  'Cadastro da empresa': ['Company details', 'Datos de la empresa'],
+  'Razão social': ['Legal name', 'Razón social'],
+  'Nome fantasia': ['Trade name', 'Nombre comercial'],
+  CNPJ: ['CNPJ', 'CNPJ'],
+  'Responsável pelo contato': ['Contact person', 'Persona de contacto'],
+  Endereço: ['Address', 'Dirección'],
+  'Quantidade de usuários': ['Number of users', 'Cantidad de usuarios'],
   'Usuário não encontrado.': ['User not found.', 'Usuario no encontrado.'],
   'O cadastro mudou. Reabra o usuário antes de salvar.': [
     'The profile changed. Reopen it before saving.',
@@ -1579,4 +1586,645 @@ export const translations = {
       'Disabling prevents test login or participant selection in the company. Data and responsibilities are preserved.',
       'Desactivar impide el acceso de prueba o la selección del participante en la empresa. Se conservan los datos y las responsabilidades.',
     ],
+  'Referência técnica do frontend': [
+    'Frontend technical reference',
+    'Referencia técnica del frontend',
+  ],
+  'Texto obrigatório': ['Required text', 'Texto obligatorio'],
+  'Formato de e-mail': ['Email format', 'Formato de correo electrónico'],
+  'Número inteiro de 1 a 100': [
+    'Integer from 1 to 100',
+    'Número entero de 1 a 100',
+  ],
+  'Data obrigatória': ['Required date', 'Fecha obligatoria'],
+  'Seleção obrigatória': ['Required selection', 'Selección obligatoria'],
+  'Campo obrigatório.': ['Required field.', 'Campo obligatorio.'],
+  'Informe um número inteiro de 1 a 100.': [
+    'Enter an integer from 1 to 100.',
+    'Introduzca un número entero de 1 a 100.',
+  ],
+  'Informe uma data válida.': [
+    'Enter a valid date.',
+    'Introduzca una fecha válida.',
+  ],
+  'Escolha uma opção válida.': [
+    'Choose a valid option.',
+    'Elija una opción válida.',
+  ],
+  Solicitação: ['Request', 'Solicitud'],
+  Relatório: ['Report', 'Informe'],
+  'Demonstração interativa': ['Interactive demo', 'Demostración interactiva'],
+  'Experimente os campos': ['Try the fields', 'Pruebe los campos'],
+  'Preencha, teste os erros e simule um salvamento. Os dados ficam apenas nesta demonstração e são descartados ao sair da seção.':
+    [
+      'Fill in the fields, test errors and simulate saving. Data stays in this demo and is discarded when you leave the section.',
+      'Complete los campos, pruebe los errores y simule guardar. Los datos permanecen en esta demostración y se descartan al salir de la sección.',
+    ],
+  'Estado dos campos': ['Field state', 'Estado de los campos'],
+  Normal: ['Normal', 'Normal'],
+  'Exemplo de erro': ['Error example', 'Ejemplo de error'],
+  Desabilitado: ['Disabled', 'Deshabilitado'],
+  'Exemplo visual de validação.': [
+    'Visual validation example.',
+    'Ejemplo visual de validación.',
+  ],
+  'Este modo mostra a aparência de erro. Selecione Normal para testar a validação real do exemplo.':
+    [
+      'This mode shows the error appearance. Select Normal to test the actual demo validation.',
+      'Este modo muestra el aspecto de error. Seleccione Normal para probar la validación real del ejemplo.',
+    ],
+  'Revise os campos indicados antes de salvar.': [
+    'Review the indicated fields before saving.',
+    'Revise los campos indicados antes de guardar.',
+  ],
+  'Há alterações após a última simulação de salvamento.': [
+    'There are changes since the last simulated save.',
+    'Hay cambios desde la última simulación de guardado.',
+  ],
+  'Salvamento simulado com sucesso. Nenhum cadastro real foi alterado.': [
+    'Simulated save succeeded. No real records were changed.',
+    'Guardado simulado con éxito. No se modificó ningún registro real.',
+  ],
+  'Simular salvamento': ['Simulate saving', 'Simular guardado'],
+  'Ver resultado salvo': ['View saved result', 'Ver resultado guardado'],
+  Recomeçar: ['Start over', 'Volver a empezar'],
+  'Roteiro de teste': ['Test walkthrough', 'Guía de prueba'],
+  'Salve com os campos vazios para ver a obrigatoriedade.': [
+    'Save with empty fields to see required field errors.',
+    'Guarde con los campos vacíos para ver los errores de obligatoriedad.',
+  ],
+  'Digite um e-mail incompleto e uma quantidade fora do intervalo.': [
+    'Enter an incomplete email and a quantity outside the range.',
+    'Introduzca un correo incompleto y una cantidad fuera del intervalo.',
+  ],
+  'Preencha todos os campos corretamente e veja o resultado salvo.': [
+    'Complete all fields correctly and view the saved result.',
+    'Complete todos los campos correctamente y vea el resultado guardado.',
+  ],
+  'Alterne os estados e clique nos campos para observar o foco.': [
+    'Switch states and click the fields to observe focus.',
+    'Cambie los estados y haga clic en los campos para observar el foco.',
+  ],
+  'Use o controle de tema da página para comparar claro e escuro.': [
+    'Use the page theme control to compare light and dark.',
+    'Use el control de tema de la página para comparar claro y oscuro.',
+  ],
+  'Estas regras pertencem ao exemplo, não definem os formulários do produto.': [
+    'These rules belong to the example and do not define product forms.',
+    'Estas reglas pertenecen al ejemplo y no definen los formularios del producto.',
+  ],
+  'Resultado do salvamento simulado': [
+    'Simulated save result',
+    'Resultado del guardado simulado',
+  ],
+  'Campo de texto': ['Text field', 'Campo de texto'],
+  'Para nomes, títulos e informações curtas. O rótulo permanece visível durante o preenchimento.':
+    [
+      'For names, titles and short information. The label stays visible while typing.',
+      'Para nombres, títulos e información breve. La etiqueta permanece visible al escribir.',
+    ],
+  'Clique e digite para observar o foco e o rótulo.': [
+    'Click and type to observe focus and the label.',
+    'Haga clic y escriba para observar el foco y la etiqueta.',
+  ],
+  'Digite um nome': ['Enter a name', 'Introduzca un nombre'],
+  'E-mail e validação': ['Email and validation', 'Correo y validación'],
+  'A mensagem abaixo do campo orienta o preenchimento e explica o erro.': [
+    'The message below the field guides input and explains errors.',
+    'El mensaje debajo del campo orienta el llenado y explica los errores.',
+  ],
+  'Digite um e-mail incompleto e depois corrija o formato.': [
+    'Enter an incomplete email, then correct the format.',
+    'Introduzca un correo incompleto y corrija el formato.',
+  ],
+  'Número e data': ['Number and date', 'Número y fecha'],
+  'Tipos específicos oferecem controles adequados para quantidade e calendário.':
+    [
+      'Specific types provide suitable quantity and calendar controls.',
+      'Los tipos específicos ofrecen controles adecuados para cantidad y calendario.',
+    ],
+  'Experimente as setas do número e o seletor de data.': [
+    'Try the number arrows and date picker.',
+    'Pruebe las flechas del número y el selector de fecha.',
+  ],
+  'Estados do campo': ['Field states', 'Estados del campo'],
+  'Obrigatoriedade, erro, leitura e desabilitação comunicam situações diferentes.':
+    [
+      'Required, error, read-only and disabled states communicate different situations.',
+      'Los estados obligatorio, error, lectura y deshabilitado comunican situaciones distintas.',
+    ],
+  'Compare os estados. O campo de leitura permite selecionar o texto.': [
+    'Compare states. The read-only field allows text selection.',
+    'Compare los estados. El campo de lectura permite seleccionar el texto.',
+  ],
+  'Somente leitura': ['Read-only', 'Solo lectura'],
+  Exemplo: ['Example', 'Ejemplo'],
+  'Hierarquia de ações': ['Action hierarchy', 'Jerarquía de acciones'],
+  'Destaque a ação principal e dê menos peso às ações secundárias.': [
+    'Highlight the main action and give secondary actions less weight.',
+    'Destaque la acción principal y dé menos peso a las acciones secundarias.',
+  ],
+  'Clique em uma ação para ver o retorno da demonstração.': [
+    'Click an action to see demo feedback.',
+    'Haga clic en una acción para ver la respuesta de la demostración.',
+  ],
+  'Ação demonstrada. Nenhum dado foi alterado.': [
+    'Action demonstrated. No data was changed.',
+    'Acción demostrada. No se modificaron datos.',
+  ],
+  'Tamanhos e disponibilidade': [
+    'Sizes and availability',
+    'Tamaños y disponibilidad',
+  ],
+  'Escolha o tamanho conforme o espaço e mantenha ações indisponíveis claramente identificadas.':
+    [
+      'Choose size according to space and clearly identify unavailable actions.',
+      'Elija el tamaño según el espacio e identifique claramente las acciones no disponibles.',
+    ],
+  'O botão desabilitado não recebe cliques.': [
+    'The disabled button does not accept clicks.',
+    'El botón deshabilitado no acepta clics.',
+  ],
+  Pequeno: ['Small', 'Pequeño'],
+  Médio: ['Medium', 'Mediano'],
+  Grande: ['Large', 'Grande'],
+  'Lista de opções': ['Option list', 'Lista de opciones'],
+  'Use uma lista quando o preenchimento deve seguir opções conhecidas.': [
+    'Use a list when input should follow known options.',
+    'Use una lista cuando el llenado debe seguir opciones conocidas.',
+  ],
+  'Abra a lista e escolha outra categoria.': [
+    'Open the list and choose another category.',
+    'Abra la lista y elija otra categoría.',
+  ],
+  'Caixa de seleção e interruptor': [
+    'Checkbox and switch',
+    'Casilla e interruptor',
+  ],
+  'A caixa marca uma opção; o interruptor alterna uma configuração entre dois estados.':
+    [
+      'A checkbox marks an option; a switch toggles a setting between two states.',
+      'La casilla marca una opción; el interruptor alterna una configuración entre dos estados.',
+    ],
+  'As escolhas afetam somente estes exemplos.': [
+    'Choices affect only these examples.',
+    'Las elecciones afectan solo estos ejemplos.',
+  ],
+  'Incluir observações': ['Include notes', 'Incluir observaciones'],
+  'Habilitar exemplo': ['Enable example', 'Habilitar ejemplo'],
+  'Escolha única': ['Single choice', 'Elección única'],
+  'Botões de opção deixam todas as alternativas visíveis e permitem escolher apenas uma.':
+    [
+      'Radio buttons show all alternatives and allow only one choice.',
+      'Los botones de opción muestran todas las alternativas y permiten elegir solo una.',
+    ],
+  'Selecione uma opção para comparar o estado marcado.': [
+    'Select an option to compare the selected state.',
+    'Seleccione una opción para comparar el estado marcado.',
+  ],
+  Informação: ['Information', 'Información'],
+  Sucesso: ['Success', 'Éxito'],
+  Atenção: ['Attention', 'Atención'],
+  'Oriente o usuário sobre o próximo passo.': [
+    'Guide the user to the next step.',
+    'Oriente al usuario sobre el siguiente paso.',
+  ],
+  'Confirme que a operação foi concluída.': [
+    'Confirm the operation is complete.',
+    'Confirme que la operación se completó.',
+  ],
+  'Explique uma situação que exige atenção.': [
+    'Explain a situation that needs attention.',
+    'Explique una situación que requiere atención.',
+  ],
+  'Informe o problema e como resolvê-lo.': [
+    'Explain the problem and how to resolve it.',
+    'Explique el problema y cómo resolverlo.',
+  ],
+  'A mensagem combina ícone, cor e texto.': [
+    'The message combines icon, color and text.',
+    'El mensaje combina icono, color y texto.',
+  ],
+  'Preencha os campos para continuar.': [
+    'Fill in the fields to continue.',
+    'Complete los campos para continuar.',
+  ],
+  'Salvamento simulado com sucesso.': [
+    'Simulated save succeeded.',
+    'Guardado simulado con éxito.',
+  ],
+  'Revise as informações antes de continuar.': [
+    'Review the information before continuing.',
+    'Revise la información antes de continuar.',
+  ],
+  'Diálogo de confirmação': ['Confirmation dialog', 'Diálogo de confirmación'],
+  'Apresente o contexto antes de uma ação e ofereça uma saída clara.': [
+    'Present context before an action and offer a clear way out.',
+    'Presente el contexto antes de una acción y ofrezca una salida clara.',
+  ],
+  'Abra o diálogo, cancele ou confirme a simulação.': [
+    'Open the dialog, cancel or confirm the simulation.',
+    'Abra el diálogo, cancele o confirme la simulación.',
+  ],
+  'Abrir exemplo': ['Open example', 'Abrir ejemplo'],
+  'Confirmar simulação': ['Confirm simulation', 'Confirmar simulación'],
+  'Esta ação apenas demonstra o funcionamento do diálogo.': [
+    'This action only demonstrates how the dialog works.',
+    'Esta acción solo demuestra el funcionamiento del diálogo.',
+  ],
+  Campos: ['Fields', 'Campos'],
+  Botões: ['Buttons', 'Botones'],
+  Seleção: ['Selection', 'Selección'],
+  Alertas: ['Alerts', 'Alertas'],
+  Diálogos: ['Dialogs', 'Diálogos'],
+  Simulação: ['Simulation', 'Simulación'],
+  'Conheça os campos de entrada, seus estados e as orientações de preenchimento.':
+    [
+      'Explore input fields, states and input guidance.',
+      'Conozca los campos de entrada, sus estados y las instrucciones de llenado.',
+    ],
+  'Compare ações principais, secundárias e indisponíveis.': [
+    'Compare primary, secondary and unavailable actions.',
+    'Compare acciones principales, secundarias y no disponibles.',
+  ],
+  'Experimente listas, caixas de seleção, interruptores e escolhas únicas.': [
+    'Try lists, checkboxes, switches and single choices.',
+    'Pruebe listas, casillas, interruptores y elecciones únicas.',
+  ],
+  'Veja como comunicar informações, sucesso, atenção e erros.': [
+    'See how to communicate information, success, warnings and errors.',
+    'Vea cómo comunicar información, éxito, advertencias y errores.',
+  ],
+  'Simule uma confirmação sem alterar dados reais.': [
+    'Simulate a confirmation without changing real data.',
+    'Simule una confirmación sin modificar datos reales.',
+  ],
+  'Combine os campos em um formulário e teste o preenchimento completo.': [
+    'Combine fields in a form and test the full input flow.',
+    'Combine los campos en un formulario y pruebe el llenado completo.',
+  ],
+  'Consulte o documento completo de orientações do frontend.': [
+    'Read the complete frontend guidance document.',
+    'Consulte el documento completo de instrucciones del frontend.',
+  ],
+  'Guia visual do frontend': [
+    'Frontend visual guide',
+    'Guía visual del frontend',
+  ],
+  'Explore os componentes, entenda o uso e experimente na prática.': [
+    'Explore components, understand their use and try them out.',
+    'Explore los componentes, entienda su uso y pruébelos.',
+  ],
+  'Categorias do guia visual': [
+    'Visual guide categories',
+    'Categorías de la guía visual',
+  ],
+  'Seções do documento': ['Document sections', 'Secciones del documento'],
+  'Neste documento': ['On this page', 'En este documento'],
+  'Baixar Markdown': ['Download Markdown', 'Descargar Markdown'],
+  'Campo numérico': ['Numeric field', 'Campo numérico'],
+  'Campo de data': ['Date field', 'Campo de fecha'],
+  'Botão principal': ['Primary button', 'Botón principal'],
+  'Botão secundário': ['Secondary button', 'Botón secundario'],
+  'Botão de texto': ['Text button', 'Botón de texto'],
+  'Botão desabilitado': ['Disabled button', 'Botón deshabilitado'],
+  'Caixa de seleção': ['Checkbox', 'Casilla de selección'],
+  Interruptor: ['Switch', 'Interruptor'],
+  'Aplicações no ArgousDocs': [
+    'Applications in ArgousDocs',
+    'Aplicaciones en ArgousDocs',
+  ],
+  'Exemplo interativo': ['Interactive example', 'Ejemplo interactivo'],
+  'Experimente este componente. A demonstração não altera dados reais.': [
+    'Try this component. The demo does not change real data.',
+    'Pruebe este componente. La demostración no modifica datos reales.',
+  ],
+  'Código JSX': ['JSX code', 'Código JSX'],
+  'Copiar código': ['Copy code', 'Copiar código'],
+  'Código copiado.': ['Code copied.', 'Código copiado.'],
+  'Não foi possível copiar. Selecione o código e copie manualmente.': [
+    'Could not copy. Select the code and copy it manually.',
+    'No se pudo copiar. Seleccione el código y cópielo manualmente.',
+  ],
+  'Propriedades principais': ['Main properties', 'Propiedades principales'],
+  Propriedade: ['Property', 'Propiedad'],
+  'Uso no exemplo': ['Use in the example', 'Uso en el ejemplo'],
+  'Variações e cuidados': [
+    'Variations and considerations',
+    'Variaciones y cuidados',
+  ],
+  'Tipos de componente': ['Component types', 'Tipos de componente'],
+  'Título do modelo': ['Template title', 'Título del modelo'],
+  'Data de referência': ['Reference date', 'Fecha de referencia'],
+  Cliques: ['Clicks', 'Clics'],
+  Indisponível: ['Unavailable', 'No disponible'],
+  'Mostrar novamente': ['Show again', 'Mostrar de nuevo'],
+  'Aplicação sugerida: título de um modelo de documento.': [
+    'Suggested use: a document template title.',
+    'Uso sugerido: título de una plantilla de documento.',
+  ],
+  'Use um rótulo explícito. Não use o placeholder como única identificação. required indica obrigatoriedade, mas a regra deve ser validada ao salvar.':
+    [
+      'Use an explicit label. Do not use a placeholder as the only identification. required indicates a required field, but the rule must be validated when saving.',
+      'Use una etiqueta explícita. No use el placeholder como única identificación. required indica obligatoriedad, pero la regla debe validarse al guardar.',
+    ],
+  'Identifica o campo.': ['Identifies the field.', 'Identifica el campo.'],
+  'Controlam o texto digitado.': [
+    'Control the entered text.',
+    'Controlan el texto escrito.',
+  ],
+  'Indica preenchimento obrigatório.': [
+    'Indicates required input.',
+    'Indica llenado obligatorio.',
+  ],
+  'Ocupa a largura disponível.': [
+    'Uses the available width.',
+    'Ocupa el ancho disponible.',
+  ],
+  'Aplicação sugerida: e-mail cadastral de um usuário.': [
+    "Suggested use: a user's profile email.",
+    'Uso sugerido: correo del registro de un usuario.',
+  ],
+  'A verificação demonstra apenas um formato básico. Não confirma a existência do endereço nem altera o login do usuário.':
+    [
+      "The check demonstrates only a basic format. It does not confirm the address exists or change the user's login.",
+      'La verificación demuestra solo un formato básico. No confirma que la dirección exista ni cambia el acceso del usuario.',
+    ],
+  'Destaca o formato inválido.': [
+    'Highlights an invalid format.',
+    'Destaca el formato inválido.',
+  ],
+  'Explica como corrigir o preenchimento.': [
+    'Explains how to correct input.',
+    'Explica cómo corregir el llenado.',
+  ],
+  'Recebe uma quantidade e demonstra limites e validação de número inteiro.': [
+    'Accepts a quantity and demonstrates limits and integer validation.',
+    'Recibe una cantidad y demuestra límites y validación de enteros.',
+  ],
+  'Aplicação sugerida: quantidade de cópias em uma operação documental.': [
+    'Suggested use: number of copies in a document operation.',
+    'Uso sugerido: cantidad de copias en una operación documental.',
+  ],
+  'Neste exemplo, o intervalo é de 1 a 100. Os limites são demonstrativos. As setas do navegador não substituem a validação.':
+    [
+      'In this example, the range is 1 to 100. Limits are demonstrative. Browser arrows do not replace validation.',
+      'En este ejemplo, el intervalo es de 1 a 100. Los límites son demostrativos. Las flechas del navegador no sustituyen la validación.',
+    ],
+  'Definem os limites e o incremento.': [
+    'Define limits and the increment.',
+    'Definen los límites y el incremento.',
+  ],
+  'Destaca valores fora da regra.': [
+    'Highlights values outside the rule.',
+    'Destaca valores fuera de la regla.',
+  ],
+  'O campo mantém uma string; converta ao validar.': [
+    'The field holds a string; convert it when validating.',
+    'El campo conserva una cadena; conviértala al validar.',
+  ],
+  'Permite informar uma data pelo teclado ou pelo calendário nativo do navegador.':
+    [
+      'Allows a date through the keyboard or native browser calendar.',
+      'Permite introducir una fecha con el teclado o el calendario nativo del navegador.',
+    ],
+  'Aplicação sugerida: data de referência de um documento.': [
+    'Suggested use: a document reference date.',
+    'Uso sugerido: fecha de referencia de un documento.',
+  ],
+  'O valor utiliza YYYY-MM-DD. A apresentação depende do navegador e do idioma. Uma data sem horário não define um fuso.':
+    [
+      'The value uses YYYY-MM-DD. Display depends on the browser and language. A date without a time does not define a time zone.',
+      'El valor usa YYYY-MM-DD. La presentación depende del navegador y del idioma. Una fecha sin hora no define una zona horaria.',
+    ],
+  'Mantém o rótulo acima do campo.': [
+    'Keeps the label above the field.',
+    'Mantiene la etiqueta encima del campo.',
+  ],
+  'Recebe a data selecionada.': [
+    'Receives the selected date.',
+    'Recibe la fecha seleccionada.',
+  ],
+  'Oferece várias linhas para informações que precisam de contexto.': [
+    'Provides multiple lines for information that needs context.',
+    'Ofrece varias líneas para información que necesita contexto.',
+  ],
+  'Aplicação sugerida: descrição de um modelo ou observação de uma etapa.': [
+    'Suggested use: template description or a stage note.',
+    'Uso sugerido: descripción de una plantilla u observación de una etapa.',
+  ],
+  'Use ajuda curta e explique o conteúdo esperado. Este campo não substitui o editor de documentos com formatação.':
+    [
+      'Use short help text and explain the expected content. This field does not replace the formatted document editor.',
+      'Use ayuda breve y explique el contenido esperado. Este campo no sustituye el editor de documentos con formato.',
+    ],
+  'Habilita várias linhas.': [
+    'Enables multiple lines.',
+    'Habilita varias líneas.',
+  ],
+  'Define a altura inicial.': [
+    'Sets initial height.',
+    'Define la altura inicial.',
+  ],
+  'Limita a expansão visual.': [
+    'Limits visual expansion.',
+    'Limita la expansión visual.',
+  ],
+  'Destaca a ação principal do contexto.': [
+    'Highlights the main action in the context.',
+    'Destaca la acción principal del contexto.',
+  ],
+  'Aplicação sugerida: salvar um cadastro após sua validação.': [
+    'Suggested use: save a record after validation.',
+    'Uso sugerido: guardar un registro después de validarlo.',
+  ],
+  'Use poucas ações com destaque. Salvar e finalizar têm significados diferentes e devem ter rótulos próprios.':
+    [
+      'Use few highlighted actions. Saving and finalizing have different meanings and should have distinct labels.',
+      'Use pocas acciones destacadas. Guardar y finalizar tienen significados diferentes y deben tener etiquetas propias.',
+    ],
+  'Executa a ação ao clicar.': [
+    'Runs the action on click.',
+    'Ejecuta la acción al hacer clic.',
+  ],
+  'Impede a interação quando verdadeiro.': [
+    'Prevents interaction when true.',
+    'Impide la interacción cuando es verdadero.',
+  ],
+  'Apresenta uma alternativa sem competir com a ação principal.': [
+    'Presents an alternative without competing with the main action.',
+    'Presenta una alternativa sin competir con la acción principal.',
+  ],
+  'Aplicação sugerida: cancelar a edição de um cadastro.': [
+    'Suggested use: cancel editing a record.',
+    'Uso sugerido: cancelar la edición de un registro.',
+  ],
+  'Se houver alterações, o cancelamento pode precisar de uma confirmação de descarte. Aqui, o clique apenas atualiza o contador.':
+    [
+      'If changes exist, cancellation may need discard confirmation. Here, clicking only updates the counter.',
+      'Si hay cambios, cancelar puede requerir confirmar el descarte. Aquí, el clic solo actualiza el contador.',
+    ],
+  'Atende ações de apoio com menor peso visual.': [
+    'Supports auxiliary actions with less visual weight.',
+    'Sirve para acciones de apoyo con menor peso visual.',
+  ],
+  'Aplicação sugerida: abrir detalhes de um usuário.': [
+    'Suggested use: open user details.',
+    'Uso sugerido: abrir los detalles de un usuario.',
+  ],
+  'Use verbos claros e preserve uma área confortável para clique e foco pelo teclado.':
+    [
+      'Use clear verbs and preserve a comfortable click area and keyboard focus.',
+      'Use verbos claros y conserve un área cómoda para hacer clic y enfocar con el teclado.',
+    ],
+  'Representa uma ação indisponível no contexto atual.': [
+    'Represents an action unavailable in the current context.',
+    'Representa una acción no disponible en el contexto actual.',
+  ],
+  'Aplicação sugerida: ação aguardando o preenchimento obrigatório.': [
+    'Suggested use: an action waiting for required fields.',
+    'Uso sugerido: acción que espera el llenado obligatorio.',
+  ],
+  'Explique a indisponibilidade perto do controle. Desabilitar o botão não substitui autorização no backend.':
+    [
+      'Explain unavailability near the control. Disabling a button does not replace backend authorization.',
+      'Explique la indisponibilidad cerca del control. Deshabilitar un botón no sustituye la autorización en el backend.',
+    ],
+  'Aplicação sugerida: filtrar usuários por status.': [
+    'Suggested use: filter users by status.',
+    'Uso sugerido: filtrar usuarios por estado.',
+  ],
+  'Inclua uma opção Todos quando o filtro for opcional. Use valores internos estáveis e rótulos compreensíveis.':
+    [
+      'Include an All option for optional filters. Use stable internal values and understandable labels.',
+      'Incluya una opción Todos cuando el filtro sea opcional. Use valores internos estables y etiquetas comprensibles.',
+    ],
+  'Transforma o TextField em seleção.': [
+    'Turns TextField into a selection control.',
+    'Convierte TextField en un control de selección.',
+  ],
+  'Representa cada opção.': [
+    'Represents each option.',
+    'Representa cada opción.',
+  ],
+  'Controlam a opção escolhida.': [
+    'Control the selected option.',
+    'Controlan la opción elegida.',
+  ],
+  'Identifica o filtro.': ['Identifies the filter.', 'Identifica el filtro.'],
+  'Marca uma opção independente; várias caixas podem estar selecionadas ao mesmo tempo.':
+    [
+      'Marks an independent option; multiple boxes can be selected at once.',
+      'Marca una opción independiente; varias casillas pueden estar seleccionadas al mismo tiempo.',
+    ],
+  'Aplicação sugerida: incluir observações em uma visualização.': [
+    'Suggested use: include notes in a view.',
+    'Uso sugerido: incluir observaciones en una vista.',
+  ],
+  'Use checked para o estado booleano e um rótulo associado. Evite usar esta caixa para escolher uma única opção entre alternativas.':
+    [
+      'Use checked for boolean state and an associated label. Avoid this control for a single choice among alternatives.',
+      'Use checked para el estado booleano y una etiqueta asociada. Evite este control para elegir una sola opción entre alternativas.',
+    ],
+  'Indica se está marcada.': [
+    'Indicates whether it is checked.',
+    'Indica si está marcada.',
+  ],
+  'Recebe event.target.checked.': [
+    'Receives event.target.checked.',
+    'Recibe event.target.checked.',
+  ],
+  'Associa o texto ao controle.': [
+    'Associates text with the control.',
+    'Asocia el texto con el control.',
+  ],
+  'Alterna uma configuração entre ligado e desligado.': [
+    'Toggles a setting between on and off.',
+    'Alterna una configuración entre encendido y apagado.',
+  ],
+  'Aplicação sugerida: alternar uma preferência de exibição.': [
+    'Suggested use: toggle a display preference.',
+    'Uso sugerido: alternar una preferencia de visualización.',
+  ],
+  'O rótulo deve explicar a configuração. Para inativar uma pessoa, apresente as consequências e respeite as regras de autorização.':
+    [
+      'The label should explain the setting. When disabling a person, present the consequences and respect authorization rules.',
+      'La etiqueta debe explicar la configuración. Para desactivar a una persona, presente las consecuencias y respete las reglas de autorización.',
+    ],
+  'Indica se está ligado.': [
+    'Indicates whether it is on.',
+    'Indica si está encendido.',
+  ],
+  'Aplicação sugerida: escolher um modo de visualização.': [
+    'Suggested use: choose a view mode.',
+    'Uso sugerido: elegir un modo de visualización.',
+  ],
+  'Agrupe alternativas relacionadas e identifique o grupo. Use seleção em lista quando houver muitas opções.':
+    [
+      'Group related alternatives and label the group. Use a list when there are many options.',
+      'Agrupe alternativas relacionadas e identifique el grupo. Use una lista cuando haya muchas opciones.',
+    ],
+  'Agrupa as opções e controla a escolha.': [
+    'Groups options and controls the choice.',
+    'Agrupa las opciones y controla la elección.',
+  ],
+  'Identifica o grupo para leitores de tela.': [
+    'Identifies the group for screen readers.',
+    'Identifica el grupo para lectores de pantalla.',
+  ],
+  'Identifica cada alternativa.': [
+    'Identifies each alternative.',
+    'Identifica cada alternativa.',
+  ],
+  'Aplicação sugerida: instrução antes do preenchimento.': [
+    'Suggested use: instructions before input.',
+    'Uso sugerido: instrucciones antes del llenado.',
+  ],
+  'Aplicação sugerida: confirmação após salvar um cadastro.': [
+    'Suggested use: confirmation after saving a record.',
+    'Uso sugerido: confirmación después de guardar un registro.',
+  ],
+  'Aplicação sugerida: aviso de alterações ainda não salvas.': [
+    'Suggested use: warning about unsaved changes.',
+    'Uso sugerido: aviso de cambios aún no guardados.',
+  ],
+  'Aplicação sugerida: falha de validação antes de salvar.': [
+    'Suggested use: validation failure before saving.',
+    'Uso sugerido: fallo de validación antes de guardar.',
+  ],
+  'A mensagem combina ícone, cor e texto. Não exponha dados sensíveis nem detalhes internos em mensagens de erro.':
+    [
+      'The message combines icon, color and text. Do not expose sensitive data or internal details in error messages.',
+      'El mensaje combina icono, color y texto. No exponga datos sensibles ni detalles internos en mensajes de error.',
+    ],
+  'Resume a situação.': ['Summarizes the situation.', 'Resume la situación.'],
+  'Permite dispensar o aviso.': [
+    'Allows dismissing the notice.',
+    'Permite cerrar el aviso.',
+  ],
+  'Aplicação sugerida: confirmar o descarte de alterações não salvas.': [
+    'Suggested use: confirm discarding unsaved changes.',
+    'Uso sugerido: confirmar el descarte de cambios no guardados.',
+  ],
+  'O exemplo não exclui nem salva dados. Mantenha o foco no diálogo, permita cancelar e explique o resultado da confirmação.':
+    [
+      'The example does not delete or save data. Keep focus in the dialog, allow cancellation and explain the confirmation result.',
+      'El ejemplo no elimina ni guarda datos. Mantenga el foco en el diálogo, permita cancelar y explique el resultado de confirmar.',
+    ],
+  'Controlam abertura e fechamento.': [
+    'Control opening and closing.',
+    'Controlan la apertura y el cierre.',
+  ],
+  'Associa o título ao diálogo.': [
+    'Associates the title with the dialog.',
+    'Asocia el título con el diálogo.',
+  ],
+  'Explica a consequência da ação.': [
+    'Explains the consequence of the action.',
+    'Explica la consecuencia de la acción.',
+  ],
+  'Agrupa cancelar e confirmar.': [
+    'Groups cancel and confirm.',
+    'Agrupa cancelar y confirmar.',
+  ],
 };

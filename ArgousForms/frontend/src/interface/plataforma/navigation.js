@@ -1,29 +1,23 @@
 'use client';
-import { useState } from 'react';
-import { Avatar, Button, Collapse, Drawer, IconButton } from '@mui/material';
+import { PlatformContext } from './index.js';
+import { useContext } from 'react';
+import { Avatar, Button, Drawer, IconButton } from '@mui/material';
 import {
-  BookOpen,
-  ChevronDown,
-  ChevronUp,
-  Code,
+  Building2,
   FileStack,
   LayoutDashboard,
   LogOut,
-  Server,
   Users,
 } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
-export default function PlatformNavigation({
-  view,
-  onSelect,
-  mobile,
-  onClose,
-  onLogout,
-}) {
+export default function PlatformNavigation() {
+  const { value, dispatch, signOut } = useContext(PlatformContext);
+  const { view, mobile } = value;
+  const onClose = () => dispatch({ field: 'mobile', value: false });
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(true);
+
   const select = (value) => {
-    onSelect(value);
+    dispatch({ field: 'view', value });
     onClose();
   };
   const content = (
@@ -45,6 +39,14 @@ export default function PlatformNavigation({
           <span>{t('Visão geral')}</span>
         </button>
         <button
+          className={view === 'clients' ? 'active' : ''}
+          onClick={() => select('clients')}
+          aria-current={view === 'clients' ? 'page' : undefined}
+        >
+          <Building2 size={19} />
+          <span>{t('Clientes')}</span>
+        </button>
+        <button
           className={view === 'users' ? 'active' : ''}
           onClick={() => select('users')}
           aria-current={view === 'users' ? 'page' : undefined}
@@ -52,28 +54,6 @@ export default function PlatformNavigation({
           <Users size={19} />
           <span>{t('Usuários')}</span>
         </button>
-        <button onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
-          <BookOpen size={19} />
-          <span>{t('Base de conhecimento')}</span>
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        <Collapse in={expanded}>
-          {[
-            ['backend', 'Backend', Server],
-            ['frontend', 'Frontend', Code],
-          ].map(([key, label, Icon]) => (
-            <button
-              key={key}
-              className={view === key ? 'active' : ''}
-              aria-current={view === key ? 'page' : undefined}
-              onClick={() => select(key)}
-              style={{ paddingLeft: 30 }}
-            >
-              <Icon size={19} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </Collapse>
       </nav>
       <div style={{ marginTop: 'auto' }}>
         <div className="sidebar-bottom">
@@ -108,7 +88,7 @@ export default function PlatformNavigation({
                 <small>adm@argous.com.br</small>
               </div>
             </Button>
-            <IconButton aria-label={t('Sair')} onClick={onLogout}>
+            <IconButton aria-label={t('Sair')} onClick={signOut}>
               <LogOut size={17} />
             </IconButton>
           </div>

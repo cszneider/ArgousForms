@@ -48,9 +48,44 @@ Este é o frontend principal, em `ArgousForms/frontend` dentro do repositório. 
 - `npm run dev`: desenvolvimento; `npm run build`: build; `npm start`: execução do build; porta 3002.
 - `npm test`: testes Node em `tests/`. Executar validações proporcionais às alterações e relatar resultados reais.
 - Não adicionar dependências sem justificar e obter autorização.
-- `npm run enviar`: valida, cria commit e publica branch no remoto `principal`, com PR via GitHub CLI. Exige autorização de publicação e autenticação válida. Não enviar segredos ou artefatos gerados; não fazer merge automático.
+- `npm run enviar`: valida, cria commit e publica branch no remoto `principal`, com PR via GitHub CLI. Por reunir essas ações, só executar após aprovação explícita do commit concreto e autorização para push e abertura de PR, com autenticação válida. Um pedido genérico de envio não dispensa a apresentação prévia do commit para aprovação. Não enviar segredos ou artefatos gerados; não fazer merge automático.
 - Não editar `target/`, não conectar bases externas e não alterar backend por conveniência de implementação do frontend.
+
+## Governança Git — aprovação individual de commits
+
+- A autorização para implementar uma atividade não autoriza criar commits, publicar alterações ou fazer merge. Cada commit exige autorização explícita do gestor, inclusive commits locais e alterações de commits existentes (`--amend`).
+- Antes de alterar arquivos, verificar a branch atual, o `git status` e as diferenças existentes. Preservar alterações do gestor, arquivos não rastreados e conteúdo já preparado no índice; não incluí-los automaticamente na atividade.
+- Para atividades autorizadas, preferir branches `codex/<descricao>`. Não criar ou trocar branches por causa desta regra sem autorização para a atividade correspondente; não alterar diretamente a branch principal sem autorização específica.
+- Antes de solicitar aprovação de um commit, concluir a implementação e as verificações proporcionais, revisar o diff e apresentar a branch, os arquivos e alterações que entrarão no commit, a mensagem proposta em português e os resultados das validações, incluindo falhas ou verificações não realizadas.
+- Após aprovação, adicionar somente os arquivos ou trechos aprovados, usando caminhos explícitos e conferindo o diff do índice. Não usar `git add .` ou incluir alterações alheias ao escopo. Se o conteúdo aprovado mudar materialmente, apresentar a mudança e obter nova aprovação antes do commit.
+- Push e abertura de PR exigem autorização explícita própria; podem ser aprovados junto com o commit quando o gestor identificar claramente as ações. Aprovação de um commit local não autoriza publicação.
+- Merge permanece sob decisão do gestor. Não fazer merge automático nem considerar a abertura de PR como autorização para merge.
+- Não executar descarte de alterações, `reset --hard`, `git clean`, exclusão de branches, force push ou reescrita de histórico sem autorização específica para a operação e seu alcance.
+- Não versionar senhas, tokens, chaves privadas, credenciais reais, dependências instaladas ou artefatos gerados. Revisar os arquivos destinados ao commit sem expor valores sensíveis na conversa ou nos logs.
+- Na entrega, informar a branch, as alterações e validações; quando houver commit autorizado, informar seu hash e mensagem, e quando houver publicação autorizada, informar o remoto e o link do PR. Não afirmar que houve commit ou publicação sem confirmação da operação.
 
 ## Escopo dos ajustes de interface
 
 - Solicitações gerais de interface devem ser aplicadas globalmente aos ambientes que compartilham o elemento. Restringir a um programa ou ambiente somente quando o usuário indicar explicitamente esse escopo. Preferir estilos e componentes compartilhados para manter o padrão.
+
+## Documentação do frontend
+
+- O projeto mantém o `AGENTS.md` como arquivo de orientação, sem base de conhecimento visual, galeria de componentes ou simulações de documentação na interface.
+
+### Padrão aprovado para TextField
+
+- Todos os `TextField` usam `variant="outlined"`, `size="medium"` e `fullWidth`, em todos os ambientes da interface.
+- O tema compartilhado define esses valores em `MuiTextField.defaultProps`.
+
+### Arquitetura aprovada para telas com contexto e dispatch
+
+- Telas com estado compartilhado, navegação interna ou filhos específicos seguem o padrão funcional: contexto exportado no arquivo principal, `initialState` com `useMemo`, `initialStateRef` com `useRef`, estado com `useReducer` e `contextValues` com `useMemo`.
+- O reducer recebe `dispatch({ field, value })`, incluindo função em `value` calculada a partir do valor anterior do campo. Atualizações de objetos e listas devem preservar os demais valores sem mutação.
+- O Provider fica na raiz visual do componente principal. Filhos específicos consomem `useContext`; não repassar por props estado e ações já disponíveis nesse contexto. Componentes genéricos reutilizáveis podem continuar recebendo props e mantendo estado local quando apropriado.
+- O contexto expõe `telaAtual`, `loading`, `value`, `dispatch` e `initialStateRef`. A navegação e as ações da tela devem manter uma única fonte de estado. Memoizações devem declarar todas as dependências utilizadas.
+- Não importar o componente Programa, serviços ou dependências do projeto de referência para o ArgousDocs. Aqui, o Provider envolve a estrutura visual existente em Material UI.
+- A migração autorizada está aplicada às telas com estado: login, configurações do usuário, administração da plataforma, lista e detalhes de usuários, workspace da empresa, editor de modelos, documento e dashboards.
+- `src/utils/page-state.js` contém o reducer compartilhado das telas. Ele preserva a referência do estado quando o campo não muda (`Object.is`), inclusive para notificações repetidas de edição; funções em `value` devem ser puras, sem gravações ou outros efeitos.
+- `WorkspaceContext` fornece as operações documentais ao editor, documento e dashboards. `TemplateEditorContext` também controla a edição visual em `ModelDesigner`; `DocumentViewContext` controla a seleção, o relógio e a análise de `ProcessFlow`, `TimingSummary` e `TimingComparison`. `PlatformContext` fornece navegação e atualização administrativa; `PlatformUsersContext` fornece o usuário selecionado aos detalhes.
+- Componentes sem estado, como a landing, não precisam de contexto artificial. Calendário, editor de texto, visualizador de PDF, componentes de UI e provedores globais de tema/idioma mantêm seu estado independente quando reutilizáveis, conforme a exceção aprovada acima.
+- O estado inicial é usado somente na montagem. Trocas de documento, pessoa ou etapa continuam utilizando as chaves existentes; reinicializações durante a navegação devem usar ações explícitas, sem apagar armazenamento.

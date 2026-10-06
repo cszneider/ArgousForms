@@ -109,7 +109,18 @@ export function AppTheme({ children }) {
             defaultProps: { disableElevation: true },
             styleOverrides: { root: { padding: '10px 17px', borderRadius: 8 } },
           },
-          MuiTextField: { defaultProps: { size: 'small', fullWidth: true } },
+          MuiTextField: {
+            defaultProps: {
+              variant: 'outlined',
+              size: 'medium',
+              fullWidth: true,
+            },
+          },
+          MuiInputLabel: {
+            styleOverrides: {
+              root: { fontSize: 14 },
+            },
+          },
           MuiOutlinedInput: {
             styleOverrides: {
               root: { background: dark ? '#14212e' : '#fff', fontSize: 14 },

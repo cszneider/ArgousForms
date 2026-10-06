@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useContext } from 'react';
+import { TemplateEditorContext } from '../modelos/template-editor.js';
 import {
   Button,
   Alert,
@@ -17,18 +18,28 @@ import { PdfModel } from './pdf-model.js';
 import { readAsset, downloadBlob } from './assets.js';
 import { PDF_FIELD_TYPES, PDF_FIELD_LABELS } from './layout-rules.js';
 
-export function ModelDesigner({
-  template,
-  onChange,
-  onBusy,
-  groups = [],
-  people = [],
-}) {
+export function ModelDesigner() {
+  const { value, dispatch } = useContext(TemplateEditorContext);
+  const { t: template, groups, people, busy, designer } = value;
+  const { error, selected, fieldId } = designer;
   const { t, system } = useI18n();
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(''),
-    [selected, setSelected] = useState(null),
-    [fieldId, setFieldId] = useState('');
+  const onChange = useCallback(
+    (next) => dispatch({ field: 't', value: next }),
+    [dispatch],
+  );
+  const updateDesigner = (field, next) =>
+    dispatch({
+      field: 'designer',
+      value: (current) => ({ ...current, [field]: next }),
+    });
+  const selectPlacement = useCallback(
+    (next) =>
+      dispatch({
+        field: 'designer',
+        value: (current) => ({ ...current, selected: next }),
+      }),
+    [dispatch],
+  );
   const layout = template.layout,
     fields = template.sections.flatMap((s) => s.fields),
     place = layout?.placements?.find((p) => p.id === selected);
@@ -62,9 +73,8 @@ export function ModelDesigner({
     });
   async function importFile(file) {
     if (!file || !changeSource()) return;
-    setBusy(true);
-    onBusy(true);
-    setError('');
+    dispatch({ field: 'busy', value: true });
+    updateDesigner('error', '');
     try {
       const next = await importModel(file);
       onChange({
@@ -72,12 +82,11 @@ export function ModelDesigner({
         name: template.name || file.name.replace(/\.[^.]+$/, ''),
         layout: next,
       });
-      setSelected(null);
+      updateDesigner('selected', null);
     } catch (e) {
-      setError(system(e.message));
+      updateDesigner('error', system(e.message));
     } finally {
-      setBusy(false);
-      onBusy(false);
+      dispatch({ field: 'busy', value: false });
     }
   }
   return (
@@ -128,7 +137,7 @@ export function ModelDesigner({
               try {
                 downloadBlob(await readAsset(layout.assetId), layout.name);
               } catch (e) {
-                setError(system(e.message));
+                updateDesigner('error', system(e.message));
               }
             }}
           >
@@ -143,7 +152,7 @@ export function ModelDesigner({
         )}
       </p>
       {error && (
-        <Alert severity="error" onClose={() => setError('')}>
+        <Alert severity="error" onClose={() => updateDesigner('error', '')}>
           {error}
         </Alert>
       )}
@@ -197,8 +206,8 @@ export function ModelDesigner({
               label={t('Campo')}
               value={place?.fieldId || fieldId}
               onChange={(e) => {
-                setFieldId(e.target.value);
-                setSelected(null);
+                updateDesigner('fieldId', e.target.value);
+                updateDesigner('selected', null);
               }}
               sx={{ maxWidth: 260 }}
             >
@@ -219,7 +228,10 @@ export function ModelDesigner({
                     section.fields.some((f) => f.id === activeField?.id),
                   ) || template.sections[0];
                 if (!section) {
-                  setError(t('Adicione uma seção antes de criar campos.'));
+                  updateDesigner(
+                    'error',
+                    t('Adicione uma seção antes de criar campos.'),
+                  );
                   return;
                 }
                 const id = createId();
@@ -244,8 +256,8 @@ export function ModelDesigner({
                       : s,
                   ),
                 });
-                setSelected(null);
-                setFieldId(id);
+                updateDesigner('selected', null);
+                updateDesigner('fieldId', id);
               }}
             >
               {t('Novo campo')}
@@ -253,8 +265,8 @@ export function ModelDesigner({
             <Button
               disabled={!fieldId && !place}
               onClick={() => {
-                setFieldId(place?.fieldId || fieldId);
-                setSelected(null);
+                updateDesigner('fieldId', place?.fieldId || fieldId);
+                updateDesigner('selected', null);
               }}
             >
               {t('Repetir marcação')}
@@ -314,7 +326,7 @@ export function ModelDesigner({
                         (p) => p.id !== selected,
                       ),
                     });
-                    setSelected(null);
+                    updateDesigner('selected', null);
                   }}
                 >
                   {t('Remover marcação')}
@@ -469,7 +481,7 @@ export function ModelDesigner({
                             ),
                           },
                         });
-                        setFieldId(id);
+                        updateDesigner('fieldId', id);
                       }}
                     >
                       {t('Separar este campo')}
@@ -488,7 +500,7 @@ export function ModelDesigner({
             fields={fields}
             preview
             selected={selected}
-            onSelect={setSelected}
+            onSelect={selectPlacement}
             onPlace={(page, x, y) => {
               if (busy) return;
               if (place) {
@@ -516,7 +528,7 @@ export function ModelDesigner({
                   },
                 ],
               });
-              setSelected(id);
+              updateDesigner('selected', id);
             }}
           />
         </>
