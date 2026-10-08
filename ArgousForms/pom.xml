@@ -25,9 +25,21 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.sun.mail</groupId>
+      <artifactId>javax.mail</artifactId>
+      <version>1.6.2</version>
+    </dependency>
+
+    <dependency>
       <groupId>br.com.quatro</groupId>
       <artifactId>Quatro</artifactId>
       <version>0.0.8</version>
+    </dependency>
+
+    <dependency>
+      <groupId>br.com.quatro</groupId>
+      <artifactId>argous-forms</artifactId>
+      <version>0.0.1</version>
     </dependency>
 
     <dependency>
