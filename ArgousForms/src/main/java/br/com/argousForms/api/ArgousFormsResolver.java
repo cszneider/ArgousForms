@@ -35,7 +35,6 @@ public final class ArgousFormsResolver extends HttpServlet {
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
 
-		System.out.println( "Cheguei no service" );
 		if( !"POST".equals( request.getMethod() ) ) {
 			response.setHeader( "Allow", "POST" );
 			ArgousFormsJson.enviarErro( response, 405, "METODO_NAO_PERMITIDO", "Utilize POST para acessar o resolver." );
@@ -48,7 +47,6 @@ public final class ArgousFormsResolver extends HttpServlet {
 	@Override
 	protected void doPost( HttpServletRequest request, HttpServletResponse response ) throws IOException {
 
-		System.out.println( "Cheguei no doPost" );
 		request.setCharacterEncoding( "UTF-8" );
 
 		try {
@@ -58,33 +56,11 @@ public final class ArgousFormsResolver extends HttpServlet {
 				throw new ArgousFormsApiException( 400, "REQUISICAO_INVALIDA", "O campo dados deve ser um objeto JSON." );
 			}
 
-			System.out.println( "executa operacao" );
 			executarOperacao( operacao, dados, request, response );
-			System.out.println( "executei" );
 		} catch ( ArgousFormsApiException e ) {
-			System.out.println( "ArgousFormsApiException" );
-			e.printStackTrace();
-			
-			registrarErroDesenvolvimento( "Erro da API: HTTP " + e.getStatusHttp() + ", código " + e.getCodigoErro(), e );
 			ArgousFormsJson.enviarErro( response, e.getStatusHttp(), e.getCodigoErro(), e.getMessage() );
 		} catch ( Exception e ) {
-			System.out.println( "Exception" );
-			e.printStackTrace();
-
-			String referencia = UUID.randomUUID().toString();
-			registrarErroDesenvolvimento( "Falha inesperada [" + referencia + "]", e );
-			ArgousFormsJson.enviarErro( response, 500, "ERRO_INTERNO", "Não foi possível processar a requisição. Referência: " + referencia );
-		}
-	}
-
-	private void registrarErroDesenvolvimento( String descricao, Throwable erro ) {
-
-		if( !"true".equalsIgnoreCase( getServletContext().getInitParameter( "argousforms.logs.desenvolvimento" ) ) ) return;
-
-		// Na execução padrão do Tomcat, stderr é direcionado ao catalina.out.
-		synchronized( System.err ) {
-			System.err.println( "[ArgousFormsResolver] " + descricao );
-			erro.printStackTrace( System.err );
+			ArgousFormsJson.enviarErro( response, 500, "ERRO_INTERNO", "Não foi possível processar a requisição." );
 		}
 	}
 
@@ -150,7 +126,6 @@ public final class ArgousFormsResolver extends HttpServlet {
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			if( conexao == null ) throw new IllegalStateException( "O pool não retornou uma conexão." );
 		} catch ( Exception e ) {
-			registrarErroDesenvolvimento( "Falha na verificação da conexão com o banco", e );
 			throw new ArgousFormsApiException( 503, "BANCO_INDISPONIVEL", "Não foi possível conectar ao banco de dados." );
 		}
 	}
@@ -165,7 +140,6 @@ public final class ArgousFormsResolver extends HttpServlet {
 			query.executeQuery();
 			encontrada = !query.isEmpty();
 		} catch ( Exception e ) {
-			registrarErroDesenvolvimento( "Falha na consulta da origem de login local", e );
 			throw new ArgousFormsApiException( 503, "ORIGEM_LOCAL_CONSULTA_FALHOU", "Não foi possível consultar a origem de login local." );
 		}
 

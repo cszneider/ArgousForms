@@ -113,6 +113,8 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 ## Persistência e transações com o framework Quatro
 
 - Inclusões, alterações e exclusões devem ser executadas pela respectiva classe `*Negocio`, para que as verificações de consistência e regras de negócio sejam aplicadas.
+- Regras de negócio específicas devem ser implementadas na classe `*NegocioEspecifico` correspondente, por meio dos ganchos do Quatro (`antesDeInserir`, `depoisDeInserir`, `antesDeAlterar`, `depoisDeAlterar` etc.), sem editar a classe `*Negocio` gerada para esse fim.
+- Quando a mesma regra se aplicar a mais de uma operação, extraí-la para um método privado que receba a entidade e chamá-lo dos ganchos pertinentes. Exemplo: `ConfirmacaoEmailNegocioEspecifico.checaRegrasDeNegocio( ConfirmacaoEmail )` é chamado antes de inserir e antes de alterar.
 - Não usar diretamente classes `*Persistor` em serviços, resolvers ou demais classes da aplicação. O uso de `*Persistor` deve permanecer restrito à implementação interna das classes de negócio geradas.
 - Consultas podem utilizar `Localizador`, `Query` ou consultas específicas parametrizadas, conforme a necessidade.
 - A transação deve pertencer ao método que representa a operação externa completa e sua unidade atômica de trabalho.

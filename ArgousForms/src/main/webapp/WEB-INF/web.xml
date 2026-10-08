@@ -7,12 +7,6 @@
              http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
 
-    <!-- Diagnóstico do resolver durante o desenvolvimento; desativar antes de distribuir o WAR. -->
-    <context-param>
-        <param-name>argousforms.logs.desenvolvimento</param-name>
-        <param-value>true</param-value>
-    </context-param>
-
     <servlet>
         <servlet-name>StartupServlet</servlet-name>
         <servlet-class>quatro.util.StartupServlet</servlet-class>

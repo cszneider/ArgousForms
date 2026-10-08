@@ -2,10 +2,10 @@ package br.com.argousForms.cadastro;
 
 import java.util.List;
 import java.util.UUID;
-import br.com.argousforms.model.persistencia.cadastro.ConfirmacaoEmail;
-import br.com.argousforms.model.persistencia.cadastro.OrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioOrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
+import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
 
 /** Cada operação externa abre e controla uma única unidade transacional. */
 interface CadastroRepositorio {
@@ -13,6 +13,7 @@ interface CadastroRepositorio {
 	Transacao abrir() throws Exception;
 
 	interface Transacao extends AutoCloseable {
+		
 		void iniciar() throws Exception;
 		void commit() throws Exception;
 		void rollback() throws Exception;

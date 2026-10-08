@@ -3,6 +3,7 @@ package br.com.argousForms.email;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Properties;
+
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Session;
@@ -14,15 +15,17 @@ import javax.mail.internet.MimeMessage;
 /** Envio SMTP da instalação. Não expõe uma operação pública de envio arbitrário. */
 public final class EmailService {
 
-	public void enviarConfirmacao(String destinatario, String codigo) throws EmailException {
-		if (codigo == null || !codigo.matches("[0-9]{8}")) {
-			throw new EmailException("O código de confirmação deve conter oito dígitos.");
+	public void enviarConfirmacao( String destinatario, String codigo ) throws EmailException {
+
+		if( codigo == null || !codigo.matches( "[0-9]{8}" ) ) {
+			throw new EmailException( "O código de confirmação deve conter oito dígitos." );
 		}
 
-		String texto = "Seu código de confirmação do ArgousForms é: " + codigo
+		String codigoApresentado = codigo.substring( 0, 4 ) + "-" + codigo.substring( 4 );
+		String texto = "Seu código de confirmação do ArgousForms é: " + codigoApresentado
 			+ "\n\nDigite esse código na página de cadastro. Ele é válido por 10 minutos."
 			+ "\nSe você não solicitou este cadastro, ignore esta mensagem.";
-		enviar(destinatario, "Confirme seu e-mail no ArgousForms", texto);
+		enviar( destinatario, "Confirme seu e-mail no ArgousForms", texto );
 	}
 
 	private void enviar(String destinatario, String assunto, String texto) throws EmailException {

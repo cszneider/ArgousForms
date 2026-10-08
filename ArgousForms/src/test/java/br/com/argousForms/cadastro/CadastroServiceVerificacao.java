@@ -14,12 +14,14 @@ import java.util.List;
 import java.util.UUID;
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
+import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocioEspecifico;
 import br.com.argousForms.security.CodigoConfirmacao;
 import br.com.argousForms.security.SenhaSegura;
-import br.com.argousforms.model.persistencia.cadastro.ConfirmacaoEmail;
-import br.com.argousforms.model.persistencia.cadastro.OrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioOrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
+import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+import quatro.negocio.ErroDeNegocio;
 
 /** Testa o fluxo sem banco/SMTP, incluindo atomicidade com falhas injetadas. */
 public final class CadastroServiceVerificacao {
@@ -28,6 +30,17 @@ public final class CadastroServiceVerificacao {
 	private static final String SENHA = " senha de teste ";
 
 	public static void main(String[] args) throws Exception {
+		ConfirmacaoEmail provisoria = new ConfirmacaoEmail();
+		provisoria.setCdHashToken( ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO );
+		ConfirmacaoEmailNegocioEspecifico regra = new ConfirmacaoEmailNegocioEspecifico();
+		regra.antesDeInserir( null, provisoria );
+		try {
+			regra.antesDeAlterar( null, provisoria );
+			throw new AssertionError( "O hash provisório não pode permanecer após a inclusão." );
+		} catch ( ErroDeNegocio esperada ) {
+			// A alteração exige o HMAC definitivo.
+		}
+
 		Cenario c = new Cenario();
 		CadastroService.Resultado resultado = c.service.cadastrar(" Pessoa ", " PESSOA@example.com ", SENHA);
 		exigir(resultado.emailEnviado() && c.envios == 1, "Código deve ser enviado após commit");
@@ -37,6 +50,7 @@ public final class CadastroServiceVerificacao {
 		exigir(!SenhaSegura.confere(SENHA.strip(), c.repo.estado.usuario.getCdHashSenha()), "Não alterar espaços da senha");
 		exigir(!c.repo.estado.vinculo.isSnEmailVerificado(), "Novo usuário deve estar pendente");
 		exigir(c.codigo.matches("[0-9]{8}") && !c.atual().getCdHashToken().equals(c.codigo), "Persistir somente hash do código");
+		exigir(new CodigoConfirmacao(new byte[32]).confere(resultado.idConfirmacao(), c.repo.estado.usuario.getIdUsuarioSistema(), EMAIL, c.codigo, c.atual().getCdHashToken()), "Hash deve usar o UUID gerado na inclusão");
 		exigir(c.atual().getDtValidade().getTimeInMillis() - c.relogio.millis() == 600_000, "Validade de dez minutos");
 		erro("CADASTRO_INDISPONIVEL", () -> c.service.cadastrar("Outro", EMAIL, "outra senha"));
 		exigir(SenhaSegura.confere(SENHA, c.repo.estado.usuario.getCdHashSenha()), "Duplicidade não pode substituir senha");
@@ -73,7 +87,7 @@ public final class CadastroServiceVerificacao {
 		reenvio.relogio.avancar(60);
 		erro("REENVIO_LIMITADO", () -> reenvio.service.reenviar(EMAIL, SENHA));
 
-		for (int escrita = 1; escrita <= 3; escrita++) {
+		for (int escrita = 1; escrita <= 4; escrita++) {
 			Cenario falha = new Cenario();
 			falha.repo.falharNaEscrita = escrita;
 			falha(() -> falha.service.cadastrar("Pessoa", EMAIL, SENHA));
@@ -228,9 +242,18 @@ public final class CadastroServiceVerificacao {
 				private void escrita() throws Exception { if (++escritas == falharNaEscrita) throw new FalhaSimulada(); }
 				public void inserir(UsuarioSistema usuario) throws Exception { escrita(); estado.usuario = usuario; }
 				public void inserir(UsuarioOrigemLogin vinculo) throws Exception { escrita(); estado.vinculo = vinculo; }
-				public void inserir(ConfirmacaoEmail confirmacao) throws Exception { escrita(); estado.confirmacoes.add(confirmacao); }
+				public void inserir(ConfirmacaoEmail confirmacao) throws Exception {
+					escrita();
+					exigir(confirmacao.getIdConfirmacaoEmail() == null, "UUID da confirmação deve ser gerado na inclusão");
+					exigir(ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO.equals(confirmacao.getCdHashToken()), "Inserção deve usar hash provisório");
+					confirmacao.setIdConfirmacaoEmail(UUID.randomUUID());
+					estado.confirmacoes.add(confirmacao);
+				}
 				public void alterar(UsuarioOrigemLogin vinculo) throws Exception { escrita(); }
-				public void alterar(ConfirmacaoEmail confirmacao) throws Exception { escrita(); }
+				public void alterar(ConfirmacaoEmail confirmacao) throws Exception {
+					escrita();
+					exigir(!ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO.equals(confirmacao.getCdHashToken()), "Hash provisório não pode ser confirmado");
+				}
 			};
 		}
 	}

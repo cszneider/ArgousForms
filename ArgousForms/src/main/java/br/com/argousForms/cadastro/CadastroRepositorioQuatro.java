@@ -3,17 +3,17 @@ package br.com.argousForms.cadastro;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import br.com.argousforms.model.negocio.cadastro.ConfirmacaoEmailNegocio;
-import br.com.argousforms.model.negocio.cadastro.UsuarioOrigemLoginNegocio;
-import br.com.argousforms.model.negocio.cadastro.UsuarioSistemaNegocio;
-import br.com.argousforms.model.persistencia.cadastro.ConfirmacaoEmail;
-import br.com.argousforms.model.persistencia.cadastro.ConfirmacaoEmailLocalizador;
-import br.com.argousforms.model.persistencia.cadastro.OrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.OrigemLoginLocalizador;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioOrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioOrigemLoginLocalizador;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioSistema;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
+import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocio;
+import br.com.argousForms.model.negocio.cadastro.UsuarioOrigemLoginNegocio;
+import br.com.argousForms.model.negocio.cadastro.UsuarioSistemaNegocio;
+import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
+import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmailLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.OrigemLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -94,8 +94,8 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 
 			try ( Query query = new Query( conexao ) ) {
 				query.setSQL( "select * from Cadastro.USUARIO_ORIGENS_LOGIN where ID_USUARIO_SISTEMA = :usuario and ID_ORIGEM_LOGIN = :origem" );
-				query.setParameter( "usuario", usuario );
-				query.setParameter( "origem", origem );
+				query.setParameter( "usuario", usuario.toString() );
+				query.setParameter( "origem", origem.toString() );
 				query.executeQuery();
 				if( query.isEmpty() ) return null;
 
@@ -112,7 +112,7 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 			List<ConfirmacaoEmail> resultado = new ArrayList<>();
 			try ( Query query = new Query( conexao ) ) {
 				query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :usuario order by DT_INCLUSAO desc" );
-				query.setParameter( "usuario", usuario );
+				query.setParameter( "usuario", usuario.toString() );
 				query.executeQuery();
 				if( !query.isEmpty() ) {
 					do {

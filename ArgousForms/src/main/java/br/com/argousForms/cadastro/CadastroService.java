@@ -11,12 +11,13 @@ import javax.servlet.ServletContext;
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
 import br.com.argousForms.email.EmailService;
+import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocioEspecifico;
 import br.com.argousForms.security.CodigoConfirmacao;
 import br.com.argousForms.security.SenhaSegura;
-import br.com.argousforms.model.persistencia.cadastro.ConfirmacaoEmail;
-import br.com.argousforms.model.persistencia.cadastro.OrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioOrigemLogin;
-import br.com.argousforms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
+import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
 import quatro.util.QtData;
 
 public final class CadastroService {
@@ -41,7 +42,8 @@ public final class CadastroService {
 		return new CadastroService( new CadastroRepositorioQuatro(), CadastroConfiguracao.codigos( contexto ), CadastroConfiguracao.origemLocal(), Clock.systemUTC(), new EmailService()::enviarConfirmacao );
 	}
 
-	CadastroService(CadastroRepositorio repositorio, CodigoConfirmacao codigos, UUID origemLocal, Clock relogio, EnvioEmail envio) {
+	CadastroService( CadastroRepositorio repositorio, CodigoConfirmacao codigos, UUID origemLocal, Clock relogio, EnvioEmail envio ) {
+
 		this.repositorio = repositorio;
 		this.codigos = codigos;
 		this.origemLocal = origemLocal;
@@ -85,8 +87,8 @@ public final class CadastroService {
 				vinculo.setDtInclusao(data(agora));
 				tx.inserir(vinculo);
 
-				confirmacao = novaConfirmacao(usuario, codigo, agora);
-				tx.inserir(confirmacao);
+				confirmacao = novaConfirmacao(usuario, agora);
+				gravarConfirmacao( tx, confirmacao, codigo );
 				// Nenhum UsuarioPerfil e nenhuma sessão são criados pelo autocadastro.
 				tx.commit();
 			} catch (Exception e) {
@@ -125,8 +127,8 @@ public final class CadastroService {
 						tx.alterar(anterior);
 					}
 				}
-				nova = novaConfirmacao(usuario, codigo, agora);
-				tx.inserir(nova);
+				nova = novaConfirmacao(usuario, agora);
+				gravarConfirmacao( tx, nova, codigo );
 				tx.commit();
 			} catch (Exception e) {
 				reverter(tx, e);
@@ -136,57 +138,94 @@ public final class CadastroService {
 		return enviar(nova, codigo);
 	}
 
-	public void confirmar(String emailInformado, UUID idConfirmacao, String codigo) throws Exception {
-		String email = normalizarEmail(emailInformado);
+	public void confirmar( String emailInformado, UUID idConfirmacao, String codigo ) throws Exception {
+
+		String email = normalizarEmail( emailInformado );
 		ArgousFormsApiException rejeicao = null;
 
-		try (CadastroRepositorio.Transacao tx = repositorio.abrir()) {
+		try ( CadastroRepositorio.Transacao tx = repositorio.abrir() ) {
 			tx.iniciar();
 			try {
-				tx.bloquearEmail(email);
-				exigirOrigem(tx);
-				UsuarioSistema usuario = tx.usuario(email);
-				if (usuario == null || usuario.getDtExclusao() != null) throw codigoInvalido();
-				UsuarioOrigemLogin vinculo = exigirVinculoPendente(tx, usuario, email);
-				ConfirmacaoEmail confirmacao = tx.confirmacoes(usuario.getIdUsuarioSistema()).stream()
-					.filter(c -> c.getIdConfirmacaoEmail().equals(idConfirmacao)).findFirst().orElseThrow(CadastroService::codigoInvalido);
-				Instant agora = relogio.instant();
-				if (!email.equals(confirmacao.getDsEmail()) || confirmacao.getDtConfirmacao() != null || confirmacao.getDtRevogacao() != null
-					|| confirmacao.getDtValidade() == null || confirmacao.getDtValidade().getTimeInMillis() <= agora.toEpochMilli()) throw codigoInvalido();
-				int tentativas = confirmacao.getNrTentativasInvalidas() == null ? 0 : confirmacao.getNrTentativasInvalidas();
-				if (tentativas >= 5) throw codigoInvalido();
+				tx.bloquearEmail( email );
+				exigirOrigem( tx );
+				UsuarioSistema usuario = tx.usuario( email );
+				if( usuario == null ) {
+					throw codigoInvalido();
+				}
+				if( usuario.getDtExclusao() != null ) {
+					throw codigoInvalido();
+				}
 
-				if (!codigos.confere(idConfirmacao, usuario.getIdUsuarioSistema(), email, codigo, confirmacao.getCdHashToken())) {
-					confirmacao.setNrTentativasInvalidas(tentativas + 1);
-					if (tentativas + 1 >= 5) confirmacao.setDtRevogacao(data(agora));
-					tx.alterar(confirmacao);
+				UsuarioOrigemLogin vinculo = exigirVinculoPendente( tx, usuario, email );
+				ConfirmacaoEmail confirmacao = tx.confirmacoes( usuario.getIdUsuarioSistema() ).stream()
+					.filter( c -> c.getIdConfirmacaoEmail().equals( idConfirmacao ) ).findFirst().orElse( null );
+				if( confirmacao == null ) {
+					throw codigoInvalido();
+				}
+
+				Instant agora = relogio.instant();
+				if( !email.equals( confirmacao.getDsEmail() ) ) {
+					throw codigoInvalido();
+				}
+				if( confirmacao.getDtConfirmacao() != null ) {
+					throw codigoInvalido();
+				}
+				if( confirmacao.getDtRevogacao() != null ) {
+					throw codigoInvalido();
+				}
+				if( confirmacao.getDtValidade() == null ) {
+					throw codigoInvalido();
+				}
+				if( confirmacao.getDtValidade().getTimeInMillis() <= agora.toEpochMilli() ) {
+					throw codigoInvalido();
+				}
+
+				int tentativas = confirmacao.getNrTentativasInvalidas() == null ? 0 : confirmacao.getNrTentativasInvalidas();
+				if( tentativas >= 5 ) {
+					throw codigoInvalido();
+				}
+
+				if( !codigos.confere( idConfirmacao, usuario.getIdUsuarioSistema(), email, codigo, confirmacao.getCdHashToken() ) ) {
+					confirmacao.setNrTentativasInvalidas( tentativas + 1 );
+					if( tentativas + 1 >= 5 ) confirmacao.setDtRevogacao( data( agora ) );
+					tx.alterar( confirmacao );
 					rejeicao = codigoInvalido();
 				} else {
-					confirmacao.setDtConfirmacao(data(agora));
-					vinculo.setSnEmailVerificado(true);
-					tx.alterar(confirmacao);
-					tx.alterar(vinculo);
+					confirmacao.setDtConfirmacao( data( agora ) );
+					vinculo.setSnEmailVerificado( true );
+					tx.alterar( confirmacao );
+					tx.alterar( vinculo );
 				}
 				tx.commit();
-			} catch (Exception e) {
-				reverter(tx, e);
+			} catch ( Exception e ) {
+				reverter( tx, e );
 				throw e;
 			}
 		}
+
 		// A tentativa incorreta precisa permanecer gravada mesmo quando a API responde com erro.
-		if (rejeicao != null) throw rejeicao;
+		if( rejeicao != null ) throw rejeicao;
 	}
 
-	private ConfirmacaoEmail novaConfirmacao(UsuarioSistema usuario, String codigo, Instant agora) {
+	private ConfirmacaoEmail novaConfirmacao( UsuarioSistema usuario, Instant agora ) {
+
 		ConfirmacaoEmail confirmacao = new ConfirmacaoEmail();
-		confirmacao.setIdConfirmacaoEmail(UUID.randomUUID());
-		confirmacao.setIdUsuarioSistema(usuario.getIdUsuarioSistema());
-		confirmacao.setDsEmail(usuario.getDsEmail());
-		confirmacao.setCdHashToken(codigos.hash(confirmacao.getIdConfirmacaoEmail(), usuario.getIdUsuarioSistema(), usuario.getDsEmail(), codigo));
-		confirmacao.setDtInclusao(data(agora));
-		confirmacao.setDtValidade(data(agora.plusSeconds(600)));
-		confirmacao.setNrTentativasInvalidas(0);
+		confirmacao.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
+		confirmacao.setDsEmail( usuario.getDsEmail() );
+		confirmacao.setCdHashToken( ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO );
+		confirmacao.setDtInclusao( data( agora ) );
+		confirmacao.setDtValidade( data( agora.plusSeconds( 600 ) ) );
+		confirmacao.setNrTentativasInvalidas( 0 );
 		return confirmacao;
+	}
+
+	private void gravarConfirmacao( CadastroRepositorio.Transacao tx, ConfirmacaoEmail confirmacao, String codigo ) throws Exception {
+
+		tx.inserir( confirmacao );
+		if( confirmacao.getIdConfirmacaoEmail() == null ) throw new IllegalStateException( "A inclusão não retornou o identificador da confirmação." );
+
+		confirmacao.setCdHashToken( codigos.hash( confirmacao.getIdConfirmacaoEmail(), confirmacao.getIdUsuarioSistema(), confirmacao.getDsEmail(), codigo ) );
+		tx.alterar( confirmacao );
 	}
 
 	private void exigirOrigem( CadastroRepositorio.Transacao tx ) throws Exception {
@@ -204,12 +243,13 @@ public final class CadastroService {
 		return vinculo;
 	}
 
-	private Resultado enviar(ConfirmacaoEmail confirmacao, String codigo) {
+	private Resultado enviar( ConfirmacaoEmail confirmacao, String codigo ) {
+
 		try {
-			envio.enviar(confirmacao.getDsEmail(), codigo);
-			return new Resultado(confirmacao.getIdConfirmacaoEmail(), true);
-		} catch (EmailException e) {
-			return new Resultado(confirmacao.getIdConfirmacaoEmail(), false);
+			envio.enviar( confirmacao.getDsEmail(), codigo );
+			return new Resultado( confirmacao.getIdConfirmacaoEmail(), true );
+		} catch ( EmailException e ) {
+			return new Resultado( confirmacao.getIdConfirmacaoEmail(), false );
 		}
 	}
 
