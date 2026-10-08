@@ -25,9 +25,21 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.sun.mail</groupId>
+      <artifactId>javax.mail</artifactId>
+      <version>1.6.2</version>
+    </dependency>
+
+    <dependency>
       <groupId>br.com.quatro</groupId>
       <artifactId>Quatro</artifactId>
       <version>0.0.8</version>
+    </dependency>
+
+    <dependency>
+      <groupId>br.com.quatro</groupId>
+      <artifactId>argous-forms</artifactId>
+      <version>0.0.1</version>
     </dependency>
 
     <dependency>
@@ -58,6 +70,26 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-war-plugin</artifactId>
         <version>3.5.1</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.11.0</version>
+        <executions>
+          <execution>
+            <id>obter-fontes-argous-forms</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>resolve-sources</goal>
+            </goals>
+            <configuration>
+              <includeGroupIds>br.com.quatro</includeGroupIds>
+              <includeArtifactIds>argous-forms</includeArtifactIds>
+              <excludeTransitive>true</excludeTransitive>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

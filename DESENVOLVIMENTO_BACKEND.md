@@ -36,6 +36,12 @@ Este documento reúne as definições e questões relacionadas ao backend. Recom
 - Auditoria.
 - Integrações e notificações.
 
+## Regras de negócio específicas com o Quatro
+
+- Inclusões, alterações e exclusões passam pela classe `*Negocio` correspondente.
+- Regras específicas da aplicação ficam na classe `*NegocioEspecifico`, usando o gancho apropriado do ciclo de persistência, como `antesDeInserir`, `depoisDeInserir`, `antesDeAlterar` ou `depoisDeAlterar`. A classe `*Negocio` gerada não deve ser editada para acrescentar essas regras.
+- Se uma regra valer para mais de uma operação, os ganchos envolvidos devem chamar um método compartilhado que receba a entidade. Na confirmação de e-mail, `checaRegrasDeNegocio( ConfirmacaoEmail )` valida o hash antes da inclusão e da alteração.
+
 ## API central
 
 O formato conceitual será:

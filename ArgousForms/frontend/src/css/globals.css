@@ -475,6 +475,42 @@ footer {
   color: var(--theme-text-secondary, #728296);
   margin-bottom: 30px;
 }
+.login-diagnostics {
+  border: 1px solid var(--theme-border, #e2e8ee);
+  border-radius: 9px;
+  background: var(--theme-surface-muted, #f7f9fb);
+  padding: 14px 16px;
+  margin-bottom: 24px;
+}
+.login-diagnostics strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.login-diagnostics p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--theme-text-secondary, #62758a);
+}
+.login-diagnostics p b {
+  color: var(--theme-text-strong, #172b41);
+}
+.login-diagnostic-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #929ead;
+}
+.login-diagnostics [data-state='sucesso'] .login-diagnostic-dot {
+  background: #168575;
+}
+.login-diagnostics [data-state='erro'] .login-diagnostic-dot {
+  background: #c84f4f;
+}
 .login-form form {
   display: flex;
   flex-direction: column;
@@ -4289,4 +4325,35 @@ footer {
   .testimonial-card {
     padding: 24px;
   }
+}
+
+.access-tools {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.access-preferences {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.access-links {
+  margin-top: 24px;
+  text-align: center;
+}
+.access-links p {
+  color: var(--theme-text-secondary, #728296);
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+.registration-complete {
+  display: grid;
+  gap: 24px;
+  margin-top: 24px;
+}
+.registration-complete > svg {
+  color: var(--theme-accent, #12665b);
+}
+.confirmation-address {
+  overflow-wrap: anywhere;
 }

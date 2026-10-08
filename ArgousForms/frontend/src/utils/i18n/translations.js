@@ -1,5 +1,158 @@
 // Interface copy only. User-authored document content is never translated.
 export const translations = {
+  'Estado da instalação': ['Installation status', 'Estado de la instalación'],
+  'Servidor': ['Server', 'Servidor'],
+  'Banco de dados': ['Database', 'Base de datos'],
+  'Origem de login local': ['Local login source', 'Origen de acceso local'],
+  'Verificando…': ['Checking…', 'Verificando…'],
+  'Servidor ativo.': ['Server is responding.', 'El servidor responde.'],
+  'Conexão com o banco disponível.': [
+    'Database connection is available.',
+    'La conexión con la base de datos está disponible.',
+  ],
+  'Origem local cadastrada.': [
+    'Local login source is registered.',
+    'El origen de acceso local está registrado.',
+  ],
+  'Não foi possível conectar ao banco de dados.': [
+    'Could not connect to the database.',
+    'No se pudo conectar a la base de datos.',
+  ],
+  'A origem local (CD_ORIGEM = 1) não foi cadastrada.': [
+    'The local login source (CD_ORIGEM = 1) is not registered.',
+    'El origen de acceso local (CD_ORIGEM = 1) no está registrado.',
+  ],
+  'Não foi possível consultar a origem local.': [
+    'Could not check the local login source.',
+    'No se pudo consultar el origen de acceso local.',
+  ],
+  'Operação de diagnóstico não encontrada no servidor.': [
+    'Diagnostic operation was not found on the server.',
+    'No se encontró la operación de diagnóstico en el servidor.',
+  ],
+  'O serviço não retornou uma resposta JSON.': [
+    'The service did not return a JSON response.',
+    'El servicio no devolvió una respuesta JSON.',
+  ],
+  'O serviço não respondeu como esperado.': [
+    'The service did not respond as expected.',
+    'El servicio no respondió como se esperaba.',
+  ],
+  'Tempo esgotado ao consultar o serviço.': [
+    'The service request timed out.',
+    'Se agotó el tiempo de espera del servicio.',
+  ],
+  'Não foi possível comunicar com o servidor.': [
+    'Could not communicate with the server.',
+    'No se pudo comunicar con el servidor.',
+  ],
+  'Ainda não tem uma conta?': [
+    'Don’t have an account yet?',
+    '¿Todavía no tiene una cuenta?',
+  ],
+  'Criar cadastro': ['Create account', 'Crear cuenta'],
+  'Retomar cadastro': ['Resume registration', 'Retomar registro'],
+  'Voltar ao login': ['Back to login', 'Volver al inicio de sesión'],
+  'Nome completo': ['Full name', 'Nombre completo'],
+  'Use pelo menos 8 caracteres.': [
+    'Use at least 8 characters.',
+    'Use al menos 8 caracteres.',
+  ],
+  'SUA CONTA ARGOUSDOCS': ['YOUR ARGOUSDOCS ACCOUNT', 'SU CUENTA ARGOUSDOCS'],
+  'Confirme seu e-mail': ['Confirm your email', 'Confirme su correo'],
+  'E-mail confirmado': ['Email confirmed', 'Correo confirmado'],
+  'Informe seus dados para começar. Vamos confirmar seu e-mail antes de concluir o cadastro.':
+    [
+      'Enter your details to get started. We will confirm your email before completing registration.',
+      'Ingrese sus datos para comenzar. Confirmaremos su correo antes de completar el registro.',
+    ],
+  'Informe o e-mail e a senha usados no cadastro para receber um novo código.':
+    [
+      'Enter the email and password used to register to receive a new code.',
+      'Ingrese el correo y la contraseña del registro para recibir un nuevo código.',
+    ],
+  'Digite o código enviado para {email}.': [
+    'Enter the code sent to {email}.',
+    'Ingrese el código enviado a {email}.',
+  ],
+  'Seu e-mail foi confirmado. O acesso depende da liberação de um administrador.':
+    [
+      'Your email has been confirmed. Access requires administrator approval.',
+      'Su correo ha sido confirmado. El acceso requiere autorización de un administrador.',
+    ],
+  'Código de confirmação': ['Confirmation code', 'Código de confirmación'],
+  'Digite os 8 dígitos do código.': [
+    'Enter the 8-digit code.',
+    'Ingrese los 8 dígitos del código.',
+  ],
+  'Confirmar e-mail': ['Confirm email', 'Confirmar correo'],
+  'Enviar novo código': ['Send a new code', 'Enviar nuevo código'],
+  'Reenviar código': ['Resend code', 'Reenviar código'],
+  'Reenviar em {segundos}s': [
+    'Resend in {segundos}s',
+    'Reenviar en {segundos}s',
+  ],
+  'Usar outro e-mail': ['Use another email', 'Usar otro correo'],
+  'Já iniciou seu cadastro?': [
+    'Already started registering?',
+    '¿Ya inició su registro?',
+  ],
+  'Aguarde…': ['Please wait…', 'Espere…'],
+  'O código é válido por 10 minutos. Confira também a pasta de spam.': [
+    'The code is valid for 10 minutes. Check your spam folder too.',
+    'El código es válido durante 10 minutos. Revise también la carpeta de spam.',
+  ],
+  'Seu cadastro foi salvo, mas o envio do e-mail não foi confirmado. Aguarde um minuto e solicite outro código.':
+    [
+      'Your registration was saved, but the email delivery was not confirmed. Wait one minute and request another code.',
+      'Su registro fue guardado, pero el envío del correo no fue confirmado. Espere un minuto y solicite otro código.',
+    ],
+  'Já iniciou seu cadastro? Use “Retomar cadastro” para solicitar outro código.':
+    [
+      'Already started registering? Use “Resume registration” to request another code.',
+      '¿Ya inició su registro? Use “Retomar registro” para solicitar otro código.',
+    ],
+  'Confira seu e-mail e senha. O cadastro pode já estar confirmado.': [
+    'Check your email and password. Registration may already be confirmed.',
+    'Revise su correo y contraseña. El registro puede estar confirmado.',
+  ],
+  'O cadastro está indisponível no momento. Tente novamente mais tarde.': [
+    'Registration is currently unavailable. Try again later.',
+    'El registro no está disponible. Intente más tarde.',
+  ],
+  'Código inválido, expirado ou já utilizado. Confira o código ou solicite outro.':
+    [
+      'Invalid, expired or previously used code. Check the code or request another one.',
+      'Código inválido, vencido o ya utilizado. Revise el código o solicite otro.',
+    ],
+  'Retome seu cadastro para solicitar um novo código.': [
+    'Resume registration to request a new code.',
+    'Retome su registro para solicitar un nuevo código.',
+  ],
+  'Aguarde antes de solicitar outro código. São permitidos até cinco envios por hora.':
+    [
+      'Wait before requesting another code. Up to five sends per hour are allowed.',
+      'Espere antes de solicitar otro código. Se permiten hasta cinco envíos por hora.',
+    ],
+  'Muitas solicitações. Aguarde antes de tentar novamente.': [
+    'Too many requests. Wait before trying again.',
+    'Demasiadas solicitudes. Espere antes de intentarlo nuevamente.',
+  ],
+  'O servidor não respondeu como esperado. Tente novamente mais tarde.': [
+    'The server did not respond as expected. Try again later.',
+    'El servidor no respondió como se esperaba. Intente más tarde.',
+  ],
+  'Não foi possível concluir a solicitação. Confira os dados e tente novamente.':
+    [
+      'Could not complete the request. Check your details and try again.',
+      'No se pudo completar la solicitud. Revise los datos e intente nuevamente.',
+    ],
+  'Não foi possível confirmar a resposta do servidor. Se já enviou seus dados, use “Retomar cadastro”.':
+    [
+      'Could not confirm the server response. If you already submitted your details, use “Resume registration”.',
+      'No se pudo confirmar la respuesta del servidor. Si ya envió sus datos, use “Retomar registro”.',
+    ],
+
   'Cadastro da empresa': ['Company details', 'Datos de la empresa'],
   'Razão social': ['Legal name', 'Razón social'],
   'Nome fantasia': ['Trade name', 'Nombre comercial'],

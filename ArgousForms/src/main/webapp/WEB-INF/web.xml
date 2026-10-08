@@ -13,7 +13,7 @@
 
         <init-param>
             <param-name>arquivoDeParametros</param-name>
-            <param-value>/Users/andersonborba/projetos/ArgousForms/ArgousForms/target/ArgousForms/WEB-INF/parametros-agforms.xml</param-value>
+            <param-value>/Users/carlos/projetos/ArgousForms/ArgousForms/src/main/webapp/WEB-INF/parametros-agforms.xml</param-value>
         </init-param>
 
         <load-on-startup>1</load-on-startup>
