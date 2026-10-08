@@ -91,6 +91,7 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 - `ArgousForms/src/main/webapp/WEB-INF/parametros-agforms.xml` contém a estrutura de parâmetros da Quatro; credenciais e URL do banco permanecem pendentes de configuração.
 - `ArgousForms/src/main/webapp/WEB-INF/web.xml` configura o `quatro.util.StartupServlet` e aponta para o arquivo de parâmetros na aplicação explodida de desenvolvimento.
 - Não inserir credenciais reais nesses arquivos nem substituir valores pendentes sem autorização e sem definir a forma segura de proteção.
+- A chave HMAC da confirmação de e-mail foi configurada pelo gestor em `agforms.xml`, na entrada `chave-confirmacao`. O valor armazenado é codificado: a leitura deverá aplicar `quatro.util.BDUtil.decodifica()` e depois decodificar o Base64 para recuperar os bytes da chave. Essa definição substitui o uso da variável de ambiente `ARGOUSFORMS_CONFIRMACAO_CHAVE`; não registrar o valor em logs ou documentação. A leitura utiliza o recurso `/WEB-INF/agforms.xml` da aplicação pelo contexto Servlet.
 
 ## Estilo do código Java
 
@@ -100,6 +101,14 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 - Usar linhas vazias para separar blocos lógicos e facilitar a leitura humana do método.
 - Preservar quebras de linha quando a expressão for genuinamente longa ou complexa e a compactação prejudicar a interpretação.
 - Não deixar espaços ou tabulações no final das linhas.
+- Usar `CodigoConfirmacao.java`, ajustada pelo gestor, como referência concreta de formatação Java.
+- Inserir espaços internos nos parênteses não vazios de declarações, chamadas, construções e condições: `metodo( argumento )`, `new Tipo( argumento )`, `if( condicao )` e `catch ( Exception e )`. Manter parênteses vazios como `metodo()`.
+- Usar `if(`, sem espaço entre `if` e `(`, conforme a referência do gestor.
+- Em alocações de arrays, usar espaços internos: `new byte[ 32 ]`; declarações de tipo permanecem `byte[]`.
+- Em métodos com vários blocos lógicos, deixar uma linha vazia após a abertura do corpo e entre validação, processamento e retorno. Métodos simples de retorno direto podem permanecer compactos.
+- Manter guardas simples com `return` na mesma linha quando legíveis; usar bloco com chaves para validações que lançam exceção, conforme a classe de referência.
+- Separar os grupos de imports `java.*` e `javax.*` por uma linha vazia.
+- Antes de entregar alterações Java, revisar a parte tocada contra essas regras; não aplicar formatação automática que remova os espaços internos ou as separações de blocos.
 
 ## Persistência e transações com o framework Quatro
 
@@ -113,6 +122,7 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 
 ## Forma de trabalho
 
+- Aplicar KISS como regra geral: escolher a solução mais simples que atenda aos requisitos aprovados, evitar abstrações, camadas, configurações e dependências sem necessidade concreta, sem abrir mão de segurança e integridade.
 - Antes de implementar uma etapa com impacto em modelo de dados, autenticação, autorização, assinatura, auditoria, workflow, armazenamento documental ou infraestrutura, apresentar as decisões necessárias e aguardar aprovação.
 - Para mudanças autorizadas, limitar os arquivos ao necessário, verificar o resultado proporcionalmente ao risco e comunicar o que foi alterado e o que permanece pendente.
 - Não adicionar dependências por conveniência. Explicar necessidade, maturidade, licença, manutenção, impacto no WAR e riscos antes de solicitar aprovação.

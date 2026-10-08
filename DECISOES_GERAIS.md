@@ -12,6 +12,10 @@ Este documento consolida as definições gerais discutidas para o ArgousForms. E
 - Atividades que possam consumir quantidade significativa de tokens devem ter objetivo, escopo e resultado esperado apresentados previamente ao gestor e dependem de sua autorização.
 - O papel do assistente é analisar requisitos, apresentar alternativas com vantagens, limitações, custos e riscos, alertar sobre segurança e manutenção e identificar decisões que dependem de aprovação.
 
+## Princípio geral de desenvolvimento
+
+- Aplicar KISS: preferir a solução mais simples que cumpra os requisitos aprovados, preservando segurança, integridade e clareza. Evitar complexidade sem necessidade concreta.
+
 ## Visão do produto
 
 O ArgousForms será um sistema comercial no modelo SaaS dedicado a cada cliente. Permitirá criar modelos de formulários e documentos, preencher formulários de forma colaborativa, executar workflows, gerar documentos finais em PDF, gerenciar documentos e aplicar assinaturas eletrônicas.
