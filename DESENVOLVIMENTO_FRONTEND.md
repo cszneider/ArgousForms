@@ -24,6 +24,7 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 - Login Google.
 - Login Microsoft.
 - Seleção ou vinculação de origem de identidade quando necessário.
+- No autocadastro local, o perfil `PARTICIPANTE` é atribuído automaticamente. Após confirmar o e-mail, o usuário poderá fazer login sem aguardar liberação administrativa; a confirmação não cria sessão automaticamente.
 
 ### Modelagem
 
@@ -124,4 +125,3 @@ Ainda precisam ser definidos o idioma padrão, as regras de fallback e se todos 
 - Acessibilidade mínima exigida.
 - Estratégia de atualização em tempo real.
 - Visualização e confirmação do PDF antes da assinatura.
-

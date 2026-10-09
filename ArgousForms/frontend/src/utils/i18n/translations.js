@@ -75,10 +75,10 @@ export const translations = {
     'Enter the code sent to {email}.',
     'Ingrese el código enviado a {email}.',
   ],
-  'Seu e-mail foi confirmado. O acesso depende da liberação de um administrador.':
+  'Seu e-mail foi confirmado e seu cadastro está concluído.':
     [
-      'Your email has been confirmed. Access requires administrator approval.',
-      'Su correo ha sido confirmado. El acceso requiere autorización de un administrador.',
+      'Your email has been confirmed and your registration is complete.',
+      'Su correo ha sido confirmado y su registro está completo.',
     ],
   'Código de confirmação': ['Confirmation code', 'Código de confirmación'],
   'Digite os 8 dígitos do código.': [

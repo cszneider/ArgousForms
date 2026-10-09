@@ -75,6 +75,7 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 
 - A instalação inicial criará instituição, primeiro administrador, perfis e origens de autenticação em uma única transação.
 - Autenticação local, Argous, Google e Microsoft convergirão para um usuário interno.
+- O autocadastro local atribui o perfil `PARTICIPANTE` na transação de inclusão. O login dependerá da confirmação do e-mail, sem aprovação administrativa; `MODELADOR` e `GESTOR` serão atribuídos posteriormente por administrador.
 - Senhas locais usarão PBKDF2-HMAC-SHA-256 com salt e parâmetros próprios.
 - Bearers de sessão serão aleatórios e apenas seus hashes SHA-256 serão armazenados no banco.
 - Aplicar autorização no backend para cada operação e recurso; ocultação na interface não é controle de segurança.
