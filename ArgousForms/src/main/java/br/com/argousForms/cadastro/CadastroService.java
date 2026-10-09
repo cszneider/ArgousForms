@@ -6,8 +6,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+
 import javax.mail.internet.InternetAddress;
 import javax.servlet.ServletContext;
+
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
 import br.com.argousForms.email.EmailService;
@@ -16,13 +18,17 @@ import br.com.argousForms.security.CodigoConfirmacao;
 import br.com.argousForms.security.SenhaSegura;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.Perfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+
 import quatro.util.QtData;
 
 public final class CadastroService {
 
 	private static final String TIPO_AUTENTICACAO_LOCAL = "L";
+	private static final String PERFIL_PARTICIPANTE = "PARTICIPANTE";
 	private final CadastroRepositorio repositorio;
 	private final CodigoConfirmacao codigos;
 	private final UUID origemLocal;
@@ -51,54 +57,67 @@ public final class CadastroService {
 		this.envio = envio;
 	}
 
-	public Resultado cadastrar(String nome, String emailInformado, String senha) throws Exception {
-		String email = normalizarEmail(emailInformado);
-		if (nome == null || nome.isBlank() || nome.strip().length() > 200) throw invalido("Informe o nome, com até 200 caracteres.");
-		validarSenha(senha);
-		String hashSenha = SenhaSegura.gerarHash(senha);
+	public Resultado cadastrar( String nome, String emailInformado, String senha ) throws Exception {
+
+		String email = normalizarEmail( emailInformado );
+		if( nome == null || nome.isBlank() || nome.strip().length() > 200 ) {
+			throw invalido( "Informe o nome, com até 200 caracteres." );
+		}
+		validarSenha( senha );
+		String hashSenha = SenhaSegura.gerarHash( senha );
 		String codigo = codigos.gerar();
 		ConfirmacaoEmail confirmacao;
 
-		try (CadastroRepositorio.Transacao tx = repositorio.abrir()) {
+		try ( CadastroRepositorio.Transacao tx = repositorio.abrir() ) {
 			tx.iniciar();
 			try {
-				tx.bloquearEmail(email);
-				exigirOrigem(tx);
-				if (tx.usuario(email) != null) {
-					throw new ArgousFormsApiException(409, "CADASTRO_INDISPONIVEL", "Não foi possível iniciar um novo cadastro com esses dados. Se já iniciou, utilize o reenvio do código.");
+				tx.bloquearEmail( email );
+				exigirOrigem( tx );
+				Perfil perfilParticipante = tx.perfilAtivo( PERFIL_PARTICIPANTE );
+				if( perfilParticipante == null ) {
+					throw new ArgousFormsApiException( 503, "PERFIL_PARTICIPANTE_INDISPONIVEL", "O perfil de cadastro não está disponível nesta instalação." );
+				}
+				if( tx.usuario( email ) != null ) {
+					throw new ArgousFormsApiException( 409, "CADASTRO_INDISPONIVEL", "Não foi possível iniciar um novo cadastro com esses dados. Se já iniciou, utilize o reenvio do código." );
 				}
 
 				Instant agora = relogio.instant();
 				UsuarioSistema usuario = new UsuarioSistema();
-				usuario.setIdUsuarioSistema(UUID.randomUUID());
-				usuario.setDsNome(nome.strip());
-				usuario.setDsEmail(email);
-				usuario.setCdHashSenha(hashSenha);
-				usuario.setDtInclusao(data(agora));
-				tx.inserir(usuario);
+				usuario.setIdUsuarioSistema( UUID.randomUUID() );
+				usuario.setDsNome( nome.strip() );
+				usuario.setDsEmail( email );
+				usuario.setCdHashSenha( hashSenha );
+				usuario.setDtInclusao( data( agora ) );
+				tx.inserir( usuario );
 
 				UsuarioOrigemLogin vinculo = new UsuarioOrigemLogin();
-				vinculo.setIdUsuarioOrigemLogin(UUID.randomUUID());
-				vinculo.setIdUsuarioSistema(usuario.getIdUsuarioSistema());
-				vinculo.setIdOrigemLogin(origemLocal);
-				vinculo.setCdUsuarioNaOrigem(email);
-				vinculo.setDsEmailOrigem(email);
-				vinculo.setSnEmailVerificado(false);
-				vinculo.setDtInclusao(data(agora));
-				tx.inserir(vinculo);
+				vinculo.setIdUsuarioOrigemLogin( UUID.randomUUID() );
+				vinculo.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
+				vinculo.setIdOrigemLogin( origemLocal );
+				vinculo.setCdUsuarioNaOrigem( email );
+				vinculo.setDsEmailOrigem( email );
+				vinculo.setSnEmailVerificado( false );
+				vinculo.setDtInclusao( data( agora ) );
+				tx.inserir( vinculo );
 
-				confirmacao = novaConfirmacao(usuario, agora);
+				UsuarioPerfil usuarioPerfil = new UsuarioPerfil();
+				usuarioPerfil.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
+				usuarioPerfil.setIdPerfil( perfilParticipante.getIdPerfil() );
+				usuarioPerfil.setDtInclusao( data( agora ) );
+				usuarioPerfil.setDtInicioVigencia( data( agora ) );
+				tx.inserir( usuarioPerfil );
+
+				confirmacao = novaConfirmacao( usuario, agora );
 				gravarConfirmacao( tx, confirmacao, codigo );
-				// Nenhum UsuarioPerfil e nenhuma sessão são criados pelo autocadastro.
 				tx.commit();
-			} catch (Exception e) {
-				reverter(tx, e);
+			} catch ( Exception e ) {
+				reverter( tx, e );
 				throw e;
 			}
 		}
 
 		// SMTP não participa da transação: falhas preservam o cadastro pendente para reenvio.
-		return enviar(confirmacao, codigo);
+		return enviar( confirmacao, codigo );
 	}
 
 	public Resultado reenviar(String emailInformado, String senha) throws Exception {

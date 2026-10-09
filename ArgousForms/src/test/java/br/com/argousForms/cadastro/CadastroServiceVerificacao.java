@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
 import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocioEspecifico;
@@ -19,8 +20,11 @@ import br.com.argousForms.security.CodigoConfirmacao;
 import br.com.argousForms.security.SenhaSegura;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.Perfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+
 import quatro.negocio.ErroDeNegocio;
 
 /** Testa o fluxo sem banco/SMTP, incluindo atomicidade com falhas injetadas. */
@@ -48,7 +52,8 @@ public final class CadastroServiceVerificacao {
 		exigir(c.repo.estado.usuario.getDsNome().equals("Pessoa"), "Normalização de nome");
 		exigir(SenhaSegura.confere(SENHA, c.repo.estado.usuario.getCdHashSenha()), "Hash de senha verificável");
 		exigir(!SenhaSegura.confere(SENHA.strip(), c.repo.estado.usuario.getCdHashSenha()), "Não alterar espaços da senha");
-		exigir(!c.repo.estado.vinculo.isSnEmailVerificado(), "Novo usuário deve estar pendente");
+			exigir(!c.repo.estado.vinculo.isSnEmailVerificado(), "Novo usuário deve estar pendente");
+			exigir( c.repo.estado.usuarioPerfil != null && c.repo.estado.usuarioPerfil.getIdPerfil().equals( c.perfil.getIdPerfil() ), "Cadastro deve atribuir o perfil PARTICIPANTE" );
 		exigir(c.codigo.matches("[0-9]{8}") && !c.atual().getCdHashToken().equals(c.codigo), "Persistir somente hash do código");
 		exigir(new CodigoConfirmacao(new byte[32]).confere(resultado.idConfirmacao(), c.repo.estado.usuario.getIdUsuarioSistema(), EMAIL, c.codigo, c.atual().getCdHashToken()), "Hash deve usar o UUID gerado na inclusão");
 		exigir(c.atual().getDtValidade().getTimeInMillis() - c.relogio.millis() == 600_000, "Validade de dez minutos");
@@ -87,11 +92,11 @@ public final class CadastroServiceVerificacao {
 		reenvio.relogio.avancar(60);
 		erro("REENVIO_LIMITADO", () -> reenvio.service.reenviar(EMAIL, SENHA));
 
-		for (int escrita = 1; escrita <= 4; escrita++) {
+			for (int escrita = 1; escrita <= 5; escrita++) {
 			Cenario falha = new Cenario();
 			falha.repo.falharNaEscrita = escrita;
 			falha(() -> falha.service.cadastrar("Pessoa", EMAIL, SENHA));
-			exigir(falha.repo.estado.usuario == null && falha.repo.estado.vinculo == null && falha.repo.estado.confirmacoes.isEmpty(), "Rollback integral do cadastro");
+				exigir(falha.repo.estado.usuario == null && falha.repo.estado.vinculo == null && falha.repo.estado.usuarioPerfil == null && falha.repo.estado.confirmacoes.isEmpty(), "Rollback integral do cadastro");
 			exigir(falha.envios == 0, "Não enviar antes do commit");
 		}
 
@@ -109,7 +114,12 @@ public final class CadastroServiceVerificacao {
 		Cenario smtp = new Cenario();
 		smtp.falhaSmtp = true;
 		exigir(!smtp.service.cadastrar("Pessoa", EMAIL, SENHA).emailEnviado(), "Falha SMTP deve ser informada");
-		exigir(smtp.repo.estado.usuario != null && !smtp.repo.estado.vinculo.isSnEmailVerificado(), "Falha SMTP preserva cadastro pendente");
+			exigir(smtp.repo.estado.usuario != null && smtp.repo.estado.usuarioPerfil != null && !smtp.repo.estado.vinculo.isSnEmailVerificado(), "Falha SMTP preserva cadastro pendente");
+
+			Cenario semPerfil = new Cenario();
+			semPerfil.perfil.setSnAtivo( false );
+			erro( "PERFIL_PARTICIPANTE_INDISPONIVEL", () -> semPerfil.service.cadastrar( "Pessoa", EMAIL, SENHA ) );
+			exigir( semPerfil.repo.estado.usuario == null, "Cadastro sem perfil ativo não pode criar usuário" );
 
 		Cenario desabilitado = new Cenario();
 		desabilitado.origem.setSnPermiteAutocadastro(false);
@@ -172,7 +182,8 @@ public final class CadastroServiceVerificacao {
 	private static final class Cenario {
 		private final Relogio relogio = new Relogio();
 		private final OrigemLogin origem = new OrigemLogin();
-		private final Repositorio repo = new Repositorio(origem);
+		private final Perfil perfil = new Perfil();
+		private final Repositorio repo = new Repositorio( origem, perfil );
 		private final CadastroService service;
 		private int envios;
 		private String codigo;
@@ -183,6 +194,9 @@ public final class CadastroServiceVerificacao {
 			origem.setTpAutenticacao( "L" );
 			origem.setSnAtiva(true);
 			origem.setSnPermiteAutocadastro(true);
+			perfil.setIdPerfil( UUID.randomUUID() );
+			perfil.setCdPerfil( "PARTICIPANTE" );
+			perfil.setSnAtivo( true );
 			service = new CadastroService(repo, new CodigoConfirmacao(new byte[32]), origem.getIdOrigemLogin(), relogio, (email, codigo) -> {
 				exigir(!repo.aberta && repo.commits > 0, "SMTP deve ocorrer após commit e liberação da conexão");
 				if (falhaSmtp) throw new EmailException("Falha simulada");
@@ -208,17 +222,22 @@ public final class CadastroServiceVerificacao {
 		private static final long serialVersionUID = 1L;
 		private UsuarioSistema usuario;
 		private UsuarioOrigemLogin vinculo;
+		private UsuarioPerfil usuarioPerfil;
 		private List<ConfirmacaoEmail> confirmacoes = new ArrayList<>();
 	}
 
 	private static final class Repositorio implements CadastroRepositorio {
 		private Estado estado = new Estado();
 		private final OrigemLogin origem;
+		private final Perfil perfil;
 		private boolean aberta;
 		private int commits;
 		private int falharNaEscrita;
 
-		private Repositorio(OrigemLogin origem) { this.origem = origem; }
+		private Repositorio( OrigemLogin origem, Perfil perfil ) {
+			this.origem = origem;
+			this.perfil = perfil;
+		}
 
 		public Transacao abrir() {
 			return new Transacao() {
@@ -235,13 +254,18 @@ public final class CadastroServiceVerificacao {
 				public void rollback() { if (aberta) estado = antes; aberta = false; }
 				public void close() { exigir(!aberta, "Transação deve terminar antes da liberação"); }
 				public void bloquearEmail(String email) { exigir(aberta, "Bloqueio deve pertencer à transação"); }
-				public OrigemLogin origem(UUID id) { return origem.getIdOrigemLogin().equals(id) ? origem : null; }
+					public OrigemLogin origem(UUID id) { return origem.getIdOrigemLogin().equals(id) ? origem : null; }
+					public Perfil perfilAtivo( String codigo ) { return perfil.isSnAtivo() && codigo.equals( perfil.getCdPerfil() ) ? perfil : null; }
 				public UsuarioSistema usuario(String email) { return estado.usuario != null && estado.usuario.getDsEmail().equals(email) ? estado.usuario : null; }
 				public UsuarioOrigemLogin vinculo(UUID usuario, UUID origem) { return estado.vinculo; }
 				public List<ConfirmacaoEmail> confirmacoes(UUID usuario) { return estado.confirmacoes; }
 				private void escrita() throws Exception { if (++escritas == falharNaEscrita) throw new FalhaSimulada(); }
 				public void inserir(UsuarioSistema usuario) throws Exception { escrita(); estado.usuario = usuario; }
-				public void inserir(UsuarioOrigemLogin vinculo) throws Exception { escrita(); estado.vinculo = vinculo; }
+					public void inserir(UsuarioOrigemLogin vinculo) throws Exception { escrita(); estado.vinculo = vinculo; }
+					public void inserir( UsuarioPerfil usuarioPerfil ) throws Exception {
+						escrita();
+						estado.usuarioPerfil = usuarioPerfil;
+					}
 				public void inserir(ConfirmacaoEmail confirmacao) throws Exception {
 					escrita();
 					exigir(confirmacao.getIdConfirmacaoEmail() == null, "UUID da confirmação deve ser gerado na inclusão");

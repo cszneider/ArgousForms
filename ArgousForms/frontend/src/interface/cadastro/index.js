@@ -241,7 +241,7 @@ export default function Cadastro() {
             <CheckCircle2 size={44} aria-hidden="true" />
             <Alert severity="success">
               {tr(
-                'Seu e-mail foi confirmado. O acesso depende da liberação de um administrador.',
+                'Seu e-mail foi confirmado e seu cadastro está concluído.',
               )}
             </Alert>
             <Button component="a" href="/login" variant="contained" fullWidth>

@@ -215,6 +215,10 @@ Deverão ser preservados o arquivo de prova, o hash carimbado, as informações 
 - Sessões revogáveis e com validade definida.
 - Histórico de login.
 - DTOs próprios, sem exposição direta das entidades de persistência.
+- O autocadastro local atribui o perfil ativo `PARTICIPANTE` na mesma transação que inclui o usuário. Se o perfil padrão não estiver disponível, a inclusão falha sem deixar cadastro parcial.
+- O vínculo de login local permanece sem e-mail verificado até a confirmação do código. A política de login permitirá acesso após essa confirmação, sem aprovação administrativa e sem autenticação automática na confirmação.
+- `PARTICIPANTE` combina os papéis `INICIADOR_PROCESSOS` e `EXECUTOR_ETAPAS`; `MODELADOR` combina o papel `MODELADOR`; `GESTOR` combina `ANALISTA_INDICADORES`. Os dois últimos perfis são atribuições posteriores por administrador.
+- A carga manual inicial está em `ArgousForms/perfis-papeis-iniciais.sql`. A instalação futura deverá inserir os papéis, perfis e vínculos padrão automaticamente. As permissões de cada papel e a operação de login ainda precisam ser implementadas.
 
 A necessidade de vínculo Argous deverá ser determinada pela funcionalidade ou pela configuração do cliente; não foi definido que todo usuário do ArgousForms dependerá desse vínculo.
 
@@ -267,4 +271,3 @@ Utilizar registros append-only para eventos relevantes:
 - Implementação da assinatura avançada.
 - Aprovação ou rejeição do OpenTimestamps.
 - Modelo inicial de perfis, papéis e permissões.
-

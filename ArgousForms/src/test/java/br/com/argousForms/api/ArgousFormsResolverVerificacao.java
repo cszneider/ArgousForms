@@ -37,6 +37,7 @@ public final class ArgousFormsResolverVerificacao {
 	}
 
 	private static void verificar(String metodo, String tipo, String corpo, int status, String codigo) throws Exception {
+		
 		Resposta resposta = chamar(metodo, tipo, corpo.getBytes(StandardCharsets.UTF_8));
 		exigir(resposta.status == status, "Status esperado: " + status + "; recebido: " + resposta.status);
 		JSONObject json = new JSONObject(resposta.corpo.toString());
@@ -48,6 +49,7 @@ public final class ArgousFormsResolverVerificacao {
 	}
 
 	private static Resposta chamar(String metodo, String tipo, byte[] corpo) throws Exception {
+		
 		ByteArrayInputStream bytes = new ByteArrayInputStream(corpo);
 		ServletInputStream entrada = new ServletInputStream() {
 			@Override

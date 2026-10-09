@@ -3,17 +3,23 @@ package br.com.argousForms.cadastro;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
 import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioOrigemLoginNegocio;
+import br.com.argousForms.model.negocio.cadastro.UsuarioPerfilNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioSistemaNegocio;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmailLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.Perfil;
+import br.com.argousForms.model.persistencia.cadastro.PerfilLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
+
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -71,6 +77,22 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 				if( !id.equals( origem.getIdOrigemLogin() ) ) throw new IllegalStateException( "A origem de login local mudou durante o cadastro." );
 
 				return origem;
+			}
+		}
+
+		public Perfil perfilAtivo( String codigo ) throws Exception {
+
+			try ( Query query = new Query( conexao ) ) {
+				query.setSQL( "select * from Cadastro.PERFIS where CD_PERFIL = :codigo and SN_ATIVO = true and DT_EXCLUSAO is null" );
+				query.setParameter( "codigo", codigo );
+				query.executeQuery();
+				if( query.isEmpty() ) return null;
+
+				Perfil perfil = new Perfil();
+				PerfilLocalizador.buscaCampos( perfil, query );
+				if( query.next() ) throw new IllegalStateException( "Perfil de autocadastro ambíguo." );
+
+				return perfil;
 			}
 		}
 
@@ -132,6 +154,10 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 
 		public void inserir(UsuarioOrigemLogin vinculo) throws Exception {
 			new UsuarioOrigemLoginNegocio(conexao, vinculo).insere();
+		}
+
+		public void inserir( UsuarioPerfil perfil ) throws Exception {
+			new UsuarioPerfilNegocio( conexao, perfil ).insere();
 		}
 
 		public void inserir(ConfirmacaoEmail confirmacao) throws Exception {
