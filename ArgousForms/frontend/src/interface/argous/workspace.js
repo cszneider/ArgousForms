@@ -5,7 +5,10 @@ import {
   sessionRole,
   isEnabled,
   PLATFORM_KEY,
+  SESSION_KEY,
+  isLocalSession,
 } from '../../programas/plataforma/access.js';
+import { executar, sair, sessaoAtual } from '../../programas/login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import {
   useEffect,
@@ -17,19 +20,20 @@ import {
 } from 'react';
 import {
   Button,
+  Checkbox,
+  FormControlLabel,
   TextField,
   MenuItem,
   Avatar,
-  AvatarGroup,
   Chip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Checkbox,
-  FormControlLabel,
   Alert,
   Snackbar,
+  Tab,
+  Tabs,
   Table,
   TableHead,
   TableRow,
@@ -80,18 +84,15 @@ import {
   canWork,
   canContribute,
   uid,
-  log,
-  timestamp,
 } from '../../programas/documentos/domain.js';
 import { readStore, writeStore } from '../../programas/documentos/storage.js';
 export const WorkspaceContext = createContext({});
 const nav = [
   ['home', 'Visão geral', LayoutDashboard],
   ['dashboards', 'Dashboards', ChartNoAxesCombined],
-  ['tasks', 'Minhas pendências', Inbox],
   ['documents', 'Documentos', Files],
   ['templates', 'Modelos', LayoutTemplate],
-  ['groups', 'Grupos e pessoas', Users],
+  ['organization', 'Organização e acessos', Users],
 ];
 const initials = (name) =>
   name
@@ -105,16 +106,31 @@ const roleLabel = (p) =>
     : p.role === 'designer'
       ? 'Criador de modelos'
       : 'Participante';
+const profilePriority = ['ADMINISTRADOR', 'GESTOR', 'MODELADOR', 'PARTICIPANTE', 'ESSENCIAL'];
+const profileSummary = (profiles) => {
+  if (!profiles?.length) return 'Sem perfil';
+  const sorted = [...profiles].sort((a, b) => {
+    const first = profilePriority.indexOf(a);
+    const second = profilePriority.indexOf(b);
+    return (first < 0 ? profilePriority.length : first) -
+      (second < 0 ? profilePriority.length : second) || a.localeCompare(b);
+  });
+  const main = sorted[0].toLocaleLowerCase('pt-BR');
+  const label = main.charAt(0).toLocaleUpperCase('pt-BR') + main.slice(1);
+  return sorted.length === 1 ? sorted[0] : `${label} + ${sorted.length - 1}`;
+};
 export default function Workspace() {
   const initialState = useMemo(
     () => ({
       telaAtual: 'Workspace',
       loading: false,
       state: null,
+      usuario: null,
       loadError: '',
       dirty: false,
       actorId: 'admin',
       view: 'home',
+      managementSection: 'groups',
       dashboardFilters: { ...defaultDashboardFilters },
       documentId: null,
       editor: null,
@@ -128,6 +144,18 @@ export default function Workspace() {
       newTemplate: '',
       newTitle: '',
       groupEdit: null,
+      tagEdit: null,
+      organizacao: null,
+      organizacaoLoading: false,
+      organizacaoError: '',
+      organizacaoSaving: false,
+      acessos: null,
+      acessosLoading: false,
+      acessosError: '',
+      acessosSaving: false,
+      papelEdit: null,
+      perfilEdit: null,
+      remocaoAcesso: null,
       personOpen: false,
       personName: '',
       personRole: 'participant',
@@ -138,10 +166,12 @@ export default function Workspace() {
   const [pageState, dispatch] = useReducer(pageReducer, initialState);
   const {
     state,
+    usuario,
     loadError,
     dirty,
     actorId,
     view,
+    managementSection,
     documentId,
     editor,
     mobile,
@@ -154,6 +184,18 @@ export default function Workspace() {
     newTemplate,
     newTitle,
     groupEdit,
+    tagEdit,
+    organizacao,
+    organizacaoLoading,
+    organizacaoError,
+    organizacaoSaving,
+    acessos,
+    acessosLoading,
+    acessosError,
+    acessosSaving,
+    papelEdit,
+    perfilEdit,
+    remocaoAcesso,
     personOpen,
     personName,
     personRole,
@@ -165,6 +207,121 @@ export default function Workspace() {
 
   const { t: tr, locale, system } = useI18n();
 
+  const carregarOrganizacao = useCallback(async () => {
+    dispatch({ field: 'organizacaoLoading', value: true });
+    dispatch({ field: 'organizacaoError', value: '' });
+    try {
+      const dados = await executar('LISTAR_ORGANIZACAO');
+      dispatch({ field: 'organizacao', value: dados });
+    } catch (erro) {
+      dispatch({ field: 'organizacaoError', value: erro.message });
+    } finally {
+      dispatch({ field: 'organizacaoLoading', value: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'organization' && usuario?.papeis?.includes('GESTOR_GRUPOS_TAGS'))
+      carregarOrganizacao();
+  }, [view, usuario, carregarOrganizacao]);
+
+  const carregarAcessos = useCallback(async () => {
+    dispatch({ field: 'acessosLoading', value: true });
+    dispatch({ field: 'acessosError', value: '' });
+    try {
+      dispatch({ field: 'acessos', value: await executar('LISTAR_ACESSOS') });
+    } catch (erro) {
+      dispatch({ field: 'acessosError', value: erro.message });
+    } finally {
+      dispatch({ field: 'acessosLoading', value: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'organization' && usuario?.papeis?.includes('GESTOR_ACESSOS'))
+      carregarAcessos();
+  }, [view, usuario, carregarAcessos]);
+
+  const salvarAcesso = async (tipo) => {
+    const registro = tipo === 'papel' ? papelEdit : perfilEdit;
+    if (!registro || acessosSaving) return;
+    dispatch({ field: 'acessosSaving', value: true });
+    try {
+      await executar(tipo === 'papel' ? 'SALVAR_PAPEL' : 'SALVAR_PERFIL', {
+        id: tipo === 'papel' ? registro.idPapel : registro.idPerfil,
+        codigo: registro.codigo.trim(),
+        nome: registro.nome.trim(),
+        descricao: registro.descricao.trim(),
+        ativo: registro.ativo,
+        ...(tipo === 'perfil' ? { papeis: registro.papeis } : {}),
+      });
+      dispatch({ field: tipo === 'papel' ? 'papelEdit' : 'perfilEdit', value: null });
+      dispatch({ field: 'toast', value: { text: tipo === 'papel' ? 'Papel salvo.' : 'Perfil salvo.', error: false } });
+      await carregarAcessos();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'acessosSaving', value: false });
+    }
+  };
+
+  const removerAcesso = async () => {
+    if (!remocaoAcesso || acessosSaving) return;
+    dispatch({ field: 'acessosSaving', value: true });
+    try {
+      const resultado = await executar(remocaoAcesso.tipo === 'papel' ? 'REMOVER_PAPEL' : 'REMOVER_PERFIL', { id: remocaoAcesso.id });
+      dispatch({ field: 'remocaoAcesso', value: null });
+      dispatch({ field: 'toast', value: { text: resultado.acao === 'excluido' ? 'Registro excluído.' : 'Registro inativado porque já foi utilizado.', error: false } });
+      await carregarAcessos();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'acessosSaving', value: false });
+    }
+  };
+
+  const salvarGrupo = async () => {
+    if (!groupEdit || organizacaoSaving) return;
+    dispatch({ field: 'organizacaoSaving', value: true });
+    try {
+      await executar('SALVAR_GRUPO', {
+        idGrupo: groupEdit.idGrupo,
+        nome: groupEdit.nome.trim(),
+        ativo: groupEdit.ativo,
+        tags: groupEdit.tags,
+      });
+      dispatch({ field: 'groupEdit', value: null });
+      dispatch({ field: 'toast', value: { text: 'Grupo salvo.', error: false } });
+      await carregarOrganizacao();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'organizacaoSaving', value: false });
+    }
+  };
+
+  const salvarTag = async () => {
+    if (!tagEdit || organizacaoSaving) return;
+    dispatch({ field: 'organizacaoSaving', value: true });
+    try {
+      await executar(tagEdit.editando ? 'ALTERAR_TAG' : 'CRIAR_TAG', {
+        codigo: tagEdit.codigo.trim(),
+        descricao: tagEdit.descricao.trim(),
+        grupo: tagEdit.grupo,
+        usuario: tagEdit.usuario,
+        vinculo: tagEdit.vinculo,
+        ...(tagEdit.editando ? { ativa: tagEdit.ativo } : {}),
+      });
+      dispatch({ field: 'tagEdit', value: null });
+      dispatch({ field: 'toast', value: { text: tagEdit.editando ? 'Tag alterada.' : 'Tag criada.', error: false } });
+      await carregarOrganizacao();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'organizacaoSaving', value: false });
+    }
+  };
+
   const mayLeave = useCallback(
     () =>
       !dirty ||
@@ -175,22 +332,43 @@ export default function Workspace() {
   );
 
   useEffect(() => {
-    try {
-      if (sessionRole() !== 'company') {
-        window.location.replace(
-          sessionRole() === 'platform' ? '/plataforma' : '/login',
-        );
-        return;
+    async function carregar() {
+      if (isLocalSession()) {
+        try {
+          const sessao = await sessaoAtual();
+          if (
+            !['user:', 'editor:'].some((prefix) => sessionStorage.getItem(SESSION_KEY) === `${prefix}${sessao.idUsuario}`)
+          ) {
+            sessionStorage.removeItem(SESSION_KEY);
+            window.location.replace('/inicio');
+            return;
+          }
+          dispatch({ field: 'usuario', value: sessao });
+        } catch {
+          sessionStorage.removeItem(SESSION_KEY);
+          window.location.replace('/login');
+          return;
+        }
       }
-      const data = readStore();
-      writeStore(data);
-      dispatch({ field: 'state', value: data });
-      const saved = sessionStorage.getItem('argousdocs:actor');
-      if (saved && isEnabled(saved) && data.people.some((p) => p.id === saved))
-        dispatch({ field: 'actorId', value: saved });
-    } catch (e) {
-      dispatch({ field: 'loadError', value: e.message });
+
+      try {
+        if (sessionRole() !== 'company') {
+          window.location.replace(
+            sessionRole() === 'platform' ? '/plataforma' : '/login',
+          );
+          return;
+        }
+        const data = readStore();
+        writeStore(data);
+        dispatch({ field: 'state', value: data });
+        const saved = sessionStorage.getItem('argousdocs:actor');
+        if (saved && isEnabled(saved) && data.people.some((p) => p.id === saved))
+          dispatch({ field: 'actorId', value: saved });
+      } catch (e) {
+        dispatch({ field: 'loadError', value: e.message });
+      }
     }
+    carregar();
   }, []);
   const commit = useCallback(
     (next) => {
@@ -246,7 +424,7 @@ export default function Workspace() {
     return () => window.removeEventListener('storage', handler);
   }, [actorId]);
   useEffect(() => {
-    if (!state) return;
+    if (!state || (pageState.usuario && !pageState.usuario.papeis?.includes('CONSULTA_DOCUMENTOS'))) return;
     const context = document.modelContext;
     if (!context?.registerTool) return;
     const controller = new AbortController();
@@ -306,12 +484,14 @@ export default function Workspace() {
       } catch {}
     }
     return () => controller.abort();
-  }, [state]);
+  }, [state, pageState.usuario]);
   const closeTemplate = useCallback(() => {
     if (mayLeave()) dispatch({ field: 'editor', value: null });
   }, [mayLeave]);
   const saveTemplate = useCallback(
     (t, startDocument = false) => {
+      if (pageState.usuario && (!pageState.usuario.papeis?.includes('MODELADOR') ||
+          (startDocument && !pageState.usuario.papeis?.includes('EDITOR_DE_DOCUMENTOS')))) return;
       const person =
         state.people.find((p) => p.id === actorId) || state.people[0];
       const existing = state.templates.find((x) => x.id === t.id);
@@ -357,7 +537,7 @@ export default function Workspace() {
         });
       }
     },
-    [state, actorId, commit, tr],
+    [state, actorId, commit, tr, pageState.usuario],
   );
   const switchPerson = useCallback(
     (id) => {
@@ -372,6 +552,7 @@ export default function Workspace() {
   }, [mayLeave]);
   const performDocumentAction = useCallback(
     (action, values, reason) => {
+      if (pageState.usuario && !pageState.usuario.papeis?.includes('EDITOR_DE_DOCUMENTOS')) return false;
       const person =
         state.people.find((p) => p.id === actorId) || state.people[0];
       const doc = state.documents.find((d) => d.id === documentId);
@@ -418,7 +599,7 @@ export default function Workspace() {
         return false;
       }
     },
-    [state, actorId, documentId, commit],
+    [state, actorId, documentId, commit, pageState.usuario],
   );
   const openDocument = useCallback(
     (id) => dispatch({ field: 'documentId', value: id }),
@@ -467,8 +648,31 @@ export default function Workspace() {
       </WorkspaceContext.Provider>
     );
   const person = state.people.find((p) => p.id === actorId) || state.people[0];
-  const admin = person.role === 'admin';
-  const designer = admin || person.role === 'designer';
+  const hasRole = (role) => usuario
+    ? usuario.papeis?.includes(role) === true
+    : person.role === 'admin' || (role === 'MODELADOR' && person.role === 'designer') ||
+      ['AUTOGESTAO', 'CONSULTA_DOCUMENTOS', 'EDITOR_DE_DOCUMENTOS'].includes(role);
+  const admin = hasRole('ADMINISTRADOR_USUARIOS');
+  const groupManager = Boolean(usuario) && hasRole('GESTOR_GRUPOS_TAGS');
+  const accessManager = hasRole('GESTOR_ACESSOS');
+  const designer = hasRole('MODELADOR');
+  const canConsultDocuments = hasRole('CONSULTA_DOCUMENTOS');
+  const canEditDocuments = hasRole('EDITOR_DE_DOCUMENTOS');
+  const canManageOwnData = hasRole('AUTOGESTAO');
+  const canView = (destination) => destination === 'home' ||
+    (destination === 'settings' && canManageOwnData) ||
+    (destination === 'documents' && canConsultDocuments) ||
+    (destination === 'dashboards' && hasRole('ANALISTA_INDICADORES')) ||
+    (destination === 'templates' && designer) ||
+    (destination === 'organization' && (admin || groupManager || accessManager));
+  const managementAreas = [
+    ['groups', 'Grupos e tags', groupManager],
+    ['access', 'Papéis e perfis', accessManager],
+    ['users', 'Usuários e pessoas', admin],
+  ].filter(([, , allowed]) => allowed);
+  const activeManagementSection = managementAreas.some(([key]) => key === managementSection)
+    ? managementSection
+    : managementAreas[0]?.[0];
   const tasks = state.documents.filter(
     (d) =>
       (canWork(d, person, state.groups) &&
@@ -482,6 +686,7 @@ export default function Workspace() {
   );
   const doc = state.documents.find((d) => d.id === documentId);
   const navigate = (v) => {
+    if (!canView(v)) return;
     if (!mayLeave()) return;
     dispatch({ field: 'view', value: v });
     dispatch({ field: 'documentId', value: null });
@@ -493,6 +698,7 @@ export default function Workspace() {
     dispatch({ field: 'mobile', value: false });
   };
   const openNew = (templateId) => {
+    if (!canEditDocuments) return;
     dispatch({
       field: 'newTemplate',
       value: templateId || state.templates.find((t) => !t.draft)?.id || '',
@@ -501,6 +707,7 @@ export default function Workspace() {
     dispatch({ field: 'newOpen', value: true });
   };
   const create = () => {
+    if (!canEditDocuments) return;
     const t = state.templates.find((t) => t.id === newTemplate);
     if (!t) return;
     try {
@@ -537,7 +744,7 @@ export default function Workspace() {
       <span className="nav-label">{tr('ESPAÇO DE TRABALHO')}</span>
       <nav className="side-nav">
         {nav
-          .filter(([v]) => designer || !['templates', 'groups'].includes(v))
+          .filter(([v]) => canView(v))
           .map(([v, label, Icon]) => (
             <button
               className={view === v ? 'active' : ''}
@@ -546,13 +753,12 @@ export default function Workspace() {
             >
               <Icon size={19} />
               <span>{tr(label)}</span>
-              {v === 'tasks' && tasks.length > 0 && <b>{tasks.length}</b>}
             </button>
           ))}
       </nav>
       <div className="sidebar-bottom">
         <div className="profile-exit">
-          <Button
+          {canManageOwnData && <Button
             onClick={() => navigate('settings')}
             aria-label={tr('Configurações do usuário')}
             sx={{
@@ -575,19 +781,24 @@ export default function Workspace() {
                 fontSize: 13,
               }}
             >
-              {initials(person.name)}
+              {initials(usuario?.nome || person.name)}
             </Avatar>
             <div>
-              <strong>{person.name}</strong>
-              <small>{tr(roleLabel(person))}</small>
+              <strong>{(usuario?.nome || person.name).trim().split(/\s+/)[0]}</strong>
+              <small title={usuario?.perfis?.join(', ')}>{usuario ? profileSummary(usuario.perfis) : tr(roleLabel(person))}</small>
             </div>
-          </Button>
+          </Button>}
           <IconButton
             aria-label={tr('Sair')}
-            onClick={() => {
+            onClick={async () => {
               if (!mayLeave()) return;
-              sessionStorage.removeItem('argousdocs:session');
-              window.location.href = '/login';
+              try {
+                if (isLocalSession()) await sair();
+                sessionStorage.removeItem(SESSION_KEY);
+                window.location.href = '/login';
+              } catch (falha) {
+                dispatch({ field: 'toast', value: { text: falha.message, error: true } });
+              }
             }}
           >
             <LogOut size={17} />
@@ -596,7 +807,7 @@ export default function Workspace() {
       </div>
     </div>
   );
-  let rows = view === 'tasks' ? tasks : state.documents;
+  let rows = state.documents;
   rows = rows.filter(
     (d) =>
       (!search ||
@@ -710,9 +921,9 @@ export default function Workspace() {
                   >
                     {d.status === 'done'
                       ? tr('Ver documento')
-                      : (canWork(d, person, state.groups) &&
+                      : canEditDocuments && ((canWork(d, person, state.groups) &&
                             (!d.assignee || d.assignee === person.id)) ||
-                          canContribute(d, person, state.groups)
+                          canContribute(d, person, state.groups))
                         ? tr('Continuar')
                         : tr('Acompanhar')}
                   </Button>
@@ -725,16 +936,12 @@ export default function Workspace() {
                 <div className="empty-state">
                   <Inbox size={30} />
                   <h3>
-                    {view === 'tasks'
-                      ? tr('Nenhuma pendência por aqui')
-                      : tr('Nenhum documento encontrado')}
+                    {tr('Nenhum documento encontrado')}
                   </h3>
                   <p>
-                    {view === 'tasks'
-                      ? tr(
-                          'Quando uma etapa chegar ao seu grupo, ela aparecerá aqui.',
-                        )
-                      : tr('Ajuste os filtros ou inicie um novo documento.')}
+                    {canEditDocuments
+                      ? tr('Ajuste os filtros ou inicie um novo documento.')
+                      : tr('Ajuste os filtros para encontrar um documento.')}
                   </p>
                 </div>
               </TableCell>
@@ -782,7 +989,7 @@ export default function Workspace() {
           <main className="workspace-main">
             {editor && designer ? (
               <TemplateEditor key={editor.id} />
-            ) : doc ? (
+            ) : doc && canConsultDocuments ? (
               <DocumentView
                 key={
                   doc.id +
@@ -796,7 +1003,7 @@ export default function Workspace() {
               />
             ) : (
               <>
-                {view === 'settings' && (
+                {view === 'settings' && canManageOwnData && (
                   <>
                     <div className="page-heading">
                       <h1>{tr('Configurações do usuário')}</h1>
@@ -810,7 +1017,7 @@ export default function Workspace() {
                     <UserSettings />
                   </>
                 )}
-                {view === 'dashboards' && <Dashboards />}
+                {view === 'dashboards' && canView('dashboards') && <Dashboards />}
                 {view === 'home' && (
                   <>
                     <div className="page-heading">
@@ -820,22 +1027,22 @@ export default function Workspace() {
                         </span>
                         <h1>
                           {tr('Olá,')}
-                          {person.name.split(' ')[0]}{' '}
+                          {(usuario?.nome || person.name).trim().split(/\s+/)[0]}{' '}
                           <span className="greeting-dot">.</span>
                         </h1>
                         <p>
                           {tr('Uma visão clara de tudo que está em movimento.')}
                         </p>
                       </div>
-                      <Button
+                      {canEditDocuments && <Button
                         variant="contained"
                         startIcon={<Plus size={18} />}
                         onClick={() => openNew()}
                       >
                         {tr('Novo documento')}
-                      </Button>
+                      </Button>}
                     </div>
-                    <div className="stats-grid">
+                    {canConsultDocuments && <div className="stats-grid">
                       {[
                         [
                           Files,
@@ -844,13 +1051,13 @@ export default function Workspace() {
                           tr('Documentos em fluxo'),
                           'active',
                         ],
-                        [
+                        ...(canEditDocuments ? [[
                           Inbox,
                           tr('Minhas pendências'),
                           tasks.length,
                           tr('Etapas para o seu grupo'),
                           'tasks',
-                        ],
+                        ]] : []),
                         [
                           Clock,
                           'Em aprovação',
@@ -870,7 +1077,7 @@ export default function Workspace() {
                           className={'stat-card ' + key}
                           key={key}
                           onClick={() => {
-                            navigate(key === 'tasks' ? 'tasks' : 'documents');
+                            navigate('documents');
                             if (key === 'reviews')
                               dispatch({
                                 field: 'status',
@@ -893,16 +1100,16 @@ export default function Workspace() {
                           <small>{sub}</small>
                         </button>
                       ))}
-                    </div>
+                    </div>}
                     <div className="home-columns">
-                      <section className="panel attention-panel">
+                      {canConsultDocuments && canEditDocuments && <section className="panel attention-panel">
                         <div className="panel-heading">
                           <div>
                             <h2>{tr('Seu próximo passo')}</h2>
                             <p>{tr('As etapas que precisam de você.')}</p>
                           </div>
                           <Button
-                            onClick={() => navigate('tasks')}
+                            onClick={() => navigate('documents')}
                             endIcon={<ArrowUpRight size={16} />}
                           >
                             {tr('Ver pendências')}
@@ -918,7 +1125,7 @@ export default function Workspace() {
                                   field: 'documentId',
                                   value: d.id,
                                 });
-                                dispatch({ field: 'view', value: 'tasks' });
+                                dispatch({ field: 'view', value: 'documents' });
                               }}
                             >
                               <span className="task-preview-icon">
@@ -948,8 +1155,8 @@ export default function Workspace() {
                             <p>{tr('Seu grupo não tem etapas pendentes.')}</p>
                           </div>
                         )}
-                      </section>
-                      <section className="quick-start">
+                      </section>}
+                      {canEditDocuments && <section className="quick-start">
                         <div className="quick-start-top">
                           <LayoutTemplate size={25} />
                           <span>{tr('DO MODELO À AÇÃO')}</span>
@@ -972,9 +1179,9 @@ export default function Workspace() {
                         >
                           {tr('Usar um modelo')}
                         </Button>
-                      </section>
+                      </section>}
                     </div>
-                    <section className="panel">
+                    {canConsultDocuments && <section className="panel">
                       <div className="panel-heading">
                         <div>
                           <h2>{tr('Documentos recentes')}</h2>
@@ -1006,40 +1213,30 @@ export default function Workspace() {
                           <span className="dot" /> {tr('Dados de demonstração')}
                         </span>
                       </div>
-                    </section>
+                    </section>}
                   </>
                 )}
-                {(view === 'documents' || view === 'tasks') && (
+                {view === 'documents' && canConsultDocuments && (
                   <>
                     <div className="page-heading">
                       <div>
                         <span className="eyebrow">
-                          {view === 'tasks'
-                            ? tr('O TRABALHO CHEGA ATÉ VOCÊ')
-                            : tr('DO INÍCIO À FINALIZAÇÃO')}
+                          {tr('DO INÍCIO À FINALIZAÇÃO')}
                         </span>
                         <h1>
-                          {view === 'tasks'
-                            ? tr('Minhas pendências')
-                            : tr('Documentos')}
+                          {tr('Documentos')}
                         </h1>
                         <p>
-                          {view === 'tasks'
-                            ? tr(
-                                'Etapas disponíveis ou atribuídas a você nos seus grupos.',
-                              )
-                            : tr(
-                                'Encontre, acompanhe e continue os documentos da equipe.',
-                              )}
+                          {tr('Encontre, acompanhe e continue os documentos da equipe.')}
                         </p>
                       </div>
-                      <Button
+                      {canEditDocuments && <Button
                         variant="contained"
                         startIcon={<Plus size={18} />}
                         onClick={() => openNew()}
                       >
                         {tr('Novo documento')}
-                      </Button>
+                      </Button>}
                     </div>
                     <section className="panel">
                       <div className="document-filters">
@@ -1248,7 +1445,7 @@ export default function Workspace() {
                             </Button>
                             <Button
                               variant="contained"
-                              disabled={!!t.draft}
+                              disabled={!!t.draft || !canEditDocuments}
                               onClick={() => openNew(t.id)}
                             >
                               {tr('Usar modelo')}
@@ -1277,102 +1474,107 @@ export default function Workspace() {
                     </Alert>
                   </>
                 )}
-                {view === 'groups' && designer && (
+                {view === 'organization' && canView('organization') && (
                   <>
                     <div className="page-heading">
                       <div>
                         <span className="eyebrow">
-                          {tr('PESSOAS CERTAS, ETAPAS CLARAS')}
+                          {tr('ADMINISTRAÇÃO DA INSTITUIÇÃO')}
                         </span>
-                        <h1>{tr('Grupos e pessoas')}</h1>
-                        <p>
-                          {tr(
-                            'Organize quem participa de cada parte do fluxo.',
-                          )}
-                        </p>
+                        <h1>{tr('Organização e acessos')}</h1>
+                        <p>{tr('Organize grupos, acessos e pessoas conforme suas responsabilidades.')}</p>
                       </div>
-                      {admin && (
-                        <Button
-                          variant="contained"
-                          startIcon={<Plus size={18} />}
-                          onClick={() =>
-                            dispatch({
-                              field: 'groupEdit',
-                              value: {
-                                id: uid(),
-                                name: '',
-                                description: '',
-                                memberIds: [],
-                              },
-                            })
-                          }
-                        >
-                          {tr('Criar grupo')}
-                        </Button>
-                      )}
                     </div>
-                    <div className="group-grid">
-                      {state.groups.map((g) => (
-                        <article className="panel group-card" key={g.id}>
-                          <div className="template-card-top">
-                            <span className="template-icon">
-                              <Users size={24} />
-                            </span>
-                            {admin && (
-                              <IconButton
-                                aria-label={
-                                  '' + tr('Editar grupo') + ' ' + g.name
-                                }
-                                onClick={() =>
-                                  dispatch({
-                                    field: 'groupEdit',
-                                    value: structuredClone(g),
-                                  })
-                                }
-                              >
-                                <Settings2 size={18} />
-                              </IconButton>
-                            )}
-                          </div>
-                          <h2>{g.name}</h2>
-                          <p>{g.description}</p>
-                          <div className="group-members">
-                            <AvatarGroup max={4}>
-                              {g.memberIds.map((id) => {
-                                const p = state.people.find((p) => p.id === id);
-                                return p ? (
-                                  <Avatar
-                                    key={id}
-                                    title={p.name}
-                                    sx={{
-                                      width: 33,
-                                      height: 33,
-                                      fontSize: 12,
-                                      bgcolor: 'action.selected',
-                                      color: 'text.primary',
-                                    }}
-                                  >
-                                    {initials(p.name)}
-                                  </Avatar>
-                                ) : null;
-                              })}
-                            </AvatarGroup>
-                            <span>
-                              {g.memberIds.length} {tr('participantes')}
-                            </span>
-                          </div>
-                          <div className="group-names">
-                            {g.memberIds
-                              .map(
-                                (id) =>
-                                  state.people.find((p) => p.id === id)?.name,
-                              )
-                              .join(', ') || tr('Nenhum participante')}
-                          </div>
-                        </article>
+                    <Tabs
+                      value={activeManagementSection}
+                      onChange={(_, section) => dispatch({ field: 'managementSection', value: section })}
+                      variant="scrollable"
+                      scrollButtons="auto"
+                      aria-label={tr('Áreas de organização e acessos')}
+                      sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
+                    >
+                      {managementAreas.map(([key, label]) => (
+                        <Tab key={key} value={key} label={tr(label)} />
                       ))}
-                    </div>
-                    <section className="panel people-panel">
+                    </Tabs>
+                    {activeManagementSection === 'groups' && (
+                      <>
+                        {organizacaoLoading && <LinearProgress sx={{ mb: 2 }} />}
+                        {organizacaoError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarOrganizacao}>{tr('Tentar novamente')}</Button>}>{system(organizacaoError)}</Alert>}
+                        <div className="panel-heading">
+                          <div><h2>{tr('Grupos')}</h2><p>{tr('Os integrantes poderão ser vinculados depois da criação do grupo.')}</p></div>
+                          <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => dispatch({ field: 'groupEdit', value: { idGrupo: null, nome: '', ativo: true, tags: [] } })}>{tr('Criar grupo')}</Button>
+                        </div>
+                        {!organizacaoError && organizacao && (
+                          organizacao.grupos.length ? <div className="group-grid">
+                            {organizacao.grupos.map((grupo) => <article className="panel group-card" key={grupo.idGrupo}>
+                              <div className="template-card-top">
+                                <span className="template-icon"><Users size={24} /></span>
+                                <IconButton aria-label={`${tr('Editar grupo')} ${grupo.nome}`} onClick={() => dispatch({ field: 'groupEdit', value: { ...grupo, tags: grupo.tags || [] } })}><Settings2 size={18} /></IconButton>
+                              </div>
+                              <h2>{grupo.nome}</h2>
+                              {!grupo.ativo && <Chip size="small" label={tr('Inativo')} />}
+                              {!!grupo.tags?.length && <p>{grupo.tags.join(', ')}</p>}
+                            </article>)}
+                          </div> : <Alert severity="info">{tr('Nenhum grupo cadastrado.')}</Alert>
+                        )}
+                        <div className="panel-heading" style={{ marginTop: 32 }}>
+                          <div><h2>{tr('Tags')}</h2><p>{tr('Cadastre tags de grupo, usuário ou vínculo. A atribuição será feita depois.')}</p></div>
+                          <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => dispatch({ field: 'tagEdit', value: { editando: false, codigo: '', descricao: '', grupo: false, usuario: false, vinculo: false, ativo: true } })}>{tr('Criar tag')}</Button>
+                        </div>
+                        {!organizacaoError && organizacao && (
+                          organizacao.tags.length ? <TableContainer className="panel"><Table>
+                            <TableHead><TableRow><TableCell>{tr('CÓDIGO')}</TableCell><TableCell>{tr('DESCRIÇÃO')}</TableCell><TableCell>{tr('APLICAÇÕES')}</TableCell><TableCell>{tr('SITUAÇÃO')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
+                            <TableBody>{organizacao.tags.map((tag) => <TableRow key={tag.codigo}>
+                              <TableCell>{tag.codigo}</TableCell><TableCell>{tag.descricao || '—'}</TableCell>
+                              <TableCell>{[
+                                tag.grupo && tr('Tag de Grupo'),
+                                tag.usuario && tr('Tag de Usuário'),
+                                tag.vinculo && tr('Tag de Vínculo'),
+                              ].filter(Boolean).join(', ') || '—'}</TableCell>
+                              <TableCell>{tr(tag.ativo ? 'Ativa' : 'Inativa')}</TableCell>
+                              <TableCell><IconButton aria-label={`${tr('Editar tag')} ${tag.codigo}`} onClick={() => dispatch({ field: 'tagEdit', value: { ...tag, editando: true } })}><Settings2 size={18} /></IconButton></TableCell>
+                            </TableRow>)}</TableBody>
+                          </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma tag cadastrada.')}</Alert>
+                        )}
+                      </>
+                    )}
+                    {activeManagementSection === 'access' && (
+                      <>
+                        {acessosLoading && <LinearProgress sx={{ mb: 2 }} />}
+                        {acessosError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarAcessos}>{tr('Tentar novamente')}</Button>}>{system(acessosError)}</Alert>}
+                        <div className="panel-heading">
+                          <div><h2>{tr('Papéis')}</h2><p>{tr('Novos papéis poderão ser criados quando for possível definir suas permissões.')}</p></div>
+                        </div>
+                        {!acessosError && acessos && (
+                          acessos.papeis.length ? <TableContainer className="panel"><Table>
+                            <TableHead><TableRow><TableCell>{tr('CÓDIGO')}</TableCell><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('DESCRIÇÃO')}</TableCell><TableCell>{tr('SITUAÇÃO')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
+                            <TableBody>{acessos.papeis.map((papel) => <TableRow key={papel.idPapel}>
+                              <TableCell>{papel.codigo}</TableCell><TableCell>{papel.nome}{papel.sistema && <Chip size="small" sx={{ ml: 1 }} label={tr('Sistema')} />}</TableCell><TableCell>{papel.descricao}</TableCell><TableCell>{tr(papel.ativo ? 'Ativo' : 'Inativo')}</TableCell>
+                              <TableCell><IconButton aria-label={`${tr('Editar papel')} ${papel.nome}`} onClick={() => dispatch({ field: 'papelEdit', value: { ...papel } })}><Settings2 size={18} /></IconButton>{!papel.sistema && <Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoAcesso', value: { tipo: 'papel', id: papel.idPapel, nome: papel.nome } })}>{tr('Remover')}</Button>}</TableCell>
+                            </TableRow>)}</TableBody>
+                          </Table></TableContainer> : <Alert severity="info">{tr('Nenhum papel cadastrado.')}</Alert>
+                        )}
+                        <div className="panel-heading" style={{ marginTop: 32 }}>
+                          <div><h2>{tr('Perfis')}</h2><p>{tr('Perfis reúnem papéis para atribuição aos usuários.')}</p></div>
+                          <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => dispatch({ field: 'perfilEdit', value: { idPerfil: null, codigo: '', nome: '', descricao: '', ativo: true, sistema: false, papeis: [] } })}>{tr('Criar perfil')}</Button>
+                        </div>
+                        {!acessosError && acessos && (
+                          acessos.perfis.length ? <TableContainer className="panel"><Table>
+                            <TableHead><TableRow><TableCell>{tr('CÓDIGO')}</TableCell><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('PAPÉIS')}</TableCell><TableCell>{tr('SITUAÇÃO')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
+                            <TableBody>{acessos.perfis.map((perfil) => <TableRow key={perfil.idPerfil}>
+                              <TableCell>{perfil.codigo}</TableCell><TableCell>{perfil.nome}{perfil.sistema && <Chip size="small" sx={{ ml: 1 }} label={tr('Sistema')} />}</TableCell>
+                              <TableCell>{perfil.papeis.map((id) => acessos.papeis.find((papel) => papel.idPapel === id)?.nome || id).join(', ') || '—'}</TableCell><TableCell>{tr(perfil.ativo ? 'Ativo' : 'Inativo')}</TableCell>
+                              <TableCell><IconButton aria-label={`${tr('Editar perfil')} ${perfil.nome}`} onClick={() => dispatch({ field: 'perfilEdit', value: { ...perfil, papeis: [...perfil.papeis] } })}><Settings2 size={18} /></IconButton>{!perfil.sistema && <Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoAcesso', value: { tipo: 'perfil', id: perfil.idPerfil, nome: perfil.nome } })}>{tr('Remover')}</Button>}</TableCell>
+                            </TableRow>)}</TableBody>
+                          </Table></TableContainer> : <Alert severity="info">{tr('Nenhum perfil cadastrado.')}</Alert>
+                        )}
+                      </>
+                    )}
+                    {activeManagementSection === 'users' && usuario && (
+                      <Alert severity="info">{tr('O cadastro de usuários e pessoas será conectado ao banco em uma etapa posterior.')}</Alert>
+                    )}
+                    {activeManagementSection === 'users' && !usuario && <section className="panel people-panel management-users-panel">
                       <div className="panel-heading">
                         <div>
                           <h2>{tr('Pessoas do espaço de trabalho')}</h2>
@@ -1440,7 +1642,7 @@ export default function Workspace() {
                           </TableBody>
                         </Table>
                       </TableContainer>
-                    </section>
+                    </section>}
                   </>
                 )}
               </>
@@ -1454,7 +1656,7 @@ export default function Workspace() {
           </main>
         </div>
         <Dialog
-          open={newOpen}
+          open={newOpen && canEditDocuments}
           onClose={() => dispatch({ field: 'newOpen', value: false })}
         >
           <DialogTitle>{tr('Novo documento')}</DialogTitle>
@@ -1535,12 +1737,59 @@ export default function Workspace() {
             </Button>
           </DialogActions>
         </Dialog>
+        <Dialog open={!!papelEdit} onClose={() => dispatch({ field: 'papelEdit', value: null })} fullWidth maxWidth="sm">
+          <DialogTitle>{tr(papelEdit?.idPapel ? 'Editar papel' : 'Criar papel')}</DialogTitle>
+          <DialogContent>
+            {papelEdit && <div className="dialog-fields">
+              <TextField label={tr('Código do papel')} autoFocus={!papelEdit.idPapel} disabled={!!papelEdit.idPapel} value={papelEdit.codigo} inputProps={{ maxLength: 70 }} onChange={(e) => dispatch({ field: 'papelEdit', value: { ...papelEdit, codigo: e.target.value } })} />
+              <TextField label={tr('Nome')} autoFocus={!!papelEdit.idPapel} value={papelEdit.nome} inputProps={{ maxLength: 120 }} onChange={(e) => dispatch({ field: 'papelEdit', value: { ...papelEdit, nome: e.target.value } })} />
+              <TextField label={tr('Descrição')} multiline minRows={2} value={papelEdit.descricao} onChange={(e) => dispatch({ field: 'papelEdit', value: { ...papelEdit, descricao: e.target.value } })} />
+              <FormControlLabel control={<Checkbox checked={papelEdit.ativo} disabled={papelEdit.sistema} onChange={(e) => dispatch({ field: 'papelEdit', value: { ...papelEdit, ativo: e.target.checked } })} />} label={tr('Papel ativo')} />
+              <p className="muted">{tr('As permissões dos papéis serão configuradas em uma etapa posterior.')}</p>
+            </div>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => dispatch({ field: 'papelEdit', value: null })}>{tr('Cancelar')}</Button>
+            <Button variant="contained" disabled={!papelEdit?.codigo.trim() || !papelEdit?.nome.trim() || !papelEdit?.descricao.trim() || acessosSaving} onClick={() => salvarAcesso('papel')}>{tr('Salvar papel')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={!!perfilEdit} onClose={() => dispatch({ field: 'perfilEdit', value: null })} fullWidth maxWidth="sm">
+          <DialogTitle>{tr(perfilEdit?.idPerfil ? 'Editar perfil' : 'Criar perfil')}</DialogTitle>
+          <DialogContent>
+            {perfilEdit && <div className="dialog-fields">
+              <TextField label={tr('Código do perfil')} autoFocus={!perfilEdit.idPerfil} disabled={!!perfilEdit.idPerfil} value={perfilEdit.codigo} inputProps={{ maxLength: 70 }} onChange={(e) => dispatch({ field: 'perfilEdit', value: { ...perfilEdit, codigo: e.target.value } })} />
+              <TextField label={tr('Nome')} autoFocus={!!perfilEdit.idPerfil} value={perfilEdit.nome} inputProps={{ maxLength: 120 }} onChange={(e) => dispatch({ field: 'perfilEdit', value: { ...perfilEdit, nome: e.target.value } })} />
+              <TextField label={tr('Descrição')} multiline minRows={2} value={perfilEdit.descricao} onChange={(e) => dispatch({ field: 'perfilEdit', value: { ...perfilEdit, descricao: e.target.value } })} />
+              <FormControlLabel control={<Checkbox checked={perfilEdit.ativo} disabled={perfilEdit.sistema} onChange={(e) => dispatch({ field: 'perfilEdit', value: { ...perfilEdit, ativo: e.target.checked } })} />} label={tr('Perfil ativo')} />
+              <div>
+                <strong>{tr('Papéis do perfil')}</strong>
+                {(acessos?.papeis || []).filter((papel) => papel.ativo || perfilEdit.papeis.includes(papel.idPapel)).map((papel) => <FormControlLabel key={papel.idPapel} sx={{ display: 'flex' }} control={<Checkbox checked={perfilEdit.papeis.includes(papel.idPapel)} disabled={perfilEdit.sistema || !papel.ativo} onChange={(e) => dispatch({ field: 'perfilEdit', value: { ...perfilEdit, papeis: e.target.checked ? [...perfilEdit.papeis, papel.idPapel] : perfilEdit.papeis.filter((id) => id !== papel.idPapel) } })} />} label={`${papel.nome} (${papel.codigo})${!papel.ativo ? ` — ${tr('Inativo')}` : ''}`} />)}
+                {!acessos?.papeis?.length && <p className="muted">{tr('Nenhum papel cadastrado.')}</p>}
+              </div>
+            </div>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => dispatch({ field: 'perfilEdit', value: null })}>{tr('Cancelar')}</Button>
+            <Button variant="contained" disabled={!perfilEdit?.codigo.trim() || !perfilEdit?.nome.trim() || !perfilEdit?.descricao.trim() || acessosSaving} onClick={() => salvarAcesso('perfil')}>{tr('Salvar perfil')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={!!remocaoAcesso} onClose={() => dispatch({ field: 'remocaoAcesso', value: null })} fullWidth maxWidth="xs">
+          <DialogTitle>{tr('Remover registro')}</DialogTitle>
+          <DialogContent>
+            <p>{tr('Remover')} <strong>{remocaoAcesso?.nome}</strong>?</p>
+            <p className="muted">{tr('Se já foi utilizado, o registro será inativado para preservar o histórico.')}</p>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => dispatch({ field: 'remocaoAcesso', value: null })}>{tr('Cancelar')}</Button>
+            <Button color="error" variant="contained" disabled={acessosSaving} onClick={removerAcesso}>{tr('Confirmar')}</Button>
+          </DialogActions>
+        </Dialog>
         <Dialog
-          open={!!groupEdit}
+          open={!!groupEdit && groupManager}
           onClose={() => dispatch({ field: 'groupEdit', value: null })}
         >
           <DialogTitle>
-            {state.groups.some((g) => g.id === groupEdit?.id)
+            {groupEdit?.idGrupo
               ? tr('Editar grupo')
               : tr('Novo grupo')}
           </DialogTitle>
@@ -1550,51 +1799,30 @@ export default function Workspace() {
                 <TextField
                   label={tr('Nome do grupo')}
                   autoFocus
-                  value={groupEdit.name}
+                  value={groupEdit.nome}
                   onChange={(e) =>
                     dispatch({
                       field: 'groupEdit',
-                      value: { ...groupEdit, name: e.target.value },
+                      value: { ...groupEdit, nome: e.target.value },
                     })
                   }
+                  inputProps={{ maxLength: 50 }}
                 />
-                <TextField
-                  label={tr('Descrição')}
-                  value={groupEdit.description}
-                  onChange={(e) =>
-                    dispatch({
-                      field: 'groupEdit',
-                      value: { ...groupEdit, description: e.target.value },
-                    })
-                  }
-                />
+                {groupEdit.idGrupo && <FormControlLabel control={<Checkbox checked={groupEdit.ativo} onChange={(e) => dispatch({ field: 'groupEdit', value: { ...groupEdit, ativo: e.target.checked } })} />} label={tr('Grupo ativo')} />}
                 <div>
-                  <p className="field-label">{tr('Participantes')}</p>
-                  {state.people.map((p) => (
+                  <strong>{tr('Tags do grupo')}</strong>
+                  <p className="muted">{tr('Selecione as tags aplicáveis a grupos.')}</p>
+                  {(organizacao?.tags || []).filter((tag) => tag.grupo || groupEdit.tags.includes(tag.codigo)).map((tag) => (
                     <FormControlLabel
-                      key={p.id}
-                      label={p.name}
-                      control={
-                        <Checkbox
-                          checked={groupEdit.memberIds.includes(p.id)}
-                          onChange={(e) =>
-                            dispatch({
-                              field: 'groupEdit',
-                              value: {
-                                ...groupEdit,
-                                memberIds: e.target.checked
-                                  ? [...groupEdit.memberIds, p.id]
-                                  : groupEdit.memberIds.filter(
-                                      (id) => id !== p.id,
-                                    ),
-                              },
-                            })
-                          }
-                        />
-                      }
+                      key={tag.codigo}
+                      sx={{ display: 'flex' }}
+                      control={<Checkbox checked={groupEdit.tags.includes(tag.codigo)} disabled={!tag.ativo && !groupEdit.tags.includes(tag.codigo)} onChange={(e) => dispatch({ field: 'groupEdit', value: { ...groupEdit, tags: e.target.checked ? [...groupEdit.tags, tag.codigo] : groupEdit.tags.filter((codigo) => codigo !== tag.codigo) } })} />}
+                      label={`${tag.codigo}${tag.descricao ? ` — ${tag.descricao}` : ''}${!tag.ativo ? ` (${tr('Inativa')})` : ''}`}
                     />
                   ))}
+                  {!organizacao?.tags?.some((tag) => tag.grupo || groupEdit.tags.includes(tag.codigo)) && <p className="muted">{tr('Nenhuma tag de grupo cadastrada.')}</p>}
                 </div>
+                <p className="muted">{tr('Os participantes serão vinculados ao grupo em uma etapa posterior.')}</p>
               </div>
             )}
           </DialogContent>
@@ -1606,72 +1834,33 @@ export default function Workspace() {
             </Button>
             <Button
               variant="contained"
-              disabled={!groupEdit?.name.trim() || !groupEdit.memberIds.length}
-              onClick={() => {
-                if (!groupEdit || !admin) return;
-                const g = { ...groupEdit, name: groupEdit.name.trim() };
-                if (
-                  state.groups.some(
-                    (x) =>
-                      x.id !== g.id &&
-                      x.name.toLowerCase() === g.name.toLowerCase(),
-                  )
-                ) {
-                  dispatch({
-                    field: 'toast',
-                    value: {
-                      text: 'Já existe um grupo com esse nome.',
-                      error: true,
-                    },
-                  });
-                  return;
-                }
-                const updatedDocs = state.documents.map((d) =>
-                  d.status !== 'done' &&
-                  d.template.stages[d.stageIndex].groupId === g.id &&
-                  d.assignee &&
-                  !g.memberIds.includes(d.assignee)
-                    ? {
-                        ...d,
-                        assignee: null,
-                        updatedAt: timestamp(),
-                        history: [
-                          ...d.history,
-                          log(
-                            person.name,
-                            'Reabriu a atribuição da etapa após alterar os participantes do grupo.',
-                            {
-                              kind: 'unassigned',
-                              stageId: d.template.stages[d.stageIndex].id,
-                            },
-                          ),
-                        ],
-                      }
-                    : d,
-                );
-                if (
-                  commit({
-                    ...state,
-                    documents: updatedDocs,
-                    groups: state.groups.some((x) => x.id === g.id)
-                      ? state.groups.map((x) => (x.id === g.id ? g : x))
-                      : [...state.groups, g],
-                  })
-                ) {
-                  dispatch({ field: 'groupEdit', value: null });
-                  dispatch({
-                    field: 'toast',
-                    value: { text: 'Grupo salvo.', error: false },
-                  });
-                }
-              }}
+              disabled={!groupEdit?.nome.trim() || organizacaoSaving}
+              onClick={salvarGrupo}
             >
               {tr('Salvar grupo')}
             </Button>
           </DialogActions>
         </Dialog>
+        <Dialog open={!!tagEdit && groupManager} onClose={() => dispatch({ field: 'tagEdit', value: null })}>
+          <DialogTitle>{tr(tagEdit?.editando ? 'Editar tag' : 'Criar tag')}</DialogTitle>
+          <DialogContent>
+            {tagEdit && <div className="dialog-fields">
+              <TextField label={tr('Código da tag')} autoFocus={!tagEdit.editando} disabled={tagEdit.editando} value={tagEdit.codigo} inputProps={{ maxLength: 30 }} helperText={tagEdit.editando ? tr('O código da tag não pode ser alterado.') : undefined} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, codigo: e.target.value } })} />
+              <TextField label={tr('Descrição')} value={tagEdit.descricao} inputProps={{ maxLength: 255 }} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, descricao: e.target.value } })} />
+              <p className="muted">{tr('Onde esta tag poderá ser utilizada?')}</p>
+              <FormControlLabel control={<Checkbox checked={tagEdit.grupo} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, grupo: e.target.checked } })} />} label={tr('Tag de Grupo')} />
+              <FormControlLabel control={<Checkbox checked={tagEdit.usuario} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, usuario: e.target.checked } })} />} label={tr('Tag de Usuário')} />
+              <FormControlLabel control={<Checkbox checked={tagEdit.vinculo} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, vinculo: e.target.checked } })} />} label={tr('Tag de Vínculo')} />
+              {tagEdit.editando && <FormControlLabel control={<Checkbox checked={tagEdit.ativo} onChange={(e) => dispatch({ field: 'tagEdit', value: { ...tagEdit, ativo: e.target.checked } })} />} label={tr('Tag ativa')} />}
+            </div>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => dispatch({ field: 'tagEdit', value: null })}>{tr('Cancelar')}</Button>
+            <Button variant="contained" disabled={!tagEdit?.codigo.trim() || !(tagEdit?.grupo || tagEdit?.usuario || tagEdit?.vinculo) || organizacaoSaving} onClick={salvarTag}>{tr('Salvar tag')}</Button>
+          </DialogActions>
+        </Dialog>
         <Dialog
-          open={personOpen}
+          open={personOpen && admin}
           onClose={() => dispatch({ field: 'personOpen', value: false })}
         >
           <DialogTitle>{tr('Adicionar pessoa de demonstração')}</DialogTitle>

@@ -6,6 +6,7 @@ import java.util.UUID;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.Perfil;
+import br.com.argousForms.model.persistencia.cadastro.Pessoa;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
@@ -26,6 +27,7 @@ interface CadastroRepositorio {
 		UsuarioSistema usuario(String email) throws Exception;
 		UsuarioOrigemLogin vinculo(UUID usuario, UUID origem) throws Exception;
 		List<ConfirmacaoEmail> confirmacoes(UUID usuario) throws Exception;
+		void inserir( Pessoa pessoa ) throws Exception;
 		void inserir(UsuarioSistema usuario) throws Exception;
 		void inserir(UsuarioOrigemLogin vinculo) throws Exception;
 		void inserir( UsuarioPerfil perfil ) throws Exception;

@@ -18,6 +18,8 @@ Este documento reúne as definições e questões relacionadas ao backend. Recom
 - Haverá autenticação local, Argous, Google e Microsoft.
 - Senhas locais usarão PBKDF2-HMAC-SHA-256.
 - Somente o hash SHA-256 do bearer de sessão será armazenado.
+- O login local exige senha válida e vínculo de origem com e-mail confirmado. A sessão inicial vale sete dias, usa cookie `HttpOnly` e persiste apenas o hash SHA-256 do segredo em `Cadastro.HISTORICO_LOGINS`. A consulta da sessão e o encerramento estão disponíveis pelo resolver; os demais métodos de login e a autorização dos módulos ainda não foram integrados.
+- As respostas de login local e consulta da sessão informam os papéis efetivos por vínculos vigentes com perfis e papéis ativos. O frontend usa `EDITOR_DE_DOCUMENTOS` para encaminhar à interface documental provisória; essa informação não substitui a autorização por operação, documento e etapa no backend.
 
 ## Responsabilidades principais
 
@@ -38,6 +40,10 @@ Este documento reúne as definições e questões relacionadas ao backend. Recom
 
 ## Regras de negócio específicas com o Quatro
 
+Regras de integridade que possam ser garantidas pelo PostgreSQL devem ser implementadas no banco, preferindo restrições declarativas e usando funções ou triggers quando necessário. O frontend deve repetir, sempre que possível, as verificações relevantes durante a interação, para dar retorno antes da gravação; essa antecipação não substitui a proteção do banco. A API e as classes de negócio podem validar previamente quando isso melhorar o fluxo ou a mensagem de erro e devem tratar as rejeições do banco.
+
+Os scripts de estrutura e regras do banco serão mantidos em `ArgousForms/banco/`. Futuras instalações em produção precisarão de um mecanismo para aplicar alterações versionadas automaticamente, sem recriar tabelas nem perder dados. A escolha e a implementação desse mecanismo permanecem pendentes.
+
 - Inclusões, alterações e exclusões passam pela classe `*Negocio` correspondente.
 - Regras específicas da aplicação ficam na classe `*NegocioEspecifico`, usando o gancho apropriado do ciclo de persistência, como `antesDeInserir`, `depoisDeInserir`, `antesDeAlterar` ou `depoisDeAlterar`. A classe `*Negocio` gerada não deve ser editada para acrescentar essas regras.
 - Se uma regra valer para mais de uma operação, os ganchos envolvidos devem chamar um método compartilhado que receba a entidade. Na confirmação de e-mail, `checaRegrasDeNegocio( ConfirmacaoEmail )` valida o hash antes da inclusão e da alteração.
@@ -52,6 +58,8 @@ O formato conceitual será:
   "dados": {}
 }
 ```
+
+O ArgousForms deverá futuramente permitir que outros sistemas, como ERPs, utilizem suas funcionalidades de fluxo documental por API. Ao desenvolver serviços de domínio, considerar esse uso sem exigir a presença da interface React para executar a regra de negócio. As operações, os contratos e a forma de autenticar e autorizar sistemas externos serão definidos quando a integração for desenvolvida; não há implementação de integração aprovada nesta etapa.
 
 ### Recomendação pendente de aprovação
 
@@ -215,10 +223,15 @@ Deverão ser preservados o arquivo de prova, o hash carimbado, as informações 
 - Sessões revogáveis e com validade definida.
 - Histórico de login.
 - DTOs próprios, sem exposição direta das entidades de persistência.
-- O autocadastro local atribui o perfil ativo `PARTICIPANTE` na mesma transação que inclui o usuário. Se o perfil padrão não estiver disponível, a inclusão falha sem deixar cadastro parcial.
+- O autocadastro local atribui os perfis ativos `ESSENCIAL` e `PARTICIPANTE` na mesma transação que inclui o usuário. Se qualquer um não estiver disponível, a inclusão falha sem deixar cadastro parcial.
 - O vínculo de login local permanece sem e-mail verificado até a confirmação do código. A política de login permitirá acesso após essa confirmação, sem aprovação administrativa e sem autenticação automática na confirmação.
-- `PARTICIPANTE` combina os papéis `INICIADOR_PROCESSOS` e `EXECUTOR_ETAPAS`; `MODELADOR` combina o papel `MODELADOR`; `GESTOR` combina `ANALISTA_INDICADORES`. Os dois últimos perfis são atribuições posteriores por administrador.
-- A carga manual inicial está em `ArgousForms/perfis-papeis-iniciais.sql`. A instalação futura deverá inserir os papéis, perfis e vínculos padrão automaticamente. As permissões de cada papel e a operação de login ainda precisam ser implementadas.
+- `ESSENCIAL` combina `AUTOGESTAO` e `CONSULTA_DOCUMENTOS`; `PARTICIPANTE` combina `EDITOR_DE_DOCUMENTOS`; `ADMINISTRADOR` inclui `ADMINISTRADOR_USUARIOS`, `GESTOR_ACESSOS` e `GESTOR_GRUPOS_TAGS`. `MODELADOR` e `GESTOR` combinam, respectivamente, `MODELADOR` e `ANALISTA_INDICADORES`. Os papéis não têm hierarquia.
+- `ENTRAR_LOCAL` e `SESSAO_ATUAL` retornam papéis efetivos e perfis ativos do usuário. A interface usa os papéis para a navegação e os perfis apenas para a identificação exibida. `LISTAR_ORGANIZACAO`, `SALVAR_GRUPO` e `CRIAR_TAG` consultam a sessão e exigem `GESTOR_GRUPOS_TAGS` no backend. `CRIAR_TAG` recebe três indicadores booleanos (`grupo`, `usuario`, `vinculo`), permite várias aplicações simultâneas e exige ao menos uma. A listagem devolve os três indicadores registrados. Escritas em `Cadastro.GRUPOS` e `Cadastro.TAGS` usam as classes `*Negocio` na transação da operação. A autorização das futuras operações de documentos, vínculos de usuários e pessoas continuará necessária no backend.
+- `LISTAR_ACESSOS`, `SALVAR_PAPEL`, `SALVAR_PERFIL`, `REMOVER_PAPEL` e `REMOVER_PERFIL` exigem `GESTOR_ACESSOS` no resolver. A gravação usa classes `*Negocio` em uma única transação. O serviço preserva os códigos, protege os registros padrão e decide entre exclusão física e inativação com base nos vínculos históricos. `validar-papeis-perfis.sql` repete as proteções possíveis no banco e deve ser aplicado manualmente após a carga dos padrões. O catálogo e a atribuição de permissões aos papéis permanecem pendentes.
+- `ALTERAR_TAG` exige o mesmo papel, mantém `CD_TAG` fixo e atualiza descrição, aplicações e situação ativa via `TagNegocio`. A operação consulta as três tabelas de vínculos antes de desmarcar qualquer aplicação. O script `ArgousForms/banco/validar-alteracao-tags.sql` reforça essas regras no banco quando executado pelo proprietário do esquema; não é aplicado automaticamente. As atribuições de tags a usuários e a vínculos ainda precisam de regras próprias.
+- `SALVAR_GRUPO` atualiza nome, situação ativa e lista de tags na mesma transação. Apenas tags ativas e habilitadas para grupos podem ser vinculadas ou reativadas. A retirada desativa o vínculo em `GRUPO_TAGS`, preservando sua data de inclusão; uma seleção posterior reativa o mesmo registro. A atualização do vínculo usa `GrupoTagNegocioSeguro`, pois o persistor gerado usa `LIKE` em `CD_TAG` e poderia alcançar outros códigos que contivessem `_` ou `%`. O script de validação das tags também protege inserções e reativações de vínculos quando instalado.
+- A futura operação de remover uma Tag ou um Grupo deverá consultar seu uso em fluxos de modelos de documento: sem uso, poderá excluir fisicamente o cadastro e seus vínculos; com uso, deverá apenas inativar o cadastro. Esse critério se aplica por analogia a outros cadastros com referências históricas. A modelagem dos fluxos e a operação de remoção ainda não existem; não inferir ausência de uso apenas pelas tabelas atuais de vínculos.
+- A carga manual inicial está em `ArgousForms/banco/carga-manual-teste.sql`; `ArgousForms/perfis-papeis-iniciais.sql` é uma carga complementar alternativa. O banco de desenvolvimento já carregado deve usar `ArgousForms/banco/ajuste-papeis-perfis-2026-10-12.sql`. A instalação futura deverá inserir automaticamente os papéis, perfis e vínculos padrão. O login local existe; as permissões concretas dos papéis e a autorização dos módulos ainda precisam ser implementadas.
 
 A necessidade de vínculo Argous deverá ser determinada pela funcionalidade ou pela configuração do cliente; não foi definido que todo usuário do ArgousForms dependerá desse vínculo.
 

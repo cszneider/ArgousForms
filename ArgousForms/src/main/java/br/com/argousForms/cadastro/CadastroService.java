@@ -19,6 +19,7 @@ import br.com.argousForms.security.SenhaSegura;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.Perfil;
+import br.com.argousForms.model.persistencia.cadastro.Pessoa;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
@@ -28,6 +29,7 @@ import quatro.util.QtData;
 public final class CadastroService {
 
 	private static final String TIPO_AUTENTICACAO_LOCAL = "L";
+	private static final String PERFIL_ESSENCIAL = "ESSENCIAL";
 	private static final String PERFIL_PARTICIPANTE = "PARTICIPANTE";
 	private final CadastroRepositorio repositorio;
 	private final CodigoConfirmacao codigos;
@@ -73,6 +75,10 @@ public final class CadastroService {
 			try {
 				tx.bloquearEmail( email );
 				exigirOrigem( tx );
+				Perfil perfilEssencial = tx.perfilAtivo( PERFIL_ESSENCIAL );
+				if( perfilEssencial == null ) {
+					throw new ArgousFormsApiException( 503, "PERFIL_ESSENCIAL_INDISPONIVEL", "O perfil essencial não está disponível nesta instalação." );
+				}
 				Perfil perfilParticipante = tx.perfilAtivo( PERFIL_PARTICIPANTE );
 				if( perfilParticipante == null ) {
 					throw new ArgousFormsApiException( 503, "PERFIL_PARTICIPANTE_INDISPONIVEL", "O perfil de cadastro não está disponível nesta instalação." );
@@ -82,8 +88,16 @@ public final class CadastroService {
 				}
 
 				Instant agora = relogio.instant();
+				Pessoa pessoa = new Pessoa();
+				pessoa.setIdPessoa( UUID.randomUUID() );
+				pessoa.setDsNomePessoa( nome.strip() );
+				pessoa.setDsEndEmail( email );
+				pessoa.setDtInclusao( data( agora ) );
+				tx.inserir( pessoa );
+
 				UsuarioSistema usuario = new UsuarioSistema();
 				usuario.setIdUsuarioSistema( UUID.randomUUID() );
+				usuario.setIdPessoa( pessoa.getIdPessoa() );
 				usuario.setDsNome( nome.strip() );
 				usuario.setDsEmail( email );
 				usuario.setCdHashSenha( hashSenha );
@@ -100,12 +114,14 @@ public final class CadastroService {
 				vinculo.setDtInclusao( data( agora ) );
 				tx.inserir( vinculo );
 
-				UsuarioPerfil usuarioPerfil = new UsuarioPerfil();
-				usuarioPerfil.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
-				usuarioPerfil.setIdPerfil( perfilParticipante.getIdPerfil() );
-				usuarioPerfil.setDtInclusao( data( agora ) );
-				usuarioPerfil.setDtInicioVigencia( data( agora ) );
-				tx.inserir( usuarioPerfil );
+				for( Perfil perfil : List.of( perfilEssencial, perfilParticipante ) ) {
+					UsuarioPerfil usuarioPerfil = new UsuarioPerfil();
+					usuarioPerfil.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
+					usuarioPerfil.setIdPerfil( perfil.getIdPerfil() );
+					usuarioPerfil.setDtInclusao( data( agora ) );
+					usuarioPerfil.setDtInicioVigencia( data( agora ) );
+					tx.inserir( usuarioPerfil );
+				}
 
 				confirmacao = novaConfirmacao( usuario, agora );
 				gravarConfirmacao( tx, confirmacao, codigo );

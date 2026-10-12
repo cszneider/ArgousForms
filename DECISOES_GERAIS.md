@@ -42,6 +42,13 @@ O sistema será trilíngue, com suporte inicial a português, espanhol e inglês
 
 As versões do Java, React e demais bibliotecas, assim como o servidor de aplicação e as ferramentas de build, ainda não foram aprovadas.
 
+## Integração futura com outros sistemas
+
+- O ArgousForms deverá poder compor outros sistemas, como um ERP que utilize seus fluxos de documentos por chamadas de API.
+- Essa capacidade será desenvolvida posteriormente. Desde já, as funcionalidades novas deverão ser concebidas, quando aplicável, para que sua lógica de negócio possa ser acionada sem depender da interface web do ArgousForms.
+- A comunicação atual por API central permanece; esta decisão não cria, por enquanto, novas operações ou mecanismos de integração.
+- Contratos de integração, autenticação e autorização de sistemas externos, troca de dados e demais detalhes operacionais ainda não foram definidos.
+
 ## Conceitos documentais
 
 Devem ser tratados como conceitos distintos:
@@ -69,22 +76,34 @@ Um documento final poderá ser formado por vários formulários preenchidos por 
 - Os usuários de uma instituição poderão ser organizados em grupos, sem hierarquia entre os grupos.
 - Os grupos poderão representar departamentos, comitês, equipes de apoio e outras formas de organização da instituição.
 - As tags serão transversais aos grupos: vários grupos poderão receber a mesma tag, e cada grupo poderá receber várias tags.
-- Haverá três categorias distintas: **Tag de Grupo**, atribuída ao grupo; **Tag de Usuário**, atribuída ao usuário; e **Tag de Vínculo**, atribuída à participação de um usuário em um grupo.
+- Haverá três aplicações: **Tag de Grupo**, atribuída ao grupo; **Tag de Usuário**, atribuída ao usuário; e **Tag de Vínculo**, atribuída à participação de um usuário em um grupo. Uma mesma tag poderá ser habilitada para uma ou mais dessas aplicações.
 - Um mesmo usuário dentro de um grupo poderá receber várias Tags de Vínculo. Por exemplo, uma Tag de Vínculo poderá indicar "gestor" ou "coordenador" naquele grupo.
 - Grupos e tags não têm relação com papéis e perfis. No fluxo, poderão selecionar os destinatários das etapas; outros usos serão detalhados posteriormente.
+- O cadastro inicial de um grupo exige somente seu nome; usuários serão vinculados depois. As listas e criações de grupos e tags da administração usam as tabelas `Cadastro.GRUPOS` e `Cadastro.TAGS`, sem depender dos dados de demonstração do navegador. A atribuição de tags a grupos, usuários ou vínculos é uma etapa posterior.
+- A edição de uma tag mantém seu código fixo e permite alterar descrição, aplicações e situação ativa. Não se pode desmarcar uma aplicação enquanto a tag tiver vínculos naquela aplicação.
+- A edição de um grupo permite alterar nome, situação ativa e tags aplicáveis a grupos. Ao retirar uma tag, o vínculo em `GRUPO_TAGS` fica inativo; se ela for escolhida novamente, o mesmo vínculo é reativado.
+- Na futura remoção de uma **Tag** ou de um **Grupo** como cadastro, será permitida a exclusão física, inclusive dos vínculos correspondentes, se o registro ainda não tiver sido usado em fluxos de modelos de documento. Se já tiver sido usado nesses fluxos, o registro deverá ser preservado e marcado como inativo.
+- A mesma política deverá orientar situações semelhantes em que a exclusão física possa comprometer referências históricas. A verificação do uso nos modelos e fluxos, as dependências de cada cadastro e a operação de remoção serão implementadas depois da modelagem documental. A inativação atual de um vínculo `GRUPO_TAGS` ao desmarcar uma tag na edição do grupo é uma operação distinta da remoção do cadastro da Tag ou do Grupo.
 
 ## Perfis, papéis e permissões
 
-- Permissões representam ações concretas; papéis reúnem permissões de uma responsabilidade; perfis combinam papéis e são atribuídos aos usuários.
+- Permissões representam ações concretas; papéis reúnem permissões de uma responsabilidade; perfis combinam papéis e são atribuídos aos usuários. Os papéis são independentes e não formam hierarquia. O acesso a painéis e operações deve ser decidido pelos papéis efetivos, não pelo nome do perfil.
 - A organização abaixo é uma abordagem inicial e poderá ser ajustada conforme o funcionamento do sistema for detalhado.
 - Os papéis padrão já considerados para a instalação são `INSTALADOR`, restrito às atividades iniciais, `ADMINISTRADOR_USUARIOS`, para liberação de usuários e atribuição de acessos, e `GESTOR_ACESSOS`, para administração de papéis, perfis e permissões.
-- Para a operação documental, os papéis iniciais são `INICIADOR_PROCESSOS`, `EXECUTOR_ETAPAS`, `MODELADOR` de documentos e fluxos, e `ANALISTA_INDICADORES` para consulta autorizada de dashboards e estatísticas.
+- Os papéis padrão adicionais são `AUTOGESTAO`, para o menu pessoal e as próprias informações; `CONSULTA_DOCUMENTOS`, para consultar documentos autorizados; `EDITOR_DE_DOCUMENTOS`, para iniciar documentos elegíveis e editar etapas atribuídas; `GESTOR_GRUPOS_TAGS`, para administrar grupos, vínculos e tags; `MODELADOR`, para modelos; e `ANALISTA_INDICADORES`, para indicadores autorizados. `INICIADOR_PROCESSOS` e `EXECUTOR_ETAPAS` foram substituídos por `EDITOR_DE_DOCUMENTOS`.
+- A Visão geral é universal para usuários autenticados, mas seu conteúdo depende dos papéis efetivos. `CONSULTA_DOCUMENTOS` dá acesso ao painel Documentos; `AUTOGESTAO` dá acesso ao menu pessoal e à manutenção dos próprios dados. Não há painel separado de Minhas pendências: elas aparecem na Visão geral quando aplicáveis. O painel **Organização e acessos** reúne áreas internas: Grupos e tags para `GESTOR_GRUPOS_TAGS`, Papéis e perfis para `GESTOR_ACESSOS` e Usuários e pessoas para `ADMINISTRADOR_USUARIOS`. Apenas as áreas autorizadas pelos papéis efetivos são exibidas.
+- Na divisão administrativa inicial, `GESTOR_ACESSOS` define papéis, perfis e permissões; `ADMINISTRADOR_USUARIOS` atribui perfis existentes aos usuários. Nenhum desses papéis implica automaticamente os demais.
+- Quando houver vários perfis, a interface poderá destacar um perfil padrão e indicar a quantidade dos demais. Essa preferência é apenas de apresentação; não define hierarquia entre papéis nem altera as permissões do usuário.
+- `EDITOR_DE_DOCUMENTOS` dá a capacidade geral de abrir "Novo Documento". A lista apresenta apenas modelos publicados cuja etapa INÍCIO aceita o usuário, segundo usuários, grupos e tags definidos no fluxo. A elegibilidade deve ser conferida novamente ao iniciar. Para preencher uma etapa, são necessários o papel e a atribuição daquela etapa; o papel sozinho não concede acesso a qualquer documento ou etapa.
 - Como possibilidades futuras, a serem detalhadas apenas quando suas operações estiverem claras, foram identificados **Publicador de modelos**, **Gestor de processos**, **Auditor** e **Gestor documental**.
-- O perfil padrão `ADMINISTRADOR` reúne os papéis `ADMINISTRADOR_USUARIOS` e `GESTOR_ACESSOS`. O papel `INSTALADOR` não integra esse perfil permanente.
-- O perfil padrão `PARTICIPANTE` reúne `INICIADOR_PROCESSOS` e `EXECUTOR_ETAPAS`. O perfil complementar `MODELADOR` reúne o papel de mesmo código. O perfil complementar `GESTOR` reúne `ANALISTA_INDICADORES`.
-- Todo novo usuário cadastrado pela página pública receberá `PARTICIPANTE` na mesma transação de inclusão. A confirmação do e-mail continua obrigatória antes do login; não haverá aprovação administrativa para liberar o cadastro. Um administrador poderá atribuir `MODELADOR` ou `GESTOR` posteriormente.
+- O perfil `ESSENCIAL` reúne `AUTOGESTAO` e `CONSULTA_DOCUMENTOS` e pertence a todos os usuários, inclusive administradores e gestores. `CONSULTA_DOCUMENTOS` não dá acesso irrestrito: cada documento determina quem pode vê-lo. A manutenção de dados próprios não permite administrar outras contas; alterações de e-mail e senha exigirão verificações próprias.
+- O perfil padrão `ADMINISTRADOR` reúne `ADMINISTRADOR_USUARIOS`, `GESTOR_ACESSOS` e `GESTOR_GRUPOS_TAGS`. O papel `INSTALADOR` não integra esse perfil permanente.
+- O perfil `PARTICIPANTE` reúne `EDITOR_DE_DOCUMENTOS`. Os perfis complementares `MODELADOR` e `GESTOR` reúnem, respectivamente, `MODELADOR` e `ANALISTA_INDICADORES`.
+- Todo novo usuário cadastrado pela página pública receberá `ESSENCIAL` e `PARTICIPANTE` na mesma transação de inclusão. A confirmação do e-mail continua obrigatória antes do login; não haverá aprovação administrativa para liberar o cadastro. Um administrador poderá atribuir `MODELADOR` ou `GESTOR` posteriormente.
 - Novos papéis e perfis poderão ser criados pela instituição no futuro. Os papéis e perfis padrão serão incluídos automaticamente em cada instalação; a carga inicial atual é manual.
-- A definição das permissões concretas de cada papel e a implementação do login permanecem etapas separadas.
+- A gestão de acessos permite editar e remover papéis, além de criar, editar e remover perfis da instituição. A criação de papéis aguarda o catálogo de permissões. Perfis podem ser compostos por papéis; a associação de permissões aos papéis fica para uma etapa futura. Um perfil conta como utilizado desde a primeira atribuição a um usuário, mesmo revogada. Um papel conta como utilizado se integrou um perfil que já foi atribuído a usuário, mesmo que os vínculos tenham sido posteriormente revogados. Registros nunca utilizados podem ser excluídos; os já utilizados devem ser inativados, preservando o histórico. Papéis e perfis padrão (`SN_SISTEMA`) só permitem editar nome e descrição: código, composição, situação e exclusão são protegidos. As regras possíveis devem ser repetidas em triggers do banco.
+- A interface não oferecerá criação de novos papéis até que exista o catálogo de permissões e seja possível definir as permissões do papel no cadastro. Nesta etapa, papéis existentes podem ser consultados e editados conforme as regras acima; novos perfis podem ser criados com esses papéis. A operação de inclusão de papel já existe no backend, mas ainda não constitui um cadastro funcional completo.
+- O login local e a sessão foram implementados; a definição das permissões concretas de cada papel, os demais métodos de login e a integração dos módulos de trabalho à autenticação permanecem etapas separadas.
 - Ser elegível por grupo ou tag não concede, por si só, todas as permissões de execução. A autorização também considerará as permissões do usuário e a responsabilidade pela etapa ou pelo documento.
 - Não haverá um papel genérico de assinador. Os signatários serão definidos pelas regras de cada documento e poderão ser usuários do sistema ou pessoas externas a ele.
 

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocio;
+import br.com.argousForms.model.negocio.cadastro.PessoaNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioOrigemLoginNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioPerfilNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioSistemaNegocio;
@@ -14,6 +15,7 @@ import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLoginLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.Perfil;
 import br.com.argousForms.model.persistencia.cadastro.PerfilLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.Pessoa;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLoginLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
@@ -150,6 +152,11 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 
 		public void inserir(UsuarioSistema usuario) throws Exception {
 			new UsuarioSistemaNegocio(conexao, usuario).insere();
+		}
+
+		public void inserir( Pessoa pessoa ) throws Exception {
+
+			new PessoaNegocio( conexao, pessoa ).insere();
 		}
 
 		public void inserir(UsuarioOrigemLogin vinculo) throws Exception {

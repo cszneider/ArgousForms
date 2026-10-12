@@ -2,6 +2,10 @@ import { readStore } from '../documentos/storage.js';
 // Local demonstration only. Production authorization belongs to the backend.
 export const PLATFORM_KEY = 'argousdocs:platform:v1';
 export const SESSION_KEY = 'argousdocs:session';
+export const isLocalSession = () => {
+  const session = sessionStorage.getItem(SESSION_KEY);
+  return session?.startsWith('user:') === true || session?.startsWith('editor:') === true;
+};
 export function readPlatform() {
   const raw = localStorage.getItem(PLATFORM_KEY);
   if (!raw) return { schema: 1, disabledIds: [], accesses: [] };
@@ -15,10 +19,12 @@ export function readPlatform() {
   return data;
 }
 export function isEnabled(id) {
+  if (isLocalSession()) return true;
   return !readPlatform().disabledIds.includes(id);
 }
 export function sessionRole() {
   const session = sessionStorage.getItem(SESSION_KEY);
+  if (isLocalSession()) return 'company';
   if (session === 'platform-demo') return 'platform';
   if (
     session === 'demo' &&
