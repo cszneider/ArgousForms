@@ -52,6 +52,7 @@ Não transformar itens identificados nesses documentos como proposta, recomenda�
 - Redis para cache e dados efêmeros.
 - Frontend em React, claramente separado do backend.
 - Comunicação principal por endpoint central que recebe requisições `POST`.
+- Capacidade futura de integração com outros sistemas por API. Ao desenvolver funcionalidades, evitar dependência da interface web na lógica de negócio quando isso dificultar seu uso por API; contratos e mecanismos de integração ainda serão definidos.
 - Implantação SaaS dedicada para cada cliente.
 - Documento final em PDF.
 - Idiomas iniciais: português, espanhol e inglês.

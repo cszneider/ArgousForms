@@ -2,7 +2,8 @@
 import { pageReducer } from '../../utils/page-state.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { createContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { loginDemo } from '../../programas/plataforma/access.js';
+import { entrarLocal } from '../../programas/login/autenticacao.js';
+import { SESSION_KEY } from '../../programas/plataforma/access.js';
 import {
   consultarDiagnostico,
   verificacoes,
@@ -102,12 +103,17 @@ export default function Login() {
           })}
         </section>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            dispatch({ field: 'loading', value: true });
+            dispatch({ field: 'error', value: '' });
             try {
-              window.location.href = loginDemo(email, password);
+              const sessao = await entrarLocal(email, password);
+              sessionStorage.setItem(SESSION_KEY, `user:${sessao.idUsuario}`);
+              window.location.href = '/app';
             } catch (error) {
               dispatch({ field: 'error', value: error.message });
+              dispatch({ field: 'loading', value: false });
             }
           }}
         >
@@ -154,6 +160,7 @@ export default function Login() {
             variant="contained"
             fullWidth
             endIcon={<ArrowRight size={18} />}
+            disabled={pageState.loading}
           >
             {tr('Entrar na plataforma')}
           </Button>
@@ -163,37 +170,6 @@ export default function Login() {
           <Button component="a" href="/cadastro" variant="outlined" fullWidth>
             {tr('Criar cadastro')}
           </Button>
-        </div>
-        <div className="demo-access">
-          <strong>{tr('Acesso de demonstração')}</strong>
-          <p>{tr('teste@argous.com.br · senha 123')}</p>
-          <Button
-            size="small"
-            onClick={() => {
-              dispatch({
-                field: 'email',
-                value: 'teste@argous.com.br',
-              });
-              dispatch({ field: 'password', value: '123' });
-              dispatch({ field: 'error', value: '' });
-            }}
-          >
-            {tr('Preencher acesso de teste')}
-          </Button>
-          <p>{tr('Administrador da plataforma')}: adm@argous.com.br</p>
-          <Button
-            size="small"
-            onClick={() => {
-              dispatch({ field: 'email', value: 'adm@argous.com.br' });
-              dispatch({ field: 'password', value: '123' });
-              dispatch({ field: 'error', value: '' });
-            }}
-          >
-            {tr('Preencher acesso de administrador')}
-          </Button>
-          <small>
-            {tr('Ambiente simulado. Os dados ficam neste navegador.')}
-          </small>
         </div>
       </AccessLayout>
     </LoginContext.Provider>

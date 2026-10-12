@@ -8,6 +8,7 @@ import {
   validateProfile,
 } from '../../programas/plataforma/profile.js';
 import { readStore } from '../../programas/documentos/storage.js';
+import { sessaoAtual } from '../../programas/login/autenticacao.js';
 import {
   Box,
   Typography,
@@ -41,31 +42,40 @@ export default function UserSettings() {
   const { t } = useI18n();
 
   useEffect(() => {
-    try {
-      const id = accountId(sessionStorage.getItem('argousdocs:session'));
-      if (!id) throw Error('Entre novamente para salvar seu cadastro.');
-      const person =
-        id === 'admin' ? readStore().people.find((p) => p.id === id) : null;
-      // Hydrate the browser-only profile when opening settings.
-      // oxlint-disable-next-line react/react-compiler
-      dispatch({
-        field: 'profile',
-        value: readProfile(id, {
-          name: person?.name || 'Administrador da plataforma',
-          email:
-            person?.email ||
-            (id === 'admin' ? 'teste@argous.com.br' : 'adm@argous.com.br'),
-        }),
-      });
-    } catch {
-      dispatch({
-        field: 'message',
-        value: {
-          error: true,
-          text: 'Não foi possível carregar seu cadastro.',
-        },
-      });
+    async function carregar() {
+      try {
+        const sessao = sessionStorage.getItem('argousdocs:session');
+        const id = accountId(sessao);
+        if (!id) throw Error('Entre novamente para salvar seu cadastro.');
+        const usuario = sessao?.startsWith('user:') || sessao?.startsWith('editor:')
+          ? await sessaoAtual()
+          : null;
+        if (usuario && usuario.idUsuario !== id) throw Error('Sessão inválida.');
+        const person =
+          id === 'admin' ? readStore().people.find((p) => p.id === id) : null;
+        // Hydrate the browser-only profile when opening settings.
+        // oxlint-disable-next-line react/react-compiler
+        dispatch({
+          field: 'profile',
+          value: readProfile(id, {
+            name: usuario?.nome || person?.name || 'Administrador da plataforma',
+            email:
+              usuario?.email ||
+              person?.email ||
+              (id === 'admin' ? 'teste@argous.com.br' : 'adm@argous.com.br'),
+          }),
+        });
+      } catch {
+        dispatch({
+          field: 'message',
+          value: {
+            error: true,
+            text: 'Não foi possível carregar seu cadastro.',
+          },
+        });
+      }
     }
+    carregar();
   }, []);
   const update = (key, value) => {
     dispatch({

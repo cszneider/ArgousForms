@@ -1,5 +1,7 @@
 export const USER_LANGUAGE_PREFIX = 'argousdocs:user-language:';
 export function accountId(session) {
+  if (session?.startsWith('user:')) return session.slice('user:'.length);
+  if (session?.startsWith('editor:')) return session.slice('editor:'.length);
   return session === 'platform-demo'
     ? 'platform-admin'
     : session === 'demo'

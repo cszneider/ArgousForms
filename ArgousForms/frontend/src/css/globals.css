@@ -1156,6 +1156,9 @@ footer {
 .people-panel {
   margin-top: 28px;
 }
+.management-users-panel {
+  margin-top: 0;
+}
 .person-name {
   display: flex;
   gap: 12px;
