@@ -26,6 +26,8 @@ A estrutura é criada por um papel proprietário diferente de `carlos`, usuário
 
 As referências entre registros devem usar os identificadores gerados **nesta instalação**, nunca UUIDs copiados de outra instituição.
 
+Os países e os tipos de identificação aprovados para a carga inicial de teste constam, respectivamente, de [carga-manual-teste.sql](ArgousForms/banco/carga-manual-teste.sql) e [carga-manual-tipos-identificacao.sql](ArgousForms/banco/carga-manual-tipos-identificacao.sql). A carga dos tipos depende dos países e inclui SSN (EUA), TFN (Austrália) e SIN (Canadá). A automatização dessas cargas na instalação ainda será definida.
+
 | Ordem lógica | Tabelas | Registros e vínculos definidos |
 | --- | --- | --- |
 | 1 | `Cadastro.INSTITUICAO` | Inserir o único registro da instituição da instalação. Os dados concretos a solicitar e o comando de inclusão ainda serão definidos. |

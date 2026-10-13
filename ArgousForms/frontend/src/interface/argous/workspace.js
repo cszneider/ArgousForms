@@ -1,6 +1,8 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
 import UserSettings from '../configuracoes/index.js';
+import ForcaSenha from '../../components/acesso/forca-senha.js';
+import { avaliarSenha } from '../../programas/login/politica-senha.js';
 import {
   sessionRole,
   isEnabled,
@@ -24,6 +26,7 @@ import {
   FormControlLabel,
   TextField,
   MenuItem,
+  Menu as MuiMenu,
   Avatar,
   Chip,
   Dialog,
@@ -153,12 +156,29 @@ export default function Workspace() {
       acessosLoading: false,
       acessosError: '',
       acessosSaving: false,
+      pessoasUsuarios: null,
+      pessoasUsuariosLoading: false,
+      pessoasUsuariosError: '',
       papelEdit: null,
       perfilEdit: null,
       remocaoAcesso: null,
       personOpen: false,
       personName: '',
       personRole: 'participant',
+      menuPessoalAnchor: null,
+      senhaDialog: false,
+      senhaAtual: '',
+      senhaNova: '',
+      senhaConfirmacao: '',
+      senhaSaving: false,
+      senhaError: '',
+      conexoesDialog: false,
+      conexoes: [],
+      conexoesLoading: false,
+      conexoesError: '',
+      conexaoParaEncerrar: null,
+      conexoesSaving: false,
+      conexoesActionError: '',
     }),
     [],
   );
@@ -193,12 +213,29 @@ export default function Workspace() {
     acessosLoading,
     acessosError,
     acessosSaving,
+    pessoasUsuarios,
+    pessoasUsuariosLoading,
+    pessoasUsuariosError,
     papelEdit,
     perfilEdit,
     remocaoAcesso,
     personOpen,
     personName,
     personRole,
+    menuPessoalAnchor,
+    senhaDialog,
+    senhaAtual,
+    senhaNova,
+    senhaConfirmacao,
+    senhaSaving,
+    senhaError,
+    conexoesDialog,
+    conexoes,
+    conexoesLoading,
+    conexoesError,
+    conexaoParaEncerrar,
+    conexoesSaving,
+    conexoesActionError,
   } = pageState;
   const updateDirty = useCallback(
     (value) => dispatch({ field: 'dirty', value }),
@@ -241,6 +278,23 @@ export default function Workspace() {
     if (view === 'organization' && usuario?.papeis?.includes('GESTOR_ACESSOS'))
       carregarAcessos();
   }, [view, usuario, carregarAcessos]);
+
+  const carregarPessoasUsuarios = useCallback(async () => {
+    dispatch({ field: 'pessoasUsuariosLoading', value: true });
+    dispatch({ field: 'pessoasUsuariosError', value: '' });
+    try {
+      dispatch({ field: 'pessoasUsuarios', value: await executar('LISTAR_PESSOAS_USUARIOS') });
+    } catch (erro) {
+      dispatch({ field: 'pessoasUsuariosError', value: erro.message });
+    } finally {
+      dispatch({ field: 'pessoasUsuariosLoading', value: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'organization' && usuario?.papeis?.includes('ADMINISTRADOR_USUARIOS'))
+      carregarPessoasUsuarios();
+  }, [view, usuario, carregarPessoasUsuarios]);
 
   const salvarAcesso = async (tipo) => {
     const registro = tipo === 'papel' ? papelEdit : perfilEdit;
@@ -697,6 +751,86 @@ export default function Workspace() {
     dispatch({ field: 'groupFilter', value: 'all' });
     dispatch({ field: 'mobile', value: false });
   };
+  const encerrarSessao = async () => {
+    if (!mayLeave()) return;
+    dispatch({ field: 'menuPessoalAnchor', value: null });
+    try {
+      if (isLocalSession()) await sair();
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = '/login';
+    } catch (falha) {
+      dispatch({ field: 'toast', value: { text: falha.message, error: true } });
+    }
+  };
+  const fecharTrocaSenha = (forcar = false) => {
+    if (senhaSaving && !forcar) return;
+    dispatch({ field: 'senhaDialog', value: false });
+    dispatch({ field: 'senhaAtual', value: '' });
+    dispatch({ field: 'senhaNova', value: '' });
+    dispatch({ field: 'senhaConfirmacao', value: '' });
+    dispatch({ field: 'senhaError', value: '' });
+  };
+  const trocarSenha = async () => {
+    if (senhaSaving) return;
+    if (!avaliarSenha(senhaNova).valida) {
+      dispatch({ field: 'senhaError', value: 'A senha não atende à política de segurança.' });
+      return;
+    }
+    if (senhaNova !== senhaConfirmacao) {
+      dispatch({ field: 'senhaError', value: 'A confirmação não corresponde à nova senha.' });
+      return;
+    }
+    dispatch({ field: 'senhaSaving', value: true });
+    dispatch({ field: 'senhaError', value: '' });
+    try {
+      await executar('ALTERAR_SENHA', { senhaAtual, senhaNova });
+      dispatch({ field: 'senhaSaving', value: false });
+      fecharTrocaSenha(true);
+      dispatch({ field: 'toast', value: { text: 'Senha alterada. As outras sessões foram encerradas.', error: false } });
+    } catch (falha) {
+      dispatch({ field: 'senhaError', value: falha.message });
+      dispatch({ field: 'senhaSaving', value: false });
+    }
+  };
+  const carregarConexoes = async () => {
+    dispatch({ field: 'conexoesLoading', value: true });
+    dispatch({ field: 'conexoesError', value: '' });
+    try {
+      const dados = await executar('LISTAR_CONEXOES_ATIVAS');
+      dispatch({ field: 'conexoes', value: dados.conexoes || [] });
+    } catch (falha) {
+      dispatch({ field: 'conexoesError', value: falha.message });
+    } finally {
+      dispatch({ field: 'conexoesLoading', value: false });
+    }
+  };
+  const abrirConexoes = () => {
+    dispatch({ field: 'menuPessoalAnchor', value: null });
+    dispatch({ field: 'conexoesDialog', value: true });
+    dispatch({ field: 'conexoes', value: [] });
+    carregarConexoes();
+  };
+  const encerrarConexao = async () => {
+    if (!conexaoParaEncerrar || conexoesSaving) return;
+    dispatch({ field: 'conexoesSaving', value: true });
+    dispatch({ field: 'conexoesActionError', value: '' });
+    try {
+      const resultado = await executar('ENCERRAR_CONEXAO', { idLogin: conexaoParaEncerrar.idLogin });
+      if (resultado.atual) {
+        sessionStorage.removeItem(SESSION_KEY);
+        window.location.href = '/login';
+        return;
+      }
+      dispatch({ field: 'conexaoParaEncerrar', value: null });
+      dispatch({ field: 'toast', value: { text: 'Conexão encerrada.', error: false } });
+      await carregarConexoes();
+    } catch (falha) {
+      dispatch({ field: 'conexoesActionError', value: falha.message });
+    } finally {
+      dispatch({ field: 'conexoesSaving', value: false });
+    }
+  };
+  const dataConexao = (valor) => valor ? new Date(valor).toLocaleString(locale) : '—';
   const openNew = (templateId) => {
     if (!canEditDocuments) return;
     dispatch({
@@ -759,8 +893,10 @@ export default function Workspace() {
       <div className="sidebar-bottom">
         <div className="profile-exit">
           {canManageOwnData && <Button
-            onClick={() => navigate('settings')}
-            aria-label={tr('Configurações do usuário')}
+            onClick={(event) => dispatch({ field: 'menuPessoalAnchor', value: event.currentTarget })}
+            aria-label={tr('Menu do usuário')}
+            aria-haspopup="menu"
+            aria-expanded={Boolean(menuPessoalAnchor)}
             sx={{
               display: 'flex',
               gap: 1.25,
@@ -788,21 +924,18 @@ export default function Workspace() {
               <small title={usuario?.perfis?.join(', ')}>{usuario ? profileSummary(usuario.perfis) : tr(roleLabel(person))}</small>
             </div>
           </Button>}
-          <IconButton
+          {canManageOwnData && <MuiMenu anchorEl={menuPessoalAnchor} open={Boolean(menuPessoalAnchor)} onClose={() => dispatch({ field: 'menuPessoalAnchor', value: null })}>
+            <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); navigate('settings'); }}>{tr('Dados cadastrais')}</MenuItem>
+            {usuario && <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); dispatch({ field: 'senhaDialog', value: true }); }}>{tr('Trocar senha')}</MenuItem>}
+            {usuario && <MenuItem onClick={abrirConexoes}>{tr('Conexões ativas')}</MenuItem>}
+            <MenuItem onClick={encerrarSessao}>{tr('Sair')}</MenuItem>
+          </MuiMenu>}
+          {!canManageOwnData && <IconButton
             aria-label={tr('Sair')}
-            onClick={async () => {
-              if (!mayLeave()) return;
-              try {
-                if (isLocalSession()) await sair();
-                sessionStorage.removeItem(SESSION_KEY);
-                window.location.href = '/login';
-              } catch (falha) {
-                dispatch({ field: 'toast', value: { text: falha.message, error: true } });
-              }
-            }}
+            onClick={encerrarSessao}
           >
             <LogOut size={17} />
-          </IconButton>
+          </IconButton>}
         </div>
       </div>
     </div>
@@ -1572,7 +1705,24 @@ export default function Workspace() {
                       </>
                     )}
                     {activeManagementSection === 'users' && usuario && (
-                      <Alert severity="info">{tr('O cadastro de usuários e pessoas será conectado ao banco em uma etapa posterior.')}</Alert>
+                      <>
+                        {pessoasUsuariosLoading && <LinearProgress sx={{ mb: 2 }} />}
+                        {pessoasUsuariosError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarPessoasUsuarios}>{tr('Tentar novamente')}</Button>}>{system(pessoasUsuariosError)}</Alert>}
+                        <div className="panel-heading"><div><h2>{tr('Usuários')}</h2><p>{tr('Contas vinculadas a pessoas da instituição.')}</p></div></div>
+                        {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.usuarios.length ? <TableContainer className="panel"><Table>
+                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('PERFIS')}</TableCell></TableRow></TableHead>
+                          <TableBody>{pessoasUsuarios.usuarios.map((registro) => <TableRow key={registro.idUsuario}>
+                            <TableCell>{registro.nome}</TableCell><TableCell>{registro.email}</TableCell><TableCell>{registro.perfis.join(', ') || '—'}</TableCell>
+                          </TableRow>)}</TableBody>
+                        </Table></TableContainer> : <Alert severity="info">{tr('Nenhum usuário cadastrado.')}</Alert>)}
+                        <div className="panel-heading" style={{ marginTop: 32 }}><div><h2>{tr('Pessoas')}</h2><p>{tr('Pessoas sem conta de usuário.')}</p></div></div>
+                        {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.pessoas.length ? <TableContainer className="panel"><Table>
+                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('TELEFONE')}</TableCell></TableRow></TableHead>
+                          <TableBody>{pessoasUsuarios.pessoas.map((registro) => <TableRow key={registro.idPessoa}>
+                            <TableCell>{registro.nomeSocial || registro.nome}</TableCell><TableCell>{registro.email || '—'}</TableCell><TableCell>{registro.telefone || '—'}</TableCell>
+                          </TableRow>)}</TableBody>
+                        </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma pessoa cadastrada.')}</Alert>)}
+                      </>
                     )}
                     {activeManagementSection === 'users' && !usuario && <section className="panel people-panel management-users-panel">
                       <div className="panel-heading">
@@ -1782,6 +1932,57 @@ export default function Workspace() {
           <DialogActions>
             <Button onClick={() => dispatch({ field: 'remocaoAcesso', value: null })}>{tr('Cancelar')}</Button>
             <Button color="error" variant="contained" disabled={acessosSaving} onClick={removerAcesso}>{tr('Confirmar')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={senhaDialog && canManageOwnData && Boolean(usuario)} onClose={() => fecharTrocaSenha()} fullWidth maxWidth="sm">
+          <DialogTitle>{tr('Trocar senha')}</DialogTitle>
+          <form onSubmit={(event) => { event.preventDefault(); trocarSenha(); }}>
+            <DialogContent>
+              <div className="dialog-fields">
+                <TextField label={tr('Senha atual')} type="password" autoComplete="current-password" value={senhaAtual} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaAtual', value: event.target.value })} />
+                <TextField label={tr('Nova senha')} type="password" autoComplete="new-password" value={senhaNova} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaNova', value: event.target.value })} slotProps={{ htmlInput: { minLength: 8, maxLength: 1024 } }} />
+                <ForcaSenha senha={senhaNova} />
+                <TextField label={tr('Confirmar nova senha')} type="password" autoComplete="new-password" value={senhaConfirmacao} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaConfirmacao', value: event.target.value })} />
+                {senhaError && <Alert severity="error">{system(senhaError)}</Alert>}
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button type="button" disabled={senhaSaving} onClick={() => fecharTrocaSenha()}>{tr('Cancelar')}</Button>
+              <Button type="submit" variant="contained" disabled={senhaSaving || !senhaAtual || !senhaNova || !senhaConfirmacao}>{tr('Salvar nova senha')}</Button>
+            </DialogActions>
+          </form>
+        </Dialog>
+        <Dialog open={conexoesDialog && canManageOwnData && Boolean(usuario)} onClose={() => dispatch({ field: 'conexoesDialog', value: false })} fullWidth maxWidth="md">
+          <DialogTitle>{tr('Conexões ativas')}</DialogTitle>
+          <DialogContent>
+            {conexoesLoading && <LinearProgress sx={{ mb: 2 }} />}
+            {conexoesError && <Alert severity="error" sx={{ mb: 2 }}>{system(conexoesError)}</Alert>}
+            {!conexoesLoading && !conexoesError && (conexoes.length ? <TableContainer><Table aria-label={tr('Conexões ativas')}>
+              <TableHead><TableRow><TableCell>{tr('INÍCIO')}</TableCell><TableCell>{tr('IP')}</TableCell><TableCell>{tr('DISPOSITIVO')}</TableCell><TableCell>{tr('VALIDADE')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
+              <TableBody>{conexoes.map((conexao) => <TableRow key={conexao.idLogin}>
+                <TableCell>{dataConexao(conexao.inicio)}{conexao.atual && <Chip size="small" sx={{ ml: 1 }} label={tr('Esta conexão')} />}</TableCell>
+                <TableCell>{conexao.enderecoIp}</TableCell>
+                <TableCell sx={{ overflowWrap: 'anywhere', maxWidth: 320 }}>{conexao.agente}</TableCell>
+                <TableCell>{dataConexao(conexao.validade)}</TableCell>
+                <TableCell><Button size="small" color="error" onClick={() => { dispatch({ field: 'conexaoParaEncerrar', value: conexao }); dispatch({ field: 'conexoesActionError', value: '' }); }}>{tr('Encerrar')}</Button></TableCell>
+              </TableRow>)}</TableBody>
+            </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma conexão ativa encontrada.')}</Alert>)}
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={conexoesLoading} onClick={carregarConexoes}>{tr('Atualizar')}</Button>
+            <Button onClick={() => dispatch({ field: 'conexoesDialog', value: false })}>{tr('Fechar')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={Boolean(conexaoParaEncerrar)} onClose={() => { if (!conexoesSaving) dispatch({ field: 'conexaoParaEncerrar', value: null }); }} fullWidth maxWidth="xs">
+          <DialogTitle>{tr('Encerrar conexão')}</DialogTitle>
+          <DialogContent>
+            <p>{tr('Deseja encerrar a conexão de')} <strong>{conexaoParaEncerrar?.enderecoIp}</strong>?</p>
+            {conexaoParaEncerrar?.atual && <Alert severity="warning">{tr('Esta é sua conexão atual. Você voltará à tela de login.')}</Alert>}
+            {conexoesActionError && <Alert severity="error" sx={{ mt: 2 }}>{system(conexoesActionError)}</Alert>}
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={conexoesSaving} onClick={() => dispatch({ field: 'conexaoParaEncerrar', value: null })}>{tr('Cancelar')}</Button>
+            <Button color="error" variant="contained" disabled={conexoesSaving} onClick={encerrarConexao}>{tr('Encerrar conexão')}</Button>
           </DialogActions>
         </Dialog>
         <Dialog

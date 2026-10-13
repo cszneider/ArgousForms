@@ -28,6 +28,7 @@ import br.com.argousForms.cadastro.LimiteCadastro;
 import br.com.argousForms.auth.AutenticacaoLocalService;
 import br.com.argousForms.acessos.AcessosService;
 import br.com.argousForms.organizacao.OrganizacaoService;
+import br.com.argousForms.pessoas.PessoasUsuariosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -42,6 +43,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final AutenticacaoLocalService autenticacao = new AutenticacaoLocalService();
 	private final AcessosService acessos = new AcessosService();
 	private final OrganizacaoService organizacao = new OrganizacaoService();
+	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -110,10 +112,53 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "LISTAR_CONEXOES_ATIVAS".equals( operacao ) ) {
+			JSONArray conexoes = new JSONArray();
+			for( AutenticacaoLocalService.ConexaoAtiva conexao : autenticacao.listarConexoes( tokenSessao( request ) ) ) {
+				JSONObject item = new JSONObject();
+				item.put( "idLogin", conexao.idLogin().toString() );
+				item.put( "inicio", conexao.inicio().toString() );
+				item.put( "ultimoAcesso", conexao.ultimoAcesso() == null ? JSONObject.NULL : conexao.ultimoAcesso().toString() );
+				item.put( "validade", conexao.validade().toString() );
+				item.put( "enderecoIp", conexao.enderecoIp() );
+				item.put( "agente", conexao.agente() );
+				item.put( "atual", conexao.atual() );
+				conexoes.put( item );
+			}
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "conexoes", conexoes ) );
+			return;
+		}
+
+		if( "ENCERRAR_CONEXAO".equals( operacao ) ) {
+			UUID idLogin = uuidObrigatorio( dados, "idLogin" );
+			boolean atual = autenticacao.encerrarConexao( tokenSessao( request ), idLogin );
+			if( atual ) definirCookieSessao( request, response, "", 0 );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "conexaoEncerrada", true, "atual", atual ) ) );
+			return;
+		}
+
 		if( "SAIR".equals( operacao ) ) {
 			autenticacao.sair( tokenSessao( request ) );
 			definirCookieSessao( request, response, "", 0 );
 			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "sessaoEncerrada", true ) ) );
+			return;
+		}
+
+		if( "ALTERAR_SENHA".equals( operacao ) ) {
+			limiteLogin.verificar( request.getRemoteAddr() );
+			String senhaAtual = ArgousFormsJson.getStringObrigatoria( dados, "senhaAtual", false );
+			String senhaNova = ArgousFormsJson.getStringObrigatoria( dados, "senhaNova", false );
+			autenticacao.alterarSenha( tokenSessao( request ), senhaAtual, senhaNova );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "senhaAlterada", true ) ) );
+			return;
+		}
+
+		if( "LISTAR_PESSOAS_USUARIOS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			if( !usuario.papeis().contains( "ADMINISTRADOR_USUARIOS" ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar pessoas e usuários." );
+			}
+			ArgousFormsJson.enviarSucesso( response, 200, pessoasUsuarios.listar() );
 			return;
 		}
 

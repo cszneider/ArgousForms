@@ -19,6 +19,8 @@ import AccessLayout from '../../components/acesso/layout.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { pageReducer } from '../../utils/page-state.js';
 import { chamarCadastro } from '../../programas/cadastro/api.js';
+import { avaliarSenha } from '../../programas/login/politica-senha.js';
+import ForcaSenha from '../../components/acesso/forca-senha.js';
 
 export const CadastroContext = createContext({});
 
@@ -59,7 +61,7 @@ function DadosCadastro() {
         onChange={(e) => dispatch({ field: 'senha', value: e.target.value })}
         required
         disabled={loading}
-        helperText={tr('Use pelo menos 8 caracteres.')}
+        helperText={telaAtual === 'Cadastro' ? undefined : tr('Informe a senha usada no cadastro.')}
         slotProps={{
           htmlInput: { minLength: 8, maxLength: 1024 },
           input: {
@@ -80,6 +82,7 @@ function DadosCadastro() {
           },
         }}
       />
+      {telaAtual === 'Cadastro' && <ForcaSenha senha={senha} />}
     </>
   );
 }
@@ -155,6 +158,10 @@ export default function Cadastro() {
 
   async function executar(operacao) {
     if (requisicao.current) return;
+    if (operacao === 'CADASTRAR_USUARIO' && !avaliarSenha(senha).valida) {
+      dispatch({ field: 'error', value: 'A senha não atende à política de segurança.' });
+      return;
+    }
     const controller = new AbortController();
     requisicao.current = controller;
     dispatch({ field: 'loading', value: true });

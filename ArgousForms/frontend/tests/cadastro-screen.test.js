@@ -35,11 +35,11 @@ test('tela cadastra, confirma com zeros iniciais e não cria sessão local; reto
     await mount('novo');
     await fill('input[autocomplete="name"]', 'Pessoa');
     await fill('input[type="email"]', 'pessoa@example.com');
-    await fill('input[type="password"]', ' senha com espaços ');
+    await fill('input[type="password"]', ' Senha com espaços1 ');
     await submit();
     await submit();
     assert.equal(calls.length, 1, 'duplo envio deve ser bloqueado');
-    assert.equal(calls[0].dados.senha, ' senha com espaços ');
+    assert.equal(calls[0].dados.senha, ' Senha com espaços1 ');
     assert.ok(document.querySelector('button[type="submit"]').disabled);
     await act(async () => resolver({ idConfirmacao: id, emailEnviado: true, confirmacaoPendente: true }));
     assert.match(document.querySelector('h2').textContent, /Confirme/);
@@ -47,7 +47,7 @@ test('tela cadastra, confirma com zeros iniciais e não cria sessão local; reto
     await submit();
     assert.deepEqual(calls[1], { operacao: 'CONFIRMAR_EMAIL', dados: { email: 'pessoa@example.com', idConfirmacao: id, codigo: '00123456' } });
     await act(async () => resolver({ emailConfirmado: true, autenticada: false }));
-    assert.match(document.body.textContent, /liberação de um administrador/);
+    assert.match(document.body.textContent, /cadastro está concluído/);
     assert.equal(browser.window.localStorage.length, 0);
     assert.equal(browser.window.sessionStorage.length, 0);
     assert.equal(document.querySelector('form'), null);

@@ -1,6 +1,6 @@
 /*
 Created		01/07/2026
-Modified		12/10/2026
+Modified		13/10/2026
 Project		
 Model		
 Company		
@@ -267,6 +267,7 @@ Create table  Cadastro.TIPOS_IDENTIFICACAO
 	CD_TIPO Varchar(10) NOT NULL,
 	DS_NOME Varchar(70) NOT NULL,
 	DS_DESCRICAO Varchar(255) NULL ,
+	CD_REGEX Varchar(50) NOT NULL,
 	DS_MASCARA Varchar(30) NULL ,
 	SN_ATIVO Boolean NOT NULL,
 	DT_INCLUSAO Timestamp NOT NULL,
@@ -363,6 +364,7 @@ Create unique index porIDUsuarioOrigem on Cadastro.USUARIO_ORIGENS_LOGIN (CD_USU
 Create unique index TipoNoPais on Cadastro.TIPOS_IDENTIFICACAO (ID_PAIS,CD_TIPO);
 
 Create unique index PessoaPais on Cadastro.PESSOA_IDENTIFICACOES (ID_PESSOA,ID_PAIS);
+Create unique index IdentificacaoPorPais on Cadastro.PESSOA_IDENTIFICACOES (ID_PAIS,CD_IDENTIFICACAO);
 
 Alter table Cadastro.USUARIO_PERFIS add  foreign key (ID_USUARIO_SISTEMA) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
 Alter table Cadastro.USUARIO_ORIGENS_LOGIN add  foreign key (ID_USUARIO_SISTEMA) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;

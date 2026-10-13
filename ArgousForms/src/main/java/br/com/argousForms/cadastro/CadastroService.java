@@ -14,8 +14,6 @@ import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
 import br.com.argousForms.email.EmailService;
 import br.com.argousForms.model.negocio.cadastro.ConfirmacaoEmailNegocioEspecifico;
-import br.com.argousForms.security.CodigoConfirmacao;
-import br.com.argousForms.security.SenhaSegura;
 import br.com.argousForms.model.persistencia.cadastro.ConfirmacaoEmail;
 import br.com.argousForms.model.persistencia.cadastro.OrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.Perfil;
@@ -23,6 +21,9 @@ import br.com.argousForms.model.persistencia.cadastro.Pessoa;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.security.CodigoConfirmacao;
+import br.com.argousForms.security.PoliticaSenha;
+import br.com.argousForms.security.SenhaSegura;
 
 import quatro.util.QtData;
 
@@ -65,7 +66,7 @@ public final class CadastroService {
 		if( nome == null || nome.isBlank() || nome.strip().length() > 200 ) {
 			throw invalido( "Informe o nome, com até 200 caracteres." );
 		}
-		validarSenha( senha );
+		validarSenhaNova( senha );
 		String hashSenha = SenhaSegura.gerarHash( senha );
 		String codigo = codigos.gerar();
 		ConfirmacaoEmail confirmacao;
@@ -299,6 +300,13 @@ public final class CadastroService {
 			throw invalido("Informe um e-mail válido.");
 		}
 		return normalizado;
+	}
+
+	private static void validarSenhaNova( String senha ) throws ArgousFormsApiException {
+
+		if( !PoliticaSenha.atende( senha ) ) {
+			throw invalido( "A senha deve ter pelo menos 8 caracteres e atender a 3 destas 4 condições: maiúscula, minúscula, numeral e símbolo." );
+		}
 	}
 
 	private static void validarSenha(String senha) throws ArgousFormsApiException {
