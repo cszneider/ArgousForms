@@ -18,6 +18,11 @@ export default defineConfig(({ mode }) => {
       rewrite: () =>
         `${backend.pathname.replace(/\/$/, '')}/argousforms.iarslvr`,
     },
+    '/ArgousForms/upload-arquivo': {
+      target: backend.origin,
+      changeOrigin: true,
+      rewrite: () => `${backend.pathname.replace(/\/$/, '')}/upload-arquivo`,
+    },
   };
   return {
     resolve: {

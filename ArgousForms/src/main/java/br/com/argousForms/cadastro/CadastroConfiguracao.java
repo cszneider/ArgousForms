@@ -15,7 +15,7 @@ import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
 import quatro.util.BDUtil;
 
-final class CadastroConfiguracao {
+public final class CadastroConfiguracao {
 
 	private CadastroConfiguracao() {
 	}
@@ -41,7 +41,7 @@ final class CadastroConfiguracao {
 		}
 	}
 
-	static CodigoConfirmacao codigos( ServletContext contexto ) throws ArgousFormsApiException {
+	public static CodigoConfirmacao codigos( ServletContext contexto ) throws ArgousFormsApiException {
 
 		try ( InputStream arquivo = contexto.getResourceAsStream( "/WEB-INF/agforms.xml" ) ) {
 			if( arquivo == null ) {

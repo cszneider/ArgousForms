@@ -1,6 +1,8 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
 import UserSettings from '../configuracoes/index.js';
+import CadastroPessoaForm from './cadastro-pessoa-form.js';
+import GestorDocumentos from '../../programas/gestor-documentos/gestor-documentos.js';
 import ForcaSenha from '../../components/acesso/forca-senha.js';
 import { avaliarSenha } from '../../programas/login/politica-senha.js';
 import {
@@ -46,7 +48,6 @@ import {
   LinearProgress,
   IconButton,
   Drawer,
-  InputAdornment,
 } from '@mui/material';
 import {
   FileStack,
@@ -59,7 +60,6 @@ import {
   Plus,
   ArrowUpRight,
   ArrowRight,
-  Search,
   ChevronRight,
   GitBranch,
   Clock,
@@ -138,10 +138,6 @@ export default function Workspace() {
       documentId: null,
       editor: null,
       mobile: false,
-      search: '',
-      status: 'all',
-      modelFilter: 'all',
-      groupFilter: 'all',
       toast: null,
       newOpen: false,
       newTemplate: '',
@@ -159,6 +155,7 @@ export default function Workspace() {
       pessoasUsuarios: null,
       pessoasUsuariosLoading: false,
       pessoasUsuariosError: '',
+      cadastroEdit: null,
       papelEdit: null,
       perfilEdit: null,
       remocaoAcesso: null,
@@ -195,10 +192,6 @@ export default function Workspace() {
     documentId,
     editor,
     mobile,
-    search,
-    status,
-    modelFilter,
-    groupFilter,
     toast,
     newOpen,
     newTemplate,
@@ -216,6 +209,7 @@ export default function Workspace() {
     pessoasUsuarios,
     pessoasUsuariosLoading,
     pessoasUsuariosError,
+    cadastroEdit,
     papelEdit,
     perfilEdit,
     remocaoAcesso,
@@ -745,10 +739,6 @@ export default function Workspace() {
     dispatch({ field: 'view', value: v });
     dispatch({ field: 'documentId', value: null });
     dispatch({ field: 'editor', value: null });
-    dispatch({ field: 'search', value: '' });
-    dispatch({ field: 'status', value: 'all' });
-    dispatch({ field: 'modelFilter', value: 'all' });
-    dispatch({ field: 'groupFilter', value: 'all' });
     dispatch({ field: 'mobile', value: false });
   };
   const encerrarSessao = async () => {
@@ -939,21 +929,6 @@ export default function Workspace() {
         </div>
       </div>
     </div>
-  );
-  let rows = state.documents;
-  rows = rows.filter(
-    (d) =>
-      (!search ||
-        `${d.title} ${d.code} ${d.template.name}`
-          .toLowerCase()
-          .includes(search.toLowerCase())) &&
-      (status === 'all' ||
-        (status === 'open' && d.status !== 'done') ||
-        statusLabel(d) === status) &&
-      (modelFilter === 'all' || d.template.id === modelFilter) &&
-      (groupFilter === 'all' ||
-        (d.status !== 'done' &&
-          d.template.stages[d.stageIndex].groupId === groupFilter)),
   );
   const documentsTable = (items, compact = false) => (
     <TableContainer>
@@ -1350,137 +1325,7 @@ export default function Workspace() {
                   </>
                 )}
                 {view === 'documents' && canConsultDocuments && (
-                  <>
-                    <div className="page-heading">
-                      <div>
-                        <span className="eyebrow">
-                          {tr('DO INÍCIO À FINALIZAÇÃO')}
-                        </span>
-                        <h1>
-                          {tr('Documentos')}
-                        </h1>
-                        <p>
-                          {tr('Encontre, acompanhe e continue os documentos da equipe.')}
-                        </p>
-                      </div>
-                      {canEditDocuments && <Button
-                        variant="contained"
-                        startIcon={<Plus size={18} />}
-                        onClick={() => openNew()}
-                      >
-                        {tr('Novo documento')}
-                      </Button>}
-                    </div>
-                    <section className="panel">
-                      <div className="document-filters">
-                        <TextField
-                          placeholder={tr('Buscar documento…')}
-                          value={search}
-                          onChange={(e) =>
-                            dispatch({
-                              field: 'search',
-                              value: e.target.value,
-                            })
-                          }
-                          slotProps={{
-                            input: {
-                              startAdornment: (
-                                <InputAdornment position="start">
-                                  <Search size={18} />
-                                </InputAdornment>
-                              ),
-                            },
-                            htmlInput: {
-                              'aria-label': tr('Buscar documento'),
-                            },
-                          }}
-                        />
-                        <TextField
-                          select
-                          label={tr('Status')}
-                          value={status}
-                          onChange={(e) =>
-                            dispatch({
-                              field: 'status',
-                              value: e.target.value,
-                            })
-                          }
-                        >
-                          <MenuItem value="all">
-                            {tr('Todos os status')}
-                          </MenuItem>
-                          <MenuItem value="open">
-                            {tr('Todos em fluxo')}
-                          </MenuItem>
-                          {[
-                            'Em andamento',
-                            'Em aprovação',
-                            'Em correção',
-                            'Finalizado',
-                          ].map((s) => (
-                            <MenuItem value={s} key={s}>
-                              {tr(s)}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                        <TextField
-                          select
-                          label={tr('Modelo')}
-                          value={modelFilter}
-                          onChange={(e) =>
-                            dispatch({
-                              field: 'modelFilter',
-                              value: e.target.value,
-                            })
-                          }
-                        >
-                          <MenuItem value="all">
-                            {tr('Todos os modelos')}
-                          </MenuItem>
-                          {state.templates.map((t) => (
-                            <MenuItem key={t.id} value={t.id}>
-                              {t.name}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                        <TextField
-                          select
-                          label={tr('Grupo')}
-                          value={groupFilter}
-                          onChange={(e) =>
-                            dispatch({
-                              field: 'groupFilter',
-                              value: e.target.value,
-                            })
-                          }
-                        >
-                          <MenuItem value="all">
-                            {tr('Todos os grupos')}
-                          </MenuItem>
-                          {state.groups.map((g) => (
-                            <MenuItem key={g.id} value={g.id}>
-                              {g.name}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      </div>
-                      {documentsTable(rows)}
-                      <div className="table-footer">
-                        {rows.length} {tr('documentos encontrados')}
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            dispatch({ field: 'search', value: '' });
-                            dispatch({ field: 'status', value: 'all' });
-                            dispatch({ field: 'modelFilter', value: 'all' });
-                            dispatch({ field: 'groupFilter', value: 'all' });
-                          }}
-                        >
-                          {tr('Limpar filtros')}
-                        </Button>
-                      </div>
-                    </section>
-                  </>
+                  <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} />
                 )}
                 {view === 'templates' && designer && (
                   <>
@@ -1708,18 +1553,23 @@ export default function Workspace() {
                       <>
                         {pessoasUsuariosLoading && <LinearProgress sx={{ mb: 2 }} />}
                         {pessoasUsuariosError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarPessoasUsuarios}>{tr('Tentar novamente')}</Button>}>{system(pessoasUsuariosError)}</Alert>}
-                        <div className="panel-heading"><div><h2>{tr('Usuários')}</h2><p>{tr('Contas vinculadas a pessoas da instituição.')}</p></div></div>
+                        <div className="panel-heading"><div><h2>{tr('Usuários')}</h2><p>{tr('Contas vinculadas a pessoas da instituição.')}</p></div>
+                          <Button variant="contained" startIcon={<UserPlus size={17} />} onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario' } })}>{tr('Adicionar usuário')}</Button></div>
                         {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.usuarios.length ? <TableContainer className="panel"><Table>
-                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('PERFIS')}</TableCell></TableRow></TableHead>
+                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('PERFIS')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
                           <TableBody>{pessoasUsuarios.usuarios.map((registro) => <TableRow key={registro.idUsuario}>
                             <TableCell>{registro.nome}</TableCell><TableCell>{registro.email}</TableCell><TableCell>{registro.perfis.join(', ') || '—'}</TableCell>
+                            <TableCell><Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idUsuario: registro.idUsuario } })}>{tr('Editar')}</Button></TableCell>
                           </TableRow>)}</TableBody>
                         </Table></TableContainer> : <Alert severity="info">{tr('Nenhum usuário cadastrado.')}</Alert>)}
-                        <div className="panel-heading" style={{ marginTop: 32 }}><div><h2>{tr('Pessoas')}</h2><p>{tr('Pessoas sem conta de usuário.')}</p></div></div>
+                        <div className="panel-heading" style={{ marginTop: 32 }}><div><h2>{tr('Pessoas')}</h2><p>{tr('Pessoas sem conta de usuário.')}</p></div>
+                          <Button variant="contained" startIcon={<Plus size={17} />} onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'pessoa' } })}>{tr('Adicionar pessoa')}</Button></div>
                         {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.pessoas.length ? <TableContainer className="panel"><Table>
-                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('TELEFONE')}</TableCell></TableRow></TableHead>
+                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('TELEFONE')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
                           <TableBody>{pessoasUsuarios.pessoas.map((registro) => <TableRow key={registro.idPessoa}>
                             <TableCell>{registro.nomeSocial || registro.nome}</TableCell><TableCell>{registro.email || '—'}</TableCell><TableCell>{registro.telefone || '—'}</TableCell>
+                            <TableCell><Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'pessoa', idPessoa: registro.idPessoa } })}>{tr('Editar')}</Button>
+                              <Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idPessoa: registro.idPessoa } })}>{tr('Criar usuário')}</Button></TableCell>
                           </TableRow>)}</TableBody>
                         </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma pessoa cadastrada.')}</Alert>)}
                       </>
@@ -1933,6 +1783,20 @@ export default function Workspace() {
             <Button onClick={() => dispatch({ field: 'remocaoAcesso', value: null })}>{tr('Cancelar')}</Button>
             <Button color="error" variant="contained" disabled={acessosSaving} onClick={removerAcesso}>{tr('Confirmar')}</Button>
           </DialogActions>
+        </Dialog>
+        <Dialog open={Boolean(cadastroEdit && usuario && admin)} onClose={() => dispatch({ field: 'cadastroEdit', value: null })} fullWidth maxWidth="md">
+          <DialogTitle>{cadastroEdit?.modo === 'pessoa' ? tr(cadastroEdit.idPessoa ? 'Editar pessoa' : 'Adicionar pessoa') : tr(cadastroEdit?.idUsuario ? 'Editar usuário' : 'Adicionar usuário')}</DialogTitle>
+          <DialogContent>
+            {cadastroEdit && <CadastroPessoaForm key={`${cadastroEdit.modo}:${cadastroEdit.idPessoa || cadastroEdit.idUsuario || 'novo'}`}
+              {...cadastroEdit} onCancel={() => dispatch({ field: 'cadastroEdit', value: null })}
+              onSaved={async (resultado) => {
+                await carregarPessoasUsuarios();
+                dispatch({ field: 'toast', value: { text: resultado.confirmacaoPendente
+                  ? resultado.emailEnviado ? 'Cadastro salvo. O código foi enviado por e-mail.' : 'Cadastro salvo, mas o e-mail não foi enviado.'
+                  : 'Cadastro salvo.', error: false } });
+                dispatch({ field: 'cadastroEdit', value: null });
+              }} />}
+          </DialogContent>
         </Dialog>
         <Dialog open={senhaDialog && canManageOwnData && Boolean(usuario)} onClose={() => fecharTrocaSenha()} fullWidth maxWidth="sm">
           <DialogTitle>{tr('Trocar senha')}</DialogTitle>

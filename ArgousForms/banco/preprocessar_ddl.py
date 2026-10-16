@@ -11,6 +11,9 @@ TABELA = re.compile(r'@Table\s*\(\s*name\s*=\s*"([^".]+)\.([^"]+)"\s*\)')
 DROP = re.compile(r'^\s*Drop table\s+([A-Z_]+)\s*;\s*$', re.IGNORECASE | re.MULTILINE)
 CREATE = re.compile(r'^\s*Create table\s+([A-Z_]+)\b', re.IGNORECASE | re.MULTILINE)
 FK = re.compile(r'^\s*Alter table\s+([A-Z_]+)\s+add\s+foreign key\s*\([^)]*\)\s+references\s+([A-Z_]+)\b', re.IGNORECASE | re.MULTILINE)
+INDICE = re.compile(r'^\s*Create(?:\s+unique)?\s+index\s+\w+\s+on\s+([A-Z_]+)\b[^;]*;\s*$', re.IGNORECASE | re.MULTILINE)
+ALTERACAO = re.compile(r'^\s*Alter table\s+([A-Z_]+)\b[^;]*;\s*$', re.IGNORECASE | re.MULTILINE)
+DROP_QUALIFICADO = re.compile(r'^\s*DROP TABLE IF EXISTS\s+([A-Za-z_]+\.[A-Z_]+);\s*$', re.IGNORECASE | re.MULTILINE)
 
 
 def esquemas(jar):
@@ -64,7 +67,7 @@ def ordem_exclusao(tabelas, dependencias):
     return resultado
 
 
-def processar(ddl, mapa):
+def processar(ddl, mapa, drops_anteriores=""):
     drops = [nome.upper() for nome in DROP.findall(ddl)]
     creates = [nome.upper() for nome in CREATE.findall(ddl)]
     if not drops or len(drops) != len(set(drops)) or set(drops) != set(creates):
@@ -74,16 +77,20 @@ def processar(ddl, mapa):
     if ausentes:
         raise ValueError(f"Tabelas sem @Table com esquema no JAR: {', '.join(ausentes)}")
 
-    dependencias = [(filho.upper(), pai.upper()) for filho, pai in FK.findall(ddl)]
-    if any(filho not in drops or pai not in drops for filho, pai in dependencias):
-        raise ValueError("Uma chave estrangeira refere-se a tabela fora do DDL")
+    dependencias = [(filho.upper(), pai.upper()) for filho, pai in FK.findall(ddl) if filho.upper() in drops and pai.upper() in drops]
 
     primeira_exclusao = DROP.search(ddl)
     cabecalho = ddl[:primeira_exclusao.start()]
     corpo = DROP.sub("", ddl[primeira_exclusao.start():])
+    corpo = INDICE.sub(lambda trecho: trecho.group(0) if trecho.group(1).upper() in creates else "", corpo)
+    corpo = ALTERACAO.sub(lambda trecho: trecho.group(0) if trecho.group(1).upper() in creates else "", corpo)
     exclusoes = "\n".join(f"DROP TABLE IF EXISTS {mapa[nome]}.{nome};" for nome in ordem_exclusao(drops, dependencias))
+    if drops_anteriores:
+        exclusoes = drops_anteriores.rstrip() + "\n" + exclusoes
+    esquemas_criados = {mapa[nome] for nome in creates}
+    esquemas_anteriores = {nome.split(".")[0] for nome in DROP_QUALIFICADO.findall(drops_anteriores)}
     resultado = cabecalho + "\nBEGIN;\n" + "\n".join(
-        f"CREATE SCHEMA IF NOT EXISTS {esquema};" for esquema in sorted({mapa[nome] for nome in creates})
+        f"CREATE SCHEMA IF NOT EXISTS {esquema};" for esquema in sorted(esquemas_criados | esquemas_anteriores)
     ) + "\n\n" + exclusoes + "\n" + corpo
 
     def qualificar(expressao, texto):
@@ -106,18 +113,21 @@ def processar(ddl, mapa):
     resultado = re.sub(r"\n{3,}", "\n\n", resultado)
     permissoes = """
 -- Executar a estrutura com um proprietário distinto do usuário da aplicação.
-REVOKE CREATE ON SCHEMA Cadastro FROM PUBLIC;
-REVOKE CREATE ON SCHEMA Cadastro FROM carlos;
-REVOKE TRIGGER ON ALL TABLES IN SCHEMA Cadastro FROM carlos;
-GRANT USAGE ON SCHEMA Cadastro TO carlos;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA Cadastro TO carlos;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA Cadastro TO carlos;
+"""
+    for esquema in sorted(esquemas_criados):
+        permissoes += f"""REVOKE CREATE ON SCHEMA {esquema} FROM PUBLIC;
+REVOKE CREATE ON SCHEMA {esquema} FROM carlos;
+REVOKE TRIGGER ON ALL TABLES IN SCHEMA {esquema} FROM carlos;
+GRANT USAGE ON SCHEMA {esquema} TO carlos;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {esquema} TO carlos;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {esquema} TO carlos;
 
 -- Aplica-se apenas aos objetos criados futuramente pelo papel que executa este DDL.
-ALTER DEFAULT PRIVILEGES IN SCHEMA Cadastro
+ALTER DEFAULT PRIVILEGES IN SCHEMA {esquema}
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO carlos;
-ALTER DEFAULT PRIVILEGES IN SCHEMA Cadastro
+ALTER DEFAULT PRIVILEGES IN SCHEMA {esquema}
     GRANT USAGE, SELECT ON SEQUENCES TO carlos;
+
 """
     return resultado.rstrip() + "\n\n" + permissoes.strip() + "\n\nCOMMIT;\n"
 
@@ -127,10 +137,17 @@ def main():
     parser.add_argument("entrada", type=Path)
     parser.add_argument("saida", type=Path)
     parser.add_argument("--sources-jar", required=True, type=Path)
+    parser.add_argument("--drop-before", type=Path, help="Script cujas tabelas devem ser removidas antes das tabelas desta entrada")
     argumentos = parser.parse_args()
 
     ddl = argumentos.entrada.read_text(encoding="utf-8")
-    resultado = processar(ddl, esquemas(argumentos.sources_jar))
+    anteriores = ""
+    if argumentos.drop_before:
+        linhas = DROP_QUALIFICADO.findall(argumentos.drop_before.read_text(encoding="utf-8"))
+        if not linhas:
+            raise ValueError("O script informado em --drop-before não possui DROP TABLE qualificados")
+        anteriores = "\n".join(f"DROP TABLE IF EXISTS {nome};" for nome in linhas)
+    resultado = processar(ddl, esquemas(argumentos.sources_jar), anteriores)
     argumentos.saida.write_text(resultado, encoding="utf-8")
 
 

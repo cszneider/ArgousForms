@@ -1,6 +1,7 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
-import { useEffect, createContext, useMemo, useReducer, useRef } from 'react';
+import { useEffect, createContext, useMemo, useReducer, useRef, useState } from 'react';
+import CadastroPessoaForm from '../argous/cadastro-pessoa-form.js';
 import { accountId } from '../../programas/plataforma/users.js';
 import {
   readProfile,
@@ -20,6 +21,7 @@ import {
 import { LanguageSelect, useI18n } from '../../components/i18n/i18n.js';
 export const UserSettingsContext = createContext({});
 export default function UserSettings() {
+  const [contaReal, setContaReal] = useState(false);
   const initialState = useMemo(
     () => ({
       telaAtual: 'UserSettings',
@@ -51,6 +53,10 @@ export default function UserSettings() {
           ? await sessaoAtual()
           : null;
         if (usuario && usuario.idUsuario !== id) throw Error('Sessão inválida.');
+        if (usuario) {
+          setContaReal(true);
+          return;
+        }
         const person =
           id === 'admin' ? readStore().people.find((p) => p.id === id) : null;
         // Hydrate the browser-only profile when opening settings.
@@ -93,7 +99,8 @@ export default function UserSettings() {
             {t(message.text)}
           </Alert>
         )}
-        {profile && (
+        {contaReal && <Box sx={{ p: 3 }}><CadastroPessoaForm modo="proprio" /></Box>}
+        {!contaReal && profile && (
           <Box
             component="form"
             noValidate

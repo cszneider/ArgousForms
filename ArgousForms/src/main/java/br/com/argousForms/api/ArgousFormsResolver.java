@@ -28,7 +28,11 @@ import br.com.argousForms.cadastro.LimiteCadastro;
 import br.com.argousForms.auth.AutenticacaoLocalService;
 import br.com.argousForms.acessos.AcessosService;
 import br.com.argousForms.organizacao.OrganizacaoService;
+import br.com.argousForms.documentos.DocumentosService;
+import br.com.argousForms.documentos.MongoArmazenamento;
+import br.com.argousForms.documentos.UploadArquivoService;
 import br.com.argousForms.pessoas.PessoasUsuariosService;
+import br.com.argousForms.pessoas.ManutencaoUsuarioService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -43,7 +47,10 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final AutenticacaoLocalService autenticacao = new AutenticacaoLocalService();
 	private final AcessosService acessos = new AcessosService();
 	private final OrganizacaoService organizacao = new OrganizacaoService();
+	private final DocumentosService documentos = new DocumentosService();
+	private final UploadArquivoService uploadArquivo = new UploadArquivoService();
 	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
+	private final ManutencaoUsuarioService manutencaoUsuarios = new ManutencaoUsuarioService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -112,6 +119,38 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "LISTAR_PASTA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.listarPasta( usuario, uuidOpcional( dados, "idPasta" ) ) );
+			return;
+		}
+
+		if( "CRIAR_PASTA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			UUID idPai = uuidObrigatorio( dados, "idPastaPai" );
+			String nome = ArgousFormsJson.getStringObrigatoria( dados, "nome", true );
+			String descricao = dados.optString( "descricao", "" );
+			ArgousFormsJson.enviarSucesso( response, 201, documentos.criarPasta( usuario, idPai, nome, descricao ) );
+			return;
+		}
+
+		if( "VERIFICAR_MONGODB".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			if( !usuario.papeis().contains( "CONSULTA_DOCUMENTOS" ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar documentos." );
+			}
+			JSONObject estado = new JSONObject().put( "limiteBytes", uploadArquivo.limiteBytes() );
+			try ( MongoArmazenamento mongo = new MongoArmazenamento( getServletContext() ) ) {
+				mongo.verificar();
+				estado.put( "disponivel", true );
+			} catch ( Exception e ) {
+				estado.put( "disponivel", false );
+				estado.put( "mensagem", e instanceof ArgousFormsApiException ? e.getMessage() : "O armazenamento de arquivos não está respondendo." );
+			}
+			ArgousFormsJson.enviarSucesso( response, 200, estado );
+			return;
+		}
+
 		if( "LISTAR_CONEXOES_ATIVAS".equals( operacao ) ) {
 			JSONArray conexoes = new JSONArray();
 			for( AutenticacaoLocalService.ConexaoAtiva conexao : autenticacao.listarConexoes( tokenSessao( request ) ) ) {
@@ -159,6 +198,59 @@ public final class ArgousFormsResolver extends HttpServlet {
 				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar pessoas e usuários." );
 			}
 			ArgousFormsJson.enviarSucesso( response, 200, pessoasUsuarios.listar() );
+			return;
+		}
+
+		if( "ACEITAR_CONVITE".equals( operacao ) ) {
+			limiteCadastro.verificar( request.getRemoteAddr() );
+			manutencaoUsuarios.confirmarConvite( ArgousFormsJson.getStringObrigatoria( dados, "email", true ),
+				ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ), ArgousFormsJson.getStringObrigatoria( dados, "senha", false ), getServletContext() );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "conviteAceito", true ) );
+			return;
+		}
+
+		if( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao )
+			|| "LOCALIZAR_PESSOA".equals( operacao ) || "SALVAR_PESSOA".equals( operacao ) || "SALVAR_USUARIO".equals( operacao )
+			|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario autenticado = autenticacao.consultar( tokenSessao( request ) );
+			boolean administrador = autenticado.papeis().contains( "ADMINISTRADOR_USUARIOS" );
+			boolean autogestao = autenticado.papeis().contains( "AUTOGESTAO" );
+			if( !administrador && !( autogestao && ( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao )
+				|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao ) ) ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode executar esta operação." );
+			}
+			if( "CATALOGO_CADASTRAL".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, pessoasUsuarios.catalogo() );
+				return;
+			}
+			if( "CONSULTAR_CADASTRO".equals( operacao ) ) {
+				UUID idUsuario = administrador ? uuidOpcional( dados, "idUsuario" ) : autenticado.idUsuario();
+				UUID idPessoa = administrador && idUsuario == null ? uuidOpcional( dados, "idPessoa" ) : null;
+				if( idUsuario == null && idPessoa == null ) idUsuario = autenticado.idUsuario();
+				JSONObject cadastro = pessoasUsuarios.consultar( idPessoa, idUsuario );
+				if( cadastro == null ) throw new ArgousFormsApiException( 404, "CADASTRO_NAO_ENCONTRADO", "Cadastro não encontrado." );
+				ArgousFormsJson.enviarSucesso( response, 200, cadastro );
+				return;
+			}
+			if( "LOCALIZAR_PESSOA".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, manutencaoUsuarios.localizar( dados.optInt( "idPais", -1 ), dados.optString( "numero", "" ) ) );
+				return;
+			}
+			if( "SALVAR_PESSOA".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "idPessoa", manutencaoUsuarios.salvarPessoa( dados ).toString() ) );
+				return;
+			}
+			if( "SALVAR_USUARIO".equals( operacao ) || "SALVAR_MEUS_DADOS".equals( operacao ) ) {
+				ManutencaoUsuarioService.Resultado resultado = manutencaoUsuarios.salvar( dados, autenticado.idUsuario(), "SALVAR_MEUS_DADOS".equals( operacao ), getServletContext() );
+				JSONObject resposta = new JSONObject().put( "idUsuario", resultado.idUsuario().toString() )
+					.put( "emailEnviado", resultado.emailEnviado() ).put( "confirmacaoPendente", resultado.confirmacaoPendente() );
+				if( resultado.idConfirmacao() != null ) resposta.put( "idConfirmacao", resultado.idConfirmacao().toString() );
+				ArgousFormsJson.enviarSucesso( response, 200, resposta );
+				return;
+			}
+			manutencaoUsuarios.confirmarTrocaEmail( ArgousFormsJson.getStringObrigatoria( dados, "email", true ),
+				ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ), autenticado.idUsuario(), getServletContext() );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "emailConfirmado", true ) );
 			return;
 		}
 
