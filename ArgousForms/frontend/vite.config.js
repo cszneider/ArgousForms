@@ -23,6 +23,14 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       rewrite: () => `${backend.pathname.replace(/\/$/, '')}/upload-arquivo`,
     },
+    '/ArgousForms/arquivo-conteudo': {
+      target: backend.origin,
+      changeOrigin: true,
+      rewrite: (path) => path.replace(
+        /^\/ArgousForms\/arquivo-conteudo/,
+        `${backend.pathname.replace(/\/$/, '')}/arquivo-conteudo`,
+      ),
+    },
   };
   return {
     resolve: {

@@ -45,11 +45,12 @@ public final class MongoConfiguracao {
 				throw indisponivel();
 			}
 
+			String usuario = BDUtil.decodifica( obrigatorio( parametros, "mongodb-usuario" ) );
 			String senha = BDUtil.decodifica( obrigatorio( parametros, "mongodb-senha" ) );
-			if( senha == null || senha.isBlank() ) throw indisponivel();
+			if( usuario == null || usuario.isBlank() || senha == null || senha.isBlank() ) throw indisponivel();
 
 			return new MongoConfiguracao( uri, obrigatorio( parametros, "mongodb-banco" ),
-				obrigatorio( parametros, "mongodb-banco-autenticacao" ), obrigatorio( parametros, "mongodb-usuario" ),
+				obrigatorio( parametros, "mongodb-banco-autenticacao" ), usuario,
 				senha, obrigatorio( parametros, "mongodb-bucket" ) );
 		} catch ( IOException | URISyntaxException | IllegalArgumentException e ) {
 			throw indisponivel();

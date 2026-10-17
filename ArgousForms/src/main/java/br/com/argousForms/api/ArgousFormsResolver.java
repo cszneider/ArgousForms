@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -42,6 +44,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 
 	private static final long serialVersionUID = 1L;
 	private static final int TAMANHO_MAXIMO_REQUEST = 64 * 1024;
+	private static final Logger LOG = Logger.getLogger( ArgousFormsResolver.class.getName() );
 	private final LimiteCadastro limiteCadastro = new LimiteCadastro();
 	private final LimiteCadastro limiteLogin = new LimiteCadastro();
 	private final AutenticacaoLocalService autenticacao = new AutenticacaoLocalService();
@@ -68,10 +71,11 @@ public final class ArgousFormsResolver extends HttpServlet {
 	protected void doPost( HttpServletRequest request, HttpServletResponse response ) throws IOException {
 
 		request.setCharacterEncoding( "UTF-8" );
+		String operacao = "REQUISICAO";
 
 		try {
 			JSONObject requisicao = lerRequisicao( request );
-			String operacao = ArgousFormsJson.getStringObrigatoria( requisicao, "operacao", true );
+			operacao = ArgousFormsJson.getStringObrigatoria( requisicao, "operacao", true );
 			if( !( requisicao.opt( "dados" ) instanceof JSONObject dados ) ) {
 				throw new ArgousFormsApiException( 400, "REQUISICAO_INVALIDA", "O campo dados deve ser um objeto JSON." );
 			}
@@ -80,6 +84,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 		} catch ( ArgousFormsApiException e ) {
 			ArgousFormsJson.enviarErro( response, e.getStatusHttp(), e.getCodigoErro(), e.getMessage() );
 		} catch ( Exception e ) {
+			LOG.log( Level.SEVERE, "Falha inesperada na operação " + operacao, e );
 			ArgousFormsJson.enviarErro( response, 500, "ERRO_INTERNO", "Não foi possível processar a requisição." );
 		}
 	}
@@ -122,6 +127,20 @@ public final class ArgousFormsResolver extends HttpServlet {
 		if( "LISTAR_PASTA".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, documentos.listarPasta( usuario, uuidOpcional( dados, "idPasta" ) ) );
+			return;
+		}
+
+		if( "CONSULTAR_ARQUIVO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.consultarArquivo( usuario, uuidObrigatorio( dados, "idArquivo" ) ) );
+			return;
+		}
+
+		if( "SALVAR_ARQUIVO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			String vencimento = dados.has( "vencimento" ) ? dados.optString( "vencimento", "" ) : null;
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.salvarArquivo( usuario, uuidObrigatorio( dados, "idArquivo" ),
+				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optString( "classificacao", "" ), vencimento ) );
 			return;
 		}
 

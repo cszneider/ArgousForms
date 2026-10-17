@@ -5,6 +5,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,6 +22,8 @@ import org.json.JSONObject;
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.auth.AutenticacaoLocalService;
 import br.com.argousForms.model.negocio.docs.PastaNegocio;
+import br.com.argousForms.model.negocio.docs.ArquivoNegocio;
+import br.com.argousForms.model.persistencia.docs.Arquivo;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
@@ -36,6 +40,7 @@ public final class DocumentosService {
 			return leitura || inclusao || gestao;
 		}
 	}
+	public record Conteudo( UUID idVersao, String nome, String contentType, long tamanhoBytes ) {}
 
 	public JSONObject listarPasta( AutenticacaoLocalService.Usuario usuario, UUID idSolicitado ) throws Exception {
 
@@ -163,15 +168,8 @@ public final class DocumentosService {
 		Direitos direitos = calcularDireitos( idPasta, pastas, leitura, Set.of(), gestores, new HashMap<>(), new HashSet<>() );
 		if( direitos.gestao() ) return;
 
-		String restricoes = "select count(*) from Docs.ARQUIVO_PERMISSOES where ID_ARQUIVO = ? "
-			+ "and DT_INICIO <= CURRENT_TIMESTAMP and (DT_FIM is null or DT_FIM > CURRENT_TIMESTAMP)";
-		int quantidade;
-		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( restricoes ) ) {
-			consulta.setObject( 1, idArquivo );
-			try ( ResultSet resultado = consulta.executeQuery() ) { resultado.next(); quantidade = resultado.getInt( 1 ); }
-		}
-		if( quantidade == 0 && direitos.leitura() ) return;
-		if( quantidade > 0 ) {
+		if( direitos.leitura() ) return;
+		if( direitos.inclusao() ) {
 			String sql = "select 1 from Docs.ARQUIVO_PERMISSOES p where p.ID_ARQUIVO = ? "
 				+ "and p.DT_INICIO <= CURRENT_TIMESTAMP and (p.DT_FIM is null or p.DT_FIM > CURRENT_TIMESTAMP) "
 				+ "and " + DESTINATARIO_ARQUIVO + " limit 1";
@@ -182,6 +180,173 @@ public final class DocumentosService {
 			}
 		}
 		throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode adicionar uma versão a este arquivo." );
+	}
+
+	public JSONObject consultarArquivo( AutenticacaoLocalService.Usuario usuario, UUID idArquivo ) throws Exception {
+
+		if( !usuario.papeis().contains( "CONSULTA_DOCUMENTOS" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar documentos." );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			Arquivo arquivo = exigirArquivo( conexao, idArquivo );
+			Direitos direitos = direitosArquivo( conexao, usuario, arquivo );
+			if( !podeLerArquivo( conexao, usuario.idUsuario(), arquivo, direitos ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode consultar este arquivo." );
+			}
+			JSONObject dados = dadosArquivo( conexao, arquivo );
+			dados.put( "podeEditar", direitos.gestao() || usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) );
+			dados.put( "podeAlterarValidade", direitos.gestao() );
+			dados.put( "podeBaixar", direitos.gestao() || usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) );
+			return dados;
+		}
+	}
+
+	public JSONObject salvarArquivo( AutenticacaoLocalService.Usuario usuario, UUID idArquivo, String tituloInformado,
+		String descricaoInformada, String classificacao, String vencimentoInformado ) throws Exception {
+
+		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
+		String descricao = descricaoInformada == null || descricaoInformada.isBlank() ? null : descricaoInformada.strip();
+		if( titulo.isEmpty() || titulo.length() > 255 ) {
+			throw new ArgousFormsApiException( 400, "TITULO_INVALIDO", "Informe um título com até 255 caracteres." );
+		}
+		if( !( "L".equals( classificacao ) || "S".equals( classificacao ) || "A".equals( classificacao ) ) ) {
+			throw new ArgousFormsApiException( 400, "CLASSIFICACAO_INVALIDA", "Escolha a classificação do arquivo." );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Arquivo arquivo = exigirArquivo( conexao, idArquivo );
+				Direitos direitos = direitosArquivo( conexao, usuario, arquivo );
+				if( !direitos.gestao() && ( !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" )
+					|| !podeLerArquivo( conexao, usuario.idUsuario(), arquivo, direitos ) ) ) {
+					throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode alterar este arquivo." );
+				}
+				if( vencimentoInformado != null && !direitos.gestao() ) {
+					throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Somente o gestor da pasta pode alterar a validade." );
+				}
+				arquivo.setDsTitulo( titulo );
+				arquivo.setDsDescricao( descricao );
+				arquivo.setTpClassificacao( classificacao );
+				if( vencimentoInformado != null ) {
+					if( vencimentoInformado.isBlank() ) arquivo.setDtVencimento( null );
+					else {
+						try {
+							Instant fimDoDia = LocalDate.parse( vencimentoInformado ).plusDays( 1 ).atStartOfDay().toInstant( ZoneOffset.UTC ).minusNanos( 1 );
+							if( !fimDoDia.isAfter( Instant.now() ) ) throw new Exception();
+							arquivo.setDtVencimento( new QtData( fimDoDia.toEpochMilli() ) );
+						} catch ( Exception e ) {
+							throw new ArgousFormsApiException( 400, "VALIDADE_INVALIDA", "Informe uma data de validade futura." );
+						}
+					}
+				}
+				new ArquivoNegocio( conexao, arquivo ).altera();
+				conexao.commit();
+				return new JSONObject().put( "idArquivo", idArquivo.toString() ).put( "salvo", true );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public Conteudo conteudo( AutenticacaoLocalService.Usuario usuario, UUID idArquivo, boolean baixar ) throws Exception {
+
+		if( !usuario.papeis().contains( "CONSULTA_DOCUMENTOS" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar documentos." );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			Arquivo arquivo = exigirArquivo( conexao, idArquivo );
+			Direitos direitos = direitosArquivo( conexao, usuario, arquivo );
+			if( !podeLerArquivo( conexao, usuario.idUsuario(), arquivo, direitos ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode consultar este arquivo." );
+			}
+			if( baixar && !direitos.gestao() && !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
+				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode baixar este arquivo." );
+			}
+			String sql = "select ID_ARQUIVO_VERSAO, NR_TAMANHO_BYTES from Docs.ARQUIVO_VERSOES "
+				+ "where ID_ARQUIVO = ? order by NR_VERSAO desc limit 1";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+				consulta.setObject( 1, idArquivo );
+				try ( ResultSet resultado = consulta.executeQuery() ) {
+					if( !resultado.next() ) throw new ArgousFormsApiException( 404, "VERSAO_NAO_ENCONTRADA", "O arquivo não possui versão disponível." );
+					return new Conteudo( resultado.getObject( 1, UUID.class ), arquivo.getDsNomeArquivo(), arquivo.getCdContentType(), resultado.getLong( 2 ) );
+				}
+			}
+		}
+	}
+
+	private Arquivo exigirArquivo( Conexao conexao, UUID idArquivo ) throws Exception {
+
+		String sql = "select ID_ARQUIVO, ID_PASTA, DS_NOME_ARQUIVO, DS_TITULO, DS_DESCRICAO, "
+			+ "TP_CLASSIFICACAO, DT_VENCIMENTO, DT_INCLUSAO, CD_CONTENT_TYPE "
+			+ "from Docs.ARQUIVOS where ID_ARQUIVO = ? and DT_LIXEIRA is null and DT_EXCLUSAO is null";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idArquivo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				if( !resultado.next() ) throw new ArgousFormsApiException( 404, "ARQUIVO_NAO_ENCONTRADO", "Arquivo não encontrado." );
+
+				Arquivo arquivo = new Arquivo();
+				arquivo.setIdArquivo( resultado.getObject( "ID_ARQUIVO", UUID.class ) );
+				arquivo.setIdPasta( resultado.getObject( "ID_PASTA", UUID.class ) );
+				arquivo.setDsNomeArquivo( resultado.getString( "DS_NOME_ARQUIVO" ) );
+				arquivo.setDsTitulo( resultado.getString( "DS_TITULO" ) );
+				arquivo.setDsDescricao( resultado.getString( "DS_DESCRICAO" ) );
+				arquivo.setTpClassificacao( resultado.getString( "TP_CLASSIFICACAO" ) );
+				arquivo.setDtVencimento( QtData.criaQtData( resultado.getTimestamp( "DT_VENCIMENTO" ) ) );
+				arquivo.setDtInclusao( QtData.criaQtData( resultado.getTimestamp( "DT_INCLUSAO" ) ) );
+				arquivo.setCdContentType( resultado.getString( "CD_CONTENT_TYPE" ) );
+				return arquivo;
+			}
+		}
+	}
+
+	private Direitos direitosArquivo( Conexao conexao, AutenticacaoLocalService.Usuario usuario, Arquivo arquivo ) throws Exception {
+
+		Map<UUID, Pasta> pastas = carregarPastas( conexao );
+		if( !pastas.containsKey( arquivo.getIdPasta() ) ) throw new ArgousFormsApiException( 404, "PASTA_NAO_ENCONTRADA", "Pasta não encontrada." );
+		Set<UUID> leitura = carregarPermissoes( conexao, usuario.idUsuario(), "L" );
+		Set<UUID> inclusao = carregarPermissoes( conexao, usuario.idUsuario(), "I" );
+		Set<UUID> gestores = usuario.papeis().contains( "GESTAO_DOCUMENTOS" ) ? carregarGestores( conexao, usuario.idUsuario() ) : Set.of();
+		return calcularDireitos( arquivo.getIdPasta(), pastas, leitura, inclusao, gestores, new HashMap<>(), new HashSet<>() );
+	}
+
+	private boolean podeLerArquivo( Conexao conexao, UUID idUsuario, Arquivo arquivo, Direitos direitos ) throws Exception {
+
+		if( direitos.gestao() || direitos.leitura() ) return true;
+		if( !direitos.inclusao() ) return false;
+		String sql = "select 1 from Docs.ARQUIVO_PERMISSOES p where p.ID_ARQUIVO = ? "
+			+ "and p.DT_INICIO <= CURRENT_TIMESTAMP and (p.DT_FIM is null or p.DT_FIM > CURRENT_TIMESTAMP) "
+			+ "and " + DESTINATARIO_ARQUIVO + " limit 1";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, arquivo.getIdArquivo() );
+			for( int indice = 2; indice <= 5; indice++ ) consulta.setObject( indice, idUsuario );
+			try ( ResultSet resultado = consulta.executeQuery() ) { return resultado.next(); }
+		}
+	}
+
+	private JSONObject dadosArquivo( Conexao conexao, Arquivo arquivo ) throws Exception {
+
+		JSONObject dados = new JSONObject().put( "idArquivo", arquivo.getIdArquivo().toString() )
+			.put( "nome", arquivo.getDsNomeArquivo() ).put( "titulo", arquivo.getDsTitulo() )
+			.put( "descricao", nulo( arquivo.getDsDescricao() ) ).put( "classificacao", arquivo.getTpClassificacao() )
+			.put( "contentType", nulo( arquivo.getCdContentType() ) );
+		String sql = "select DT_VENCIMENTO, DT_INCLUSAO from Docs.ARQUIVOS where ID_ARQUIVO = ?";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, arquivo.getIdArquivo() );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				resultado.next();
+				dados.put( "vencimento", data( resultado, "DT_VENCIMENTO" ) ).put( "inclusao", data( resultado, "DT_INCLUSAO" ) );
+			}
+		}
+		String versoes = "select NR_VERSAO, NR_TAMANHO_BYTES from Docs.ARQUIVO_VERSOES "
+			+ "where ID_ARQUIVO = ? order by NR_VERSAO desc limit 1";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( versoes ) ) {
+			consulta.setObject( 1, arquivo.getIdArquivo() );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				if( resultado.next() ) dados.put( "versao", resultado.getInt( 1 ) ).put( "tamanhoBytes", resultado.getLong( 2 ) );
+			}
+		}
+		return dados;
 	}
 
 	private static Map<UUID, Pasta> carregarPastas( Conexao conexao ) throws SQLException {
@@ -280,19 +445,8 @@ public final class DocumentosService {
 
 		JSONArray arquivos = new JSONArray();
 		if( !direitos.algum() ) return arquivos;
-		Set<UUID> restritos = new HashSet<>();
-		String restricoes = "select distinct p.ID_ARQUIVO from Docs.ARQUIVO_PERMISSOES p "
-			+ "join Docs.ARQUIVOS a on a.ID_ARQUIVO = p.ID_ARQUIVO where a.ID_PASTA = ? "
-			+ "and p.DT_INICIO <= CURRENT_TIMESTAMP and (p.DT_FIM is null or p.DT_FIM > CURRENT_TIMESTAMP)";
-		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( restricoes ) ) {
-			consulta.setObject( 1, pasta );
-			try ( ResultSet resultado = consulta.executeQuery() ) {
-				while( resultado.next() ) restritos.add( resultado.getObject( "ID_ARQUIVO", UUID.class ) );
-			}
-		}
-
 		Set<UUID> liberados = new HashSet<>();
-		if( !direitos.gestao() ) {
+		if( !direitos.gestao() && !direitos.leitura() && direitos.inclusao() ) {
 			String sql = "select distinct p.ID_ARQUIVO from Docs.ARQUIVO_PERMISSOES p "
 				+ "join Docs.ARQUIVOS a on a.ID_ARQUIVO = p.ID_ARQUIVO where a.ID_PASTA = ? "
 				+ "and p.DT_INICIO <= CURRENT_TIMESTAMP and (p.DT_FIM is null or p.DT_FIM > CURRENT_TIMESTAMP) "
@@ -317,7 +471,7 @@ public final class DocumentosService {
 			try ( ResultSet resultado = consulta.executeQuery() ) {
 				while( resultado.next() ) {
 					UUID id = resultado.getObject( "ID_ARQUIVO", UUID.class );
-					if( !direitos.gestao() && !( restritos.contains( id ) ? liberados.contains( id ) : direitos.leitura() ) ) continue;
+					if( !direitos.gestao() && !direitos.leitura() && !liberados.contains( id ) ) continue;
 					JSONObject item = new JSONObject().put( "idArquivo", id.toString() )
 						.put( "nome", resultado.getString( "DS_NOME_ARQUIVO" ) ).put( "titulo", resultado.getString( "DS_TITULO" ) )
 						.put( "descricao", nulo( resultado.getString( "DS_DESCRICAO" ) ) )

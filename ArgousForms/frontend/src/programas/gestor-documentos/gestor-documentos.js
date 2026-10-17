@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { Alert, Box, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, LinearProgress, Link, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
-import { FileText, Folder, Plus, Upload } from 'lucide-react';
+import { Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, LinearProgress, Link, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Download, FileText, Folder, Plus, Upload } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { pageReducer } from '../../utils/page-state.js';
 import { useI18n } from '../../components/i18n/i18n.js';
@@ -11,7 +11,7 @@ import { enviarArquivo } from './upload-arquivo.js';
 export const GestorDocumentosContext = createContext(null);
 
 function Conteudo() {
-  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, usuario, podeEnviar } = useContext(GestorDocumentosContext);
+  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar } = useContext(GestorDocumentosContext);
   const { t, system } = useI18n();
   const pastasDestino = [value.dados?.pasta, ...(value.dados?.pastas || [])].filter((pasta) => pasta?.podeIncluir);
 
@@ -60,8 +60,9 @@ function Conteudo() {
                 onClick={() => dispatch({ field: 'idPasta', value: pasta.idPasta })}>{pasta.nome}</Button></TableCell>
               <TableCell>{t('Pasta')}</TableCell><TableCell>—</TableCell><TableCell>—</TableCell>
             </TableRow>)}
-            {value.dados.arquivos.map((arquivo) => <TableRow key={arquivo.idArquivo}>
-              <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><FileText size={18} />{arquivo.nome}</Box></TableCell>
+            {value.dados.arquivos.map((arquivo) => <TableRow key={arquivo.idArquivo} hover>
+              <TableCell><Button sx={{ textTransform: 'none' }} startIcon={<FileText size={18} />}
+                onClick={() => abrirArquivo(arquivo.idArquivo)}>{arquivo.nome}</Button></TableCell>
               <TableCell>{arquivo.contentType || '—'}</TableCell>
               <TableCell>{arquivo.tamanhoBytes == null ? '—' : `${(arquivo.tamanhoBytes / 1048576).toFixed(2)} MiB`}</TableCell>
               <TableCell>{arquivo.versao ?? '—'}</TableCell>
@@ -143,14 +144,84 @@ function Conteudo() {
         <Button variant="contained" disabled={value.enviando || !value.arquivo || !value.pastaDestino} onClick={enviar}>{t('Enviar')}</Button>
       </DialogActions>
     </Dialog>
+    <Dialog open={value.detalheAberto} onClose={() => !value.salvandoArquivo && dispatch({ field: 'detalheAberto', value: false })}
+      fullWidth maxWidth="md">
+      <DialogTitle>{value.arquivoDetalhe?.nome || t('Arquivo')}</DialogTitle>
+      <DialogContent sx={{ display: 'grid', gap: 2, pt: '12px !important' }}>
+        {value.carregandoArquivo && <LinearProgress />}
+        {value.erroDetalhe && <Alert severity="error">{system(value.erroDetalhe)}</Alert>}
+        {value.carregandoArquivo && <Box component="output" aria-live="polite"
+          sx={{ minHeight: 420, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+          <CircularProgress />
+          <Typography variant="body2">{t('Carregando arquivo...')}</Typography>
+        </Box>}
+        {value.arquivoDetalhe && <>
+          {['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(value.arquivoDetalhe.contentType?.toLowerCase())
+            ? <Box sx={{ position: 'relative', minHeight: 420, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, bgcolor: 'action.hover', borderRadius: 1, overflow: 'hidden' }}>
+                {value.arquivoDetalhe.contentType?.toLowerCase() === 'application/pdf' && <Alert severity="info"
+                  icon={value.previewCarregando ? <CircularProgress size={18} /> : undefined} sx={{ width: '100%' }}>
+                  {value.previewCarregando ? t('Carregando arquivo...') : t('Se o PDF ainda estiver em branco, aguarde a apresentação pelo navegador.')}
+                </Alert>}
+                {value.previewCarregando && !value.previewErro && value.arquivoDetalhe.contentType?.toLowerCase() !== 'application/pdf' && <Box component="output" aria-live="polite"
+                  sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                  <CircularProgress />
+                  <Typography variant="body2">{t('Carregando arquivo...')}</Typography>
+                </Box>}
+                {value.previewErro && <Alert severity="error">{t('Não foi possível carregar a visualização do arquivo.')}</Alert>}
+                {value.previewUrl && (value.arquivoDetalhe.contentType?.toLowerCase() === 'application/pdf'
+                  ? <Box component="iframe" title={value.arquivoDetalhe.titulo} src={value.previewUrl}
+                      onLoad={() => dispatch({ field: 'previewCarregando', value: false })}
+                      onError={() => { dispatch({ field: 'previewErro', value: true }); dispatch({ field: 'previewCarregando', value: false }); }}
+                      sx={{ width: '100%', height: 420, border: 0 }} />
+                  : <Box component="img" alt={value.arquivoDetalhe.titulo} src={value.previewUrl}
+                      onLoad={() => dispatch({ field: 'previewCarregando', value: false })}
+                      onError={() => { dispatch({ field: 'previewErro', value: true }); dispatch({ field: 'previewCarregando', value: false }); }}
+                      sx={{ maxWidth: '100%', maxHeight: 420, objectFit: 'contain', opacity: value.previewCarregando || value.previewErro ? 0 : 1 }} />)}
+              </Box>
+            : <Alert severity="info">{t('Este tipo de arquivo não possui visualização direta.')}</Alert>}
+          <Typography variant="body2">{t('Nome')}: {value.arquivoDetalhe.nome} · MIME: {value.arquivoDetalhe.contentType || '—'} · {t('Versão')}: {value.arquivoDetalhe.versao ?? '—'}</Typography>
+          <Typography variant="body2">{t('Tamanho')}: {value.arquivoDetalhe.tamanhoBytes == null ? '—' : `${(value.arquivoDetalhe.tamanhoBytes / 1048576).toFixed(2)} MiB`} · {t('Criado em')}: {value.arquivoDetalhe.inclusao ? new Date(value.arquivoDetalhe.inclusao).toLocaleDateString() : '—'}</Typography>
+          <TextField label={t('Título')} value={value.detalheTitulo} disabled={!value.arquivoDetalhe.podeEditar}
+            inputProps={{ maxLength: 255 }} onChange={(event) => dispatch({ field: 'detalheTitulo', value: event.target.value })} />
+          <TextField label={t('Descrição')} value={value.detalheDescricao} disabled={!value.arquivoDetalhe.podeEditar}
+            multiline minRows={2} onChange={(event) => dispatch({ field: 'detalheDescricao', value: event.target.value })} />
+          <FormControl fullWidth disabled={!value.arquivoDetalhe.podeEditar}>
+            <InputLabel>{t('Classificação')}</InputLabel>
+            <Select label={t('Classificação')} value={value.detalheClassificacao}
+              onChange={(event) => dispatch({ field: 'detalheClassificacao', value: event.target.value })}>
+              <MenuItem value="L">{t('Dados livres')}</MenuItem><MenuItem value="S">{t('Dados sensíveis')}</MenuItem>
+              <MenuItem value="A">{t('Dados anonimizados')}</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField label={t('Data de validade')} type="date" value={value.detalheVencimento}
+            disabled={!value.arquivoDetalhe.podeAlterarValidade} InputLabelProps={{ shrink: true }}
+            helperText={value.arquivoDetalhe.podeAlterarValidade ? t('A validade termina ao fim do dia informado (UTC). Deixe em branco para não vencer.') : t('Somente um gestor da pasta pode alterar a validade.')}
+            onChange={(event) => dispatch({ field: 'detalheVencimento', value: event.target.value })} />
+        </>}
+      </DialogContent>
+      <DialogActions>
+        {value.arquivoDetalhe?.podeBaixar && <Button component="a" href={urlConteudo(value.arquivoDetalhe.idArquivo, 'baixar')}
+          startIcon={<Download size={18} />}>{t('Baixar')}</Button>}
+        <Button onClick={() => dispatch({ field: 'detalheAberto', value: false })}>{t('Fechar')}</Button>
+        {value.arquivoDetalhe?.podeEditar && <Button variant="contained" disabled={value.salvandoArquivo || !value.detalheTitulo.trim()}
+          onClick={salvarArquivo}>{t('Salvar alterações')}</Button>}
+      </DialogActions>
+    </Dialog>
   </>;
+}
+
+function urlConteudo(idArquivo, modo) {
+  return `/ArgousForms/arquivo-conteudo?idArquivo=${encodeURIComponent(idArquivo)}&modo=${modo}`;
 }
 
 export default function GestorDocumentos({ usuario, podeEnviar }) {
   const initialState = useMemo(() => ({ idPasta: null, dados: null, loading: false, error: '',
     novaPastaAberta: false, nomeNovaPasta: '', descricaoNovaPasta: '', salvandoPasta: false, erroNovaPasta: '',
     mongo: null, envioAberto: false, arquivo: null, pastaDestino: '', tituloArquivo: '', descricaoArquivo: '',
-    classificacaoArquivo: 'L', diasValidade: '', modoConflito: 'NOVO_ARQUIVO', enviando: false, progressoEnvio: 0, erroEnvio: '' }), []);
+    classificacaoArquivo: 'L', diasValidade: '', modoConflito: 'NOVO_ARQUIVO', enviando: false, progressoEnvio: 0, erroEnvio: '',
+    detalheAberto: false, carregandoArquivo: false, salvandoArquivo: false, erroDetalhe: '', arquivoDetalhe: null,
+    previewCarregando: false, previewErro: false, previewUrl: null,
+    detalheTitulo: '', detalheDescricao: '', detalheClassificacao: 'L', detalheVencimento: '' }), []);
   const initialStateRef = useRef(initialState);
   const [value, dispatch] = useReducer(pageReducer, initialState);
   const requestRef = useRef(0);
@@ -231,10 +302,86 @@ export default function GestorDocumentos({ usuario, podeEnviar }) {
     }
   }, [value, carregar]);
 
+  const abrirArquivo = useCallback(async (idArquivo) => {
+    dispatch({ field: 'detalheAberto', value: true });
+    dispatch({ field: 'carregandoArquivo', value: true });
+    dispatch({ field: 'previewCarregando', value: true });
+    dispatch({ field: 'previewErro', value: false });
+    dispatch({ field: 'previewUrl', value: null });
+    dispatch({ field: 'erroDetalhe', value: '' });
+    dispatch({ field: 'arquivoDetalhe', value: null });
+    try {
+      const arquivo = await executar('CONSULTAR_ARQUIVO', { idArquivo });
+      dispatch({ field: 'arquivoDetalhe', value: arquivo });
+      dispatch({ field: 'detalheTitulo', value: arquivo.titulo || '' });
+      dispatch({ field: 'detalheDescricao', value: arquivo.descricao || '' });
+      dispatch({ field: 'detalheClassificacao', value: arquivo.classificacao });
+      dispatch({ field: 'detalheVencimento', value: arquivo.vencimento?.slice(0, 10) || '' });
+    } catch (error) {
+      dispatch({ field: 'erroDetalhe', value: error.message });
+    } finally {
+      dispatch({ field: 'carregandoArquivo', value: false });
+    }
+  }, []);
+
+  const idPreview = value.arquivoDetalhe?.idArquivo;
+  const tipoPreview = value.arquivoDetalhe?.contentType?.toLowerCase();
+  useEffect(() => {
+    if (!value.detalheAberto || !idPreview || !['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(tipoPreview)) return;
+
+    const controlador = new AbortController();
+    let url = null;
+    async function buscarConteudo() {
+      try {
+        const resposta = await fetch(urlConteudo(idPreview, 'visualizar'), {
+          credentials: 'same-origin', cache: 'no-store', signal: controlador.signal,
+        });
+        if (!resposta.ok) {
+          const erro = await resposta.json().catch(() => null);
+          throw new Error(erro?.mensagem || 'Não foi possível carregar a visualização do arquivo.');
+        }
+        const conteudo = await resposta.blob();
+        if (controlador.signal.aborted) return;
+        url = URL.createObjectURL(conteudo);
+        dispatch({ field: 'previewUrl', value: url });
+      } catch (error) {
+        if (controlador.signal.aborted) return;
+        dispatch({ field: 'previewErro', value: true });
+        dispatch({ field: 'previewCarregando', value: false });
+        dispatch({ field: 'erroDetalhe', value: error.message });
+      }
+    }
+    buscarConteudo();
+    return () => {
+      controlador.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [value.detalheAberto, idPreview, tipoPreview]);
+
+  const salvarArquivo = useCallback(async () => {
+    if (!value.arquivoDetalhe) return;
+    dispatch({ field: 'salvandoArquivo', value: true });
+    dispatch({ field: 'erroDetalhe', value: '' });
+    try {
+      const dados = { idArquivo: value.arquivoDetalhe.idArquivo, titulo: value.detalheTitulo.trim(),
+        descricao: value.detalheDescricao.trim(), classificacao: value.detalheClassificacao };
+      if (value.arquivoDetalhe.podeAlterarValidade && value.detalheVencimento !== (value.arquivoDetalhe.vencimento?.slice(0, 10) || '')) {
+        dados.vencimento = value.detalheVencimento;
+      }
+      await executar('SALVAR_ARQUIVO', dados);
+      await carregar();
+      dispatch({ field: 'detalheAberto', value: false });
+    } catch (error) {
+      dispatch({ field: 'erroDetalhe', value: error.message });
+    } finally {
+      dispatch({ field: 'salvandoArquivo', value: false });
+    }
+  }, [value.arquivoDetalhe, value.detalheTitulo, value.detalheDescricao, value.detalheClassificacao, value.detalheVencimento, carregar]);
+
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { verificarMongo(); }, [verificarMongo]);
   const contextValues = useMemo(() => ({ telaAtual: 'GestorDocumentos', loading: value.loading,
-    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, usuario, podeEnviar }),
-    [value, carregar, criarPasta, verificarMongo, enviar, usuario, podeEnviar]);
+    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar }),
+    [value, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar]);
   return <GestorDocumentosContext.Provider value={contextValues}><Conteudo /></GestorDocumentosContext.Provider>;
 }

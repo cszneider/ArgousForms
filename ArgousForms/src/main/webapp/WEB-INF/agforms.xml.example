@@ -25,6 +25,7 @@
 	<entry key="mongodb-uri"></entry>
 	<entry key="mongodb-banco"></entry>
 	<entry key="mongodb-banco-autenticacao">admin</entry>
+	<!-- Usuário e senha codificados separadamente com BDUtil.codifica(). -->
 	<entry key="mongodb-usuario"></entry>
 	<entry key="mongodb-senha"></entry>
 	<entry key="mongodb-bucket">argousforms_arquivos</entry>

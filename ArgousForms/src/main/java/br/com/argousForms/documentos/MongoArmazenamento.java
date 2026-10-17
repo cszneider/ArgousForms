@@ -1,6 +1,7 @@
 package br.com.argousForms.documentos;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -56,6 +57,11 @@ public final class MongoArmazenamento implements AutoCloseable {
 	public void excluir( UUID idVersao ) {
 
 		bucket.delete( new BsonString( idVersao.toString() ) );
+	}
+
+	public void baixar( UUID idVersao, OutputStream destino ) {
+
+		bucket.downloadToStream( new BsonString( idVersao.toString() ), destino );
 	}
 
 	@Override
