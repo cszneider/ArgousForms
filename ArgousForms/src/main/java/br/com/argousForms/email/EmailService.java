@@ -28,6 +28,28 @@ public final class EmailService {
 		enviar( destinatario, "Confirme seu e-mail no ArgousForms", texto );
 	}
 
+	public void enviarConvite( String destinatario, String codigo ) throws EmailException {
+
+		validarCodigo( codigo );
+		String apresentado = codigo.substring( 0, 4 ) + "-" + codigo.substring( 4 );
+		enviar( destinatario, "Convite para o ArgousForms", "Você recebeu um convite para usar o ArgousForms.\n\n"
+			+ "Acesse a página de login, escolha 'Aceitar convite' e informe este código: " + apresentado
+			+ "\n\nO código é válido por 10 minutos. Se não esperava o convite, ignore esta mensagem." );
+	}
+
+	public void enviarTrocaEmail( String destinatario, String codigo ) throws EmailException {
+
+		validarCodigo( codigo );
+		String apresentado = codigo.substring( 0, 4 ) + "-" + codigo.substring( 4 );
+		enviar( destinatario, "Confirme seu novo e-mail no ArgousForms", "Confirme a alteração do e-mail da sua conta com o código: "
+			+ apresentado + "\n\nO código é válido por 10 minutos. Se não solicitou a alteração, ignore esta mensagem." );
+	}
+
+	private static void validarCodigo( String codigo ) throws EmailException {
+
+		if( codigo == null || !codigo.matches( "[0-9]{8}" ) ) throw new EmailException( "O código deve conter oito dígitos." );
+	}
+
 	private void enviar(String destinatario, String assunto, String texto) throws EmailException {
 		InternetAddress para = validarEndereco(destinatario);
 		EmailConfiguracao configuracao = EmailConfiguracao.carregar();

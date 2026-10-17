@@ -11,6 +11,11 @@ public final class EmailConfiguracao {
 	private final String conta;
 	private final String senha;
 
+	public static void main(String[] args) {
+		
+		System.out.println( BDUtil.codifica( "TI@x1ca" ) );
+	}
+	
 	private EmailConfiguracao( String host, int porta, String conta, String senha ) {
 
 		this.host = host;

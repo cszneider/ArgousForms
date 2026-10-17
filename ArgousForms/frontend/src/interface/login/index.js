@@ -170,6 +170,9 @@ export default function Login() {
           <Button component="a" href="/cadastro" variant="outlined" fullWidth>
             {tr('Criar cadastro')}
           </Button>
+          <Button component="a" href="/convite" variant="text" fullWidth>
+            {tr('Aceitar convite recebido por e-mail')}
+          </Button>
         </div>
       </AccessLayout>
     </LoginContext.Provider>

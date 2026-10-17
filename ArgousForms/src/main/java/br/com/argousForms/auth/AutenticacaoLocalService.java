@@ -2,6 +2,9 @@ package br.com.argousForms.auth;
 
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -12,8 +15,12 @@ import java.util.UUID;
 
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.model.negocio.cadastro.HistoricoLoginNegocio;
+import br.com.argousForms.model.negocio.cadastro.UsuarioSistemaNegocio;
 import br.com.argousForms.model.persistencia.cadastro.HistoricoLogin;
 import br.com.argousForms.model.persistencia.cadastro.HistoricoLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
+import br.com.argousForms.security.PoliticaSenha;
 import br.com.argousForms.security.SenhaSegura;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
@@ -27,6 +34,7 @@ public final class AutenticacaoLocalService {
 
 	public record Sessao( String token, UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis ) {}
 	public record Usuario( UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis ) {}
+	public record ConexaoAtiva( UUID idLogin, Instant inicio, Instant ultimoAcesso, Instant validade, String enderecoIp, String agente, boolean atual ) {}
 
 	public Sessao entrar( String emailInformado, String senha, String ip, String userAgent ) throws Exception {
 
@@ -36,6 +44,14 @@ public final class AutenticacaoLocalService {
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			conexao.beginTransaction();
 			try {
+				// Serializa o login com a troca de senha para não criar sessão com a senha antiga após a revogação.
+				try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA from Cadastro.USUARIOS_SISTEMA where lower(trim(DS_EMAIL)) = ? and DT_EXCLUSAO is null for update" ) ) {
+					bloqueio.setString( 1, email );
+					try ( ResultSet resultado = bloqueio.executeQuery() ) {
+						if( !resultado.next() ) throw credenciaisInvalidas();
+					}
+				}
+
 				UUID idUsuario;
 				UUID idVinculo;
 				String nome;
@@ -112,6 +128,106 @@ public final class AutenticacaoLocalService {
 		}
 	}
 
+	public List<ConexaoAtiva> listarConexoes( String token ) throws Exception {
+
+		Usuario usuario = consultar( token );
+		if( !usuario.papeis().contains( "AUTOGESTAO" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar as próprias conexões." );
+		}
+
+		List<ConexaoAtiva> conexoes = new ArrayList<>();
+		boolean atualEncontrada = false;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			String sql = "select h.ID_LOGIN, h.DT_LOGIN, h.DT_ULTIMO_ACESSO, h.DT_VALIDADE, h.DS_ENDERECO_IP, h.DS_USER_AGENT, "
+				+ "(h.CD_BEARER_SHA256 = ?) as ATUAL from Cadastro.HISTORICO_LOGINS h "
+				+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
+				+ "join Cadastro.ORIGENS_LOGIN o on o.ID_ORIGEM_LOGIN = v.ID_ORIGEM_LOGIN "
+				+ "where v.ID_USUARIO_SISTEMA = ? and h.DT_VALIDADE > CURRENT_TIMESTAMP and h.DT_REVOGACAO is null "
+				+ "and v.DT_REVOGACAO is null and v.SN_EMAIL_VERIFICADO = true "
+				+ "and o.SN_ATIVA = true and o.DT_EXCLUSAO is null order by h.DT_LOGIN desc";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+				consulta.setString( 1, hash( token ) );
+				consulta.setObject( 2, usuario.idUsuario() );
+				try ( ResultSet resultado = consulta.executeQuery() ) {
+					while( resultado.next() ) {
+						boolean atual = resultado.getBoolean( "ATUAL" );
+						atualEncontrada |= atual;
+						conexoes.add( new ConexaoAtiva( resultado.getObject( "ID_LOGIN", UUID.class ), instante( resultado, "DT_LOGIN" ),
+							instante( resultado, "DT_ULTIMO_ACESSO" ), instante( resultado, "DT_VALIDADE" ),
+							resultado.getString( "DS_ENDERECO_IP" ), resultado.getString( "DS_USER_AGENT" ), atual ) );
+					}
+				}
+			}
+		}
+		if( !atualEncontrada ) throw sessaoInvalida();
+		return conexoes;
+	}
+
+	public boolean encerrarConexao( String token, UUID idLogin ) throws Exception {
+
+		Usuario usuario = consultar( token );
+		if( !usuario.papeis().contains( "AUTOGESTAO" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode encerrar as próprias conexões." );
+		}
+
+		String hashAtual = hash( token );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				// Serializa revogações e trocas de senha da mesma conta.
+				try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA from Cadastro.USUARIOS_SISTEMA where ID_USUARIO_SISTEMA = ? and DT_EXCLUSAO is null for update" ) ) {
+					bloqueio.setObject( 1, usuario.idUsuario() );
+					try ( ResultSet resultado = bloqueio.executeQuery() ) {
+						if( !resultado.next() ) throw sessaoInvalida();
+					}
+				}
+
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select 1 from Cadastro.HISTORICO_LOGINS h "
+						+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
+						+ "where h.CD_BEARER_SHA256 = :hash and v.ID_USUARIO_SISTEMA = :usuario "
+						+ "and h.DT_REVOGACAO is null and h.DT_VALIDADE > CURRENT_TIMESTAMP "
+						+ "and v.DT_REVOGACAO is null and v.SN_EMAIL_VERIFICADO = true" );
+					query.setParameter( "hash", hashAtual );
+					query.setParameter( "usuario", usuario.idUsuario().toString() );
+					query.executeQuery();
+					if( query.isEmpty() ) throw sessaoInvalida();
+				}
+
+				HistoricoLogin historico;
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select h.* from Cadastro.HISTORICO_LOGINS h "
+						+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
+						+ "where h.ID_LOGIN = :login and v.ID_USUARIO_SISTEMA = :usuario "
+						+ "and h.DT_REVOGACAO is null and h.DT_VALIDADE > CURRENT_TIMESTAMP" );
+					query.setParameter( "login", idLogin.toString() );
+					query.setParameter( "usuario", usuario.idUsuario().toString() );
+					query.executeQuery();
+					if( query.isEmpty() ) {
+						throw new ArgousFormsApiException( 404, "CONEXAO_NAO_ENCONTRADA", "Esta conexão não está mais ativa." );
+					}
+					historico = new HistoricoLogin();
+					HistoricoLoginLocalizador.buscaCampos( historico, query );
+				}
+
+				boolean atual = hashAtual.equals( historico.getCdBearerSha256() );
+				historico.setDtRevogacao( new QtData( Instant.now().toEpochMilli() ) );
+				new HistoricoLoginNegocio( conexao, historico ).altera();
+				conexao.commit();
+				return atual;
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private static Instant instante( ResultSet resultado, String campo ) throws Exception {
+
+		Timestamp valor = resultado.getTimestamp( campo );
+		return valor == null ? null : valor.toInstant();
+	}
+
 	private List<String> papeisAtivos( Conexao conexao, UUID idUsuario ) throws Exception {
 
 		List<String> papeis = new ArrayList<>();
@@ -172,6 +288,78 @@ public final class AutenticacaoLocalService {
 					HistoricoLogin historico = new HistoricoLogin();
 					HistoricoLoginLocalizador.buscaCampos( historico, query );
 					historico.setDtRevogacao( new QtData( Instant.now().toEpochMilli() ) );
+					new HistoricoLoginNegocio( conexao, historico ).altera();
+				}
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public void alterarSenha( String token, String senhaAtual, String senhaNova ) throws Exception {
+
+		Usuario usuarioAutenticado = consultar( token );
+		if( !usuarioAutenticado.papeis().contains( "AUTOGESTAO" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode alterar a própria senha." );
+		}
+		if( !PoliticaSenha.atende( senhaNova ) ) {
+			throw new ArgousFormsApiException( 400, "SENHA_FRACA", "A nova senha deve ter pelo menos 8 caracteres e atender a 3 destas 4 condições: maiúscula, minúscula, numeral e símbolo." );
+		}
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				// Query bloqueia FOR UPDATE; esta consulta JDBC apenas serializa trocas simultâneas da mesma conta.
+				try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA from Cadastro.USUARIOS_SISTEMA where ID_USUARIO_SISTEMA = ? and DT_EXCLUSAO is null for update" ) ) {
+					bloqueio.setObject( 1, usuarioAutenticado.idUsuario() );
+					try ( ResultSet resultado = bloqueio.executeQuery() ) {
+						if( !resultado.next() ) throw sessaoInvalida();
+					}
+				}
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select 1 from Cadastro.HISTORICO_LOGINS where CD_BEARER_SHA256 = :hash and DT_REVOGACAO is null and DT_VALIDADE > CURRENT_TIMESTAMP" );
+					query.setParameter( "hash", hash( token ) );
+					query.executeQuery();
+					if( query.isEmpty() ) throw sessaoInvalida();
+				}
+
+				UsuarioSistema usuario;
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.USUARIOS_SISTEMA where ID_USUARIO_SISTEMA = :id and DT_EXCLUSAO is null" );
+					query.setParameter( "id", usuarioAutenticado.idUsuario().toString() );
+					query.executeQuery();
+					if( query.isEmpty() ) throw sessaoInvalida();
+					usuario = new UsuarioSistema();
+					UsuarioSistemaLocalizador.buscaCampos( usuario, query );
+				}
+
+				if( !SenhaSegura.confere( senhaAtual, usuario.getCdHashSenha() ) ) {
+					throw new ArgousFormsApiException( 401, "SENHA_ATUAL_INCORRETA", "A senha atual está incorreta." );
+				}
+
+				usuario.setCdHashSenha( SenhaSegura.gerarHash( senhaNova ) );
+				new UsuarioSistemaNegocio( conexao, usuario ).altera();
+				List<HistoricoLogin> outrasSessoes = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select h.* from Cadastro.HISTORICO_LOGINS h "
+						+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
+						+ "where v.ID_USUARIO_SISTEMA = :id and h.CD_BEARER_SHA256 <> :hash and h.DT_REVOGACAO is null" );
+					query.setParameter( "id", usuarioAutenticado.idUsuario().toString() );
+					query.setParameter( "hash", hash( token ) );
+					query.executeQuery();
+					if( !query.isEmpty() ) {
+						do {
+							HistoricoLogin historico = new HistoricoLogin();
+							HistoricoLoginLocalizador.buscaCampos( historico, query );
+							outrasSessoes.add( historico );
+						} while ( query.next() );
+					}
+				}
+				QtData agora = new QtData( Instant.now().toEpochMilli() );
+				for( HistoricoLogin historico : outrasSessoes ) {
+					historico.setDtRevogacao( agora );
 					new HistoricoLoginNegocio( conexao, historico ).altera();
 				}
 				conexao.commit();

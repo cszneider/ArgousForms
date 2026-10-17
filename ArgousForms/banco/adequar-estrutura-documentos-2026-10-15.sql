@@ -1,0 +1,50 @@
+-- Ajuste incremental do banco de desenvolvimento existente, sem recriar usuários.
+-- Executar como proprietário dos esquemas Cadastro e Docs, antes das cargas abaixo.
+-- O DDL exportado antigo é preservado como histórico em estrutura-exportada-*.sql.
+BEGIN;
+
+ALTER TABLE Cadastro.INSTITUICAO
+    ADD COLUMN IF NOT EXISTS NR_DIAS_PERMANENCIA_LIXEIRA integer;
+UPDATE Cadastro.INSTITUICAO
+   SET NR_DIAS_PERMANENCIA_LIXEIRA = 30
+ WHERE NR_DIAS_PERMANENCIA_LIXEIRA IS NULL;
+ALTER TABLE Cadastro.INSTITUICAO
+    ALTER COLUMN NR_DIAS_PERMANENCIA_LIXEIRA SET DEFAULT 30,
+    ALTER COLUMN NR_DIAS_PERMANENCIA_LIXEIRA SET NOT NULL;
+
+ALTER TABLE Cadastro.INSTITUICAO
+    ADD COLUMN IF NOT EXISTS NR_TAMANHO_MAXIMO_ARQUIVO_BYTES integer;
+UPDATE Cadastro.INSTITUICAO
+   SET NR_TAMANHO_MAXIMO_ARQUIVO_BYTES = 33554432
+ WHERE NR_TAMANHO_MAXIMO_ARQUIVO_BYTES IS NULL;
+ALTER TABLE Cadastro.INSTITUICAO
+    ALTER COLUMN NR_TAMANHO_MAXIMO_ARQUIVO_BYTES SET DEFAULT 33554432,
+    ALTER COLUMN NR_TAMANHO_MAXIMO_ARQUIVO_BYTES SET NOT NULL;
+
+DO $ajuste$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'Cadastro.INSTITUICAO'::regclass
+           AND conname = 'ck_instituicao_tamanho_maximo_positivo'
+    ) THEN
+        ALTER TABLE Cadastro.INSTITUICAO
+            ADD CONSTRAINT ck_instituicao_tamanho_maximo_positivo
+            CHECK (NR_TAMANHO_MAXIMO_ARQUIVO_BYTES > 0);
+    END IF;
+END;
+$ajuste$;
+
+ALTER TABLE Docs.PASTAS ALTER COLUMN ID_PASTA_PAI DROP NOT NULL;
+-- Converte eventual RAIZ criada sob a antiga convenção de autorreferência.
+UPDATE Docs.PASTAS SET ID_PASTA_PAI = NULL WHERE ID_PASTA_PAI = ID_PASTA;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pastas_raiz
+    ON Docs.PASTAS ((true)) WHERE ID_PASTA_PAI IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_arquivos_nome_ativo
+    ON Docs.ARQUIVOS (ID_PASTA, DS_NOME_ARQUIVO)
+    WHERE DT_LIXEIRA IS NULL AND DT_EXCLUSAO IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_arquivo_versoes_numero
+    ON Docs.ARQUIVO_VERSOES (ID_ARQUIVO, NR_VERSAO);
+
+COMMIT;

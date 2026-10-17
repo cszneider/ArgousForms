@@ -1,6 +1,6 @@
 /*
 Created		01/07/2026
-Modified		12/10/2026
+Modified		13/10/2026
 Project		
 Model		
 Company		
@@ -11,7 +11,19 @@ Database		PostgreSQL 7
 
 BEGIN;
 CREATE SCHEMA IF NOT EXISTS Cadastro;
+CREATE SCHEMA IF NOT EXISTS Docs;
 
+DROP TABLE IF EXISTS Docs.ARQUIVO_TAGS;
+DROP TABLE IF EXISTS Docs.TAGS_ARQUIVO;
+DROP TABLE IF EXISTS Docs.ARQUIVOS_ATRIBUTOS;
+DROP TABLE IF EXISTS Docs.ATRIBUTO_VALORES;
+DROP TABLE IF EXISTS Docs.ATRIBUTOS;
+DROP TABLE IF EXISTS Docs.ARQUIVO_PERMISSOES;
+DROP TABLE IF EXISTS Docs.ARQUIVO_VERSOES;
+DROP TABLE IF EXISTS Docs.ARQUIVOS;
+DROP TABLE IF EXISTS Docs.PASTA_PERMISSOES;
+DROP TABLE IF EXISTS Docs.PASTA_GESTORES;
+DROP TABLE IF EXISTS Docs.PASTAS;
 DROP TABLE IF EXISTS Cadastro.VINCULO_TAGS;
 DROP TABLE IF EXISTS Cadastro.USUARIO_TAGS;
 DROP TABLE IF EXISTS Cadastro.GRUPO_TAGS;
@@ -204,6 +216,8 @@ Create table  Cadastro.INSTITUICAO
 (
 	ID_INSTITUICAO Smallint NOT NULL Default 1 Constraint ck_instituicoes_registro_unico Check (ID_INSTITUICAO = 1 ),
 	DS_NOME Varchar(200) NOT NULL,
+	NR_DIAS_PERMANENCIA_LIXEIRA Integer NOT NULL Default 30,
+	NR_TAMANHO_MAXIMO_ARQUIVO_BYTES Integer NOT NULL Default 33554432 Constraint ck_instituicao_tamanho_maximo_positivo Check (NR_TAMANHO_MAXIMO_ARQUIVO_BYTES > 0),
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_ALTERACAO Timestamp NOT NULL,
  primary key (ID_INSTITUICAO)
@@ -267,6 +281,7 @@ Create table  Cadastro.TIPOS_IDENTIFICACAO
 	CD_TIPO Varchar(10) NOT NULL,
 	DS_NOME Varchar(70) NOT NULL,
 	DS_DESCRICAO Varchar(255) NULL ,
+	CD_REGEX Varchar(50) NOT NULL,
 	DS_MASCARA Varchar(30) NULL ,
 	SN_ATIVO Boolean NOT NULL,
 	DT_INCLUSAO Timestamp NOT NULL,
@@ -363,6 +378,7 @@ Create unique index porIDUsuarioOrigem on Cadastro.USUARIO_ORIGENS_LOGIN (CD_USU
 Create unique index TipoNoPais on Cadastro.TIPOS_IDENTIFICACAO (ID_PAIS,CD_TIPO);
 
 Create unique index PessoaPais on Cadastro.PESSOA_IDENTIFICACOES (ID_PESSOA,ID_PAIS);
+Create unique index IdentificacaoPorPais on Cadastro.PESSOA_IDENTIFICACOES (ID_PAIS,CD_IDENTIFICACAO);
 
 Alter table Cadastro.USUARIO_PERFIS add  foreign key (ID_USUARIO_SISTEMA) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
 Alter table Cadastro.USUARIO_ORIGENS_LOGIN add  foreign key (ID_USUARIO_SISTEMA) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
