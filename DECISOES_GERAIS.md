@@ -51,17 +51,31 @@ As versões do Java, React e demais bibliotecas, assim como o servidor de aplica
 
 ## Conceitos documentais
 
-Devem ser tratados como conceitos distintos:
+As definições seguintes substituem o uso anterior de “modelo de documento” como nome do conjunto e a suposição de um documento final obrigatório ou principal:
 
-- Modelo de formulário: campos, validações, seções, condições e traduções.
-- Modelo de documento: composição visual que produzirá o documento final.
-- Versão publicada: versão imutável de um modelo usada em novas execuções.
-- Instância de processo: execução de um fluxo que reúne etapas, preenchimentos e documentos produzidos ao longo do percurso.
-- Instância de formulário: dados preenchidos durante um processo.
-- Documento final: PDF produzido a partir de um ou mais formulários.
-- Anexos: arquivos adicionais associados à instância documental.
+- **Protocolo:** conjunto de definições de formulários, fluxo e documentos possíveis para uma atividade.
+- **Formulário:** definição de dados a preencher em um Protocolo. Pertence a esse Protocolo; pode ser copiado de outro, mas a cópia é independente. Um mesmo formulário pode ser usado em mais de uma etapa do mesmo Protocolo.
+- **Variável:** definição pertencente à versão do Protocolo, com tipo, limites, possibilidades e valor padrão conforme aplicável. Formulários da mesma versão podem apresentar a mesma variável. Seus valores pertencem à execução do Processo e preservam o histórico das passagens pelas etapas.
+- **Fluxo:** percurso de etapas e transições, inclusive caminhos condicionais e paralelos. Tem uma etapa inicial e uma ou mais etapas finais.
+- **Processo:** execução concreta de uma versão publicada de um Protocolo. Pode produzir vários documentos, em diferentes momentos, ou nenhum, conforme o Protocolo. Conclusão e cancelamento encerram o Processo; uma devolução apenas reabre etapas, sem cancelá-lo.
+- **Documento:** artefato produzido durante o percurso ou no encerramento, com apresentação própria. O Protocolo define quais documentos podem ser produzidos, inclusive em caso de cancelamento. A assinatura, quando exigida, ocorre depois da conclusão; assinaturas pendentes não retiram o Processo do estado concluído.
+- **Fórum:** espaço de cada Processo para comentários e registro das ações, transições e decisões tomadas. Convidados externos podem acompanhar as partes autorizadas e comentar, sem assumir preenchimentos; o Protocolo permite ou não esses convites.
 
-Um documento final poderá ser formado por vários formulários preenchidos por pessoas diferentes.
+### Protocolos — modelagem em andamento
+
+- O schema dos Protocolos e Processos será `Processos`. Um Protocolo reúne definições de formulários, fluxo e documentos possíveis; um Processo é a execução de uma versão publicada do Protocolo. Formulários pertencem ao Protocolo e podem ser copiados de outro, tornando-se independentes da origem.
+- Um Protocolo terá no máximo um rascunho em andamento. `Processos.PROTOCOLOS` terá título obrigatório e descrição opcional como dados atuais do catálogo. Cada versão publicada preservará uma cópia desses valores para consulta histórica.
+- Em `Processos.PROTOCOLO_VERSOES`, `NR_VERSAO` será obrigatório: `-1` no rascunho e número positivo atribuído apenas na publicação. A combinação `(ID_PROTOCOLO, NR_VERSAO)` será única. A situação do rascunho deverá corresponder a `-1` e à ausência de dados de publicação; a situação publicada deverá corresponder a número positivo, publicador e data de publicação.
+- Versões publicadas e as definições a elas vinculadas serão imutáveis. As regras de integridade pertinentes serão implementadas no banco após a conclusão da modelagem e o recebimento do DDL do gestor; as triggers não serão escritas nesta etapa.
+- Cada Processo permanece associado à versão publicada com que começou. A edição de um Protocolo publicado cria um novo rascunho, sem alterar processos em andamento.
+- `Processos.PROTOCOLO_ETAPAS` conterá etapas de tipo `I` (inicial), `O` (operacional) e `F` (final). Por versão publicada, haverá exatamente uma `I`, zero ou mais `O` e uma ou mais `F`. A etapa inicial é uma etapa de trabalho, com formulário e procedimentos próprios; o círculo “I” é apenas seu marcador visual no editor.
+- Cada etapa terá exatamente um formulário, referenciado por `ID_FORMULARIO` na própria `PROTOCOLO_ETAPAS`; um mesmo formulário poderá ser usado em mais de uma etapa da mesma versão. Se cada passagem gera um preenchimento independente ainda será detalhado na modelagem.
+- O Criador define em cada formulário quais variáveis do Protocolo aparecem e se cada uma é somente para leitura ou permite leitura e escrita. Assim, uma variável pode ser preenchida em um formulário, reapresentada para consulta em outro e editada novamente em um terceiro. A definição pode ser criada numa área inicial ou durante a montagem dos formulários; em ambos os casos passa a pertencer à versão do Protocolo. Quando um mesmo formulário for reutilizado em várias etapas, suas definições de leitura e escrita também serão reutilizadas. A resolução de escritas concorrentes na mesma variável ainda precisa ser definida.
+- Cada etapa terá título, observações opcionais, dois textos opcionais para scripts de inicialização e finalização e sua posição `X`/`Y` no canvas, guardada na própria `PROTOCOLO_ETAPAS`. As etapas serão editadas no canvas do fluxo, por duplo clique no bloco, e não por um CRUD isolado. O editor terá paleta de blocos e ligações diretas ou por blocos de decisão, com disposição predominantemente horizontal. A modelagem dos blocos de decisão será tratada separadamente.
+- Para os scripts, foi aprovado um subconjunto de JavaScript com `if`/`else`, `for`, `while` e `switch`, além de funções disponibilizadas pelo sistema, como `get`, `set`, `sendEmail`, `writeOnForum` e `sendMessage`. O catálogo e o contrato dessas funções, os limites de execução, o momento exato de cada script e o executor ainda serão definidos. A ideia de executar os scripts em um serviço Node e devolver resultados e ações para validação e execução pelo backend Java agradou ao gestor, mas **não é decisão de arquitetura** nesta etapa.
+- O gestor de cada Processo é único em cada momento. Ele revisa o processo ao chegar a uma etapa final, pode devolvê-lo a etapa anterior e é responsável por concluir ou cancelar; ao concluir, publica os documentos cabíveis e inicia as assinaturas previstas. Também aprova convites externos e define a visibilidade do convidado. A transferência voluntária de gestão exige convite e aceite do sucessor elegível; uma transição do fluxo pode transferi-la automaticamente. Para processo órfão por desativação ou afastamento registrado, tenta-se primeiro o substituto previsto no Protocolo e depois uma fila compartilhada de usuários ativos com `GESTOR_DE_PROTOCOLOS`.
+- `CRIADOR_DE_PROTOCOLOS` prepara o rascunho e `GESTOR_DE_PROTOCOLOS` publica. O criador edita apenas o rascunho de sua responsabilidade; o gestor de protocolos pode designar substituto. Quem acumular os dois papéis pode criar e publicar o próprio Protocolo. `GESTOR_DE_PROTOCOLOS` é distinto do gestor de indicadores. A substituição do antigo nome `MODELADOR` no código e nos cadastros será tratada na implementação correspondente.
+- Ainda não foram decididos o indicador `SN_ATIVO` em `PROTOCOLOS` nem o tratamento de um rascunho descartado. A exclusão do rascunho descartado, com registro da ação na auditoria, permanece recomendação pendente de aprovação.
 
 ## Colaboração e divisão de responsabilidade
 
@@ -137,7 +151,7 @@ O processo será representado visualmente como um fluxo, tendo o n8n apenas como
 
 As regras definidas para a execução são:
 
-- Cada modelo de documento definirá os grupos cujos integrantes poderão iniciar o fluxo.
+- Cada Protocolo definirá os grupos cujos integrantes poderão iniciar o fluxo.
 - Cada etapa de trabalho será direcionada a um ou mais grupos, com ou sem filtros por tags. A seleção poderá considerar Tag de Grupo, Tag de Usuário e Tag de Vínculo.
 - As tags e participações serão avaliadas na finalização da etapa anterior, quando se determina o destino da próxima etapa.
 - Uma pessoa elegível assumirá a responsabilidade vigente pela etapa e poderá salvar preenchimentos provisórios ou finalizá-la. Apenas a finalização encaminhará o fluxo.

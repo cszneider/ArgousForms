@@ -37,13 +37,16 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 
 ### Modelagem
 
-- Editor de modelos de formulário.
+- Editor de Protocolos, com formulários pertencentes ao Protocolo; copiar um formulário de outro Protocolo cria uma definição independente.
+- O Criador poderá definir variáveis do Protocolo numa área inicial ou durante a criação dos formulários. Em cada formulário, escolherá quais variáveis aparecem e se cada uma é somente leitura ou leitura e escrita; a mesma variável poderá aparecer em vários formulários com modos diferentes.
 - Definição de seções e campos.
 - Definição de validações e regras condicionais.
 - Associação dos campos às partes e responsabilidades.
-- Editor do modelo visual do documento final.
-- Editor de workflow com fases, transições, divisões e convergências.
-- Versionamento, revisão e publicação dos modelos.
+- Editor da apresentação dos documentos que o Protocolo poderá produzir, sem pressupor um documento principal.
+- Editor visual do fluxo, com canvas predominantemente horizontal, paleta à direita, ligações diretas ou com blocos de decisão, divisões e convergências. O círculo “I” marca visualmente o início; a primeira etapa de trabalho é do tipo `I`. Duplo clique no bloco abre a edição de título, observações, formulário e scripts de inicialização e finalização.
+- Cada etapa possui um formulário e salva sua posição `X`/`Y` no canvas; o mesmo formulário poderá ser selecionado em várias etapas da versão do Protocolo.
+- Tipos de etapa `I` (inicial), `O` (operacional) e `F` (final). Cada versão publicada deverá ter exatamente uma `I` e uma ou mais `F`.
+- Versionamento, revisão e publicação de Protocolos. A atualização dos nomes e papéis das telas existentes ocorrerá durante a implementação, sem presumir que a interface atual já foi alterada.
 
 ### Execução documental
 
