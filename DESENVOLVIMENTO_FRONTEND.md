@@ -46,6 +46,7 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 - Editor visual do fluxo, com canvas predominantemente horizontal, paleta à direita, ligações diretas ou com blocos de decisão, divisões e convergências. O círculo “I” marca visualmente o início; a primeira etapa de trabalho é do tipo `I`. Duplo clique no bloco abre a edição de título, observações, formulário e scripts de inicialização e finalização.
 - Cada etapa possui um formulário e salva sua posição `X`/`Y` no canvas; o mesmo formulário poderá ser selecionado em várias etapas da versão do Protocolo.
 - Tipos de etapa `I` (inicial), `O` (operacional) e `F` (final). Cada versão publicada deverá ter exatamente uma `I` e uma ou mais `F`.
+- Ao configurar os destinatários de uma etapa no editor do fluxo, consultar `INSTITUICAO.SN_PERMITIR_DESTINATARIOS_UNICOS`. Com `FALSE`, avisar que a etapa precisa de ao menos uma regra que não dependa exclusivamente de um usuário nominal antes da publicação; usuários nominais podem ser alternativas. O backend confirmará essa regra na publicação.
 - Versionamento, revisão e publicação de Protocolos. A atualização dos nomes e papéis das telas existentes ocorrerá durante a implementação, sem presumir que a interface atual já foi alterada.
 
 ### Execução documental
