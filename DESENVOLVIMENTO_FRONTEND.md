@@ -57,6 +57,7 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 - Indicação do estado de cada parte.
 - Salvamento parcial e salvamento completo.
 - Finalização explícita.
+- **Iniciar/Assumir etapa** é uma ação explícita; apenas abrir a tela não altera a situação. **Salvar rascunho** aceita dados incompletos; **Salvar etapa** valida o preenchimento sem encaminhar; **Finalizar etapa** valida e aciona o fluxo. O usuário pode preencher e finalizar sem passar obrigatoriamente pelos dois salvamentos anteriores. A interface só apresenta a etapa como finalizada após confirmação de sucesso do backend.
 - Devolução a fase anterior quando autorizada.
 - Histórico do documento.
 - Visualização do PDF gerado.

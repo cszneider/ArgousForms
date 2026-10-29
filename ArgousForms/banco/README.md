@@ -4,9 +4,7 @@ Este diretório reunirá os scripts SQL do ArgousForms, incluindo a criação da
 
 `estrutura-exportada-2026-10-13.sql` e `estrutura-exportada-docs-2026-10-15.sql` preservam os DDLs recebidos do modelador e **não devem ser executados diretamente**. `preprocessar_ddl.py` qualifica os nomes pelos esquemas declarados nas classes `@Table` do JAR de fontes e reorganiza os `DROP TABLE` pelas chaves estrangeiras declaradas nos exports. Os resultados executáveis estão em `estrutura-inicial.sql` (`Cadastro`) e `estrutura-docs.sql` (`Docs`, resolvido como `docs` pelo PostgreSQL). A indicação "PostgreSQL 7" nos cabeçalhos veio do gerador; não expressa a versão mínima compatível com o DDL.
 
-Os exports datados acima são anteriores aos dois campos novos de `Cadastro.INSTITUICAO` e ao pai nulo da RAIZ. Os scripts executáveis foram ajustados conforme o JAR atualizado; **não rode novamente o pré-processador com esses exports antigos**, pois ele desfaria os ajustes. Quando houver um novo DDL do modelador, os comandos abaixo voltarão a gerar os scripts executáveis:
-
-`estrutura-docs.sql` e `adequar-estrutura-documentos-2026-10-15.sql` também criam índices únicos para nome de arquivo ativo dentro da pasta e para o número de versão dentro do arquivo. Eles impedem duplicidades inclusive em gravações fora do servlet de upload. Ao regenerar o DDL, preservar esses índices no modelo ou reaplicá-los no ajuste posterior.
+Os exports datados acima são anteriores a ajustes já feitos nos scripts executáveis. **Não rode novamente o pré-processador com esses exports antigos**, pois ele desfaria os ajustes. As diferenças a preservar e os complementos de futuros exports estão em [DDL.md](DDL.md). Quando houver um novo export do modelador, os comandos abaixo voltarão a gerar os scripts executáveis:
 
 ```sh
 python3 banco/preprocessar_ddl.py banco/estrutura-exportada-docs-2026-10-15.sql banco/estrutura-docs.sql --sources-jar ~/.m2/repository/br/com/quatro/argous-forms/0.0.1/argous-forms-0.0.1-sources.jar
@@ -33,7 +31,7 @@ O banco de desenvolvimento que recebeu a carga antiga e ainda não recebeu o aju
 
 A carga de teste não cria a instituição nem o primeiro administrador. Os tipos de identificação são carregados pelo script separado, para execução manual; o procedimento para a instalação automática ainda precisa ser definido. `CD_IDIOMA`, `CD_MOEDA`, `CD_TELEFONE` e `DS_CAPITAL` registram um valor principal para teste, não todas as opções de países multilíngues, multimoeda ou com mais de uma capital. A lista dos países segue os [35 Estados independentes das Américas da OEA](https://www.oas.org/ext/en/main/oas/member-states) e os cinco países adicionais aprovados. Códigos de país, moeda e telefone podem ser conferidos, respectivamente, nas referências da [ISO](https://www.iso.org/iso-3166-country-codes.html), do [Unicode CLDR](https://unicode.org/cldr/charts/48/supplemental/detailed_territory_currency_information.html) e da [UIT](https://www.itu.int/ITU-T/inr/nnp/index.html).
 
-Os scripts de validação das tags não foram executados nesta etapa. A modelagem ainda não contém regras de banco para a atribuição inicial de tags a grupos, usuários e vínculos; essas regras dependem de definição funcional específica.
+Os scripts de validação das tags não foram executados nesta etapa.
 
 O DDL deve ser executado por um papel proprietário distinto de `carlos`. Os `GRANT`s não removem os poderes de um proprietário nem de um superusuário. As permissões padrão no fim de cada estrutura só alcançam tabelas e sequências criadas futuramente pelo mesmo papel que executou o DDL; se outro papel criar objetos em uma atualização, ele deverá configurar suas próprias permissões padrão ou conceder acesso aos objetos novos. `carlos` não recebe `CREATE` nos esquemas, `TRIGGER` nas tabelas nem privilégios para modificar objetos de estrutura.
 
