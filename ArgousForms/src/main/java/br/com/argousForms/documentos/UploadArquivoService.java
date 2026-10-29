@@ -101,7 +101,7 @@ public final class UploadArquivoService {
 				versao.setIdArquivo( arquivo.getIdArquivo() );
 				versao.setIdUsuarioIncluiu( usuario.idUsuario() );
 				versao.setNrVersao( numeroVersao );
-				versao.setNrTamanhoBytes( tamanho );
+				versao.setNrTamanhoBytes( Long.valueOf( tamanho ) );
 				versao.setCdHashSha256( hash );
 				versao.setTpOrigem( "U" );
 				versao.setDtInclusao( new QtData( Instant.now().toEpochMilli() ) );

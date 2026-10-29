@@ -37,13 +37,17 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 
 ### Modelagem
 
-- Editor de modelos de formulário.
+- Editor de Protocolos, com formulários pertencentes ao Protocolo; copiar um formulário de outro Protocolo cria uma definição independente.
+- O Criador poderá definir variáveis do Protocolo numa área inicial ou durante a criação dos formulários. Em cada formulário, escolherá quais variáveis aparecem e se cada uma é somente leitura ou leitura e escrita; a mesma variável poderá aparecer em vários formulários com modos diferentes.
 - Definição de seções e campos.
 - Definição de validações e regras condicionais.
 - Associação dos campos às partes e responsabilidades.
-- Editor do modelo visual do documento final.
-- Editor de workflow com fases, transições, divisões e convergências.
-- Versionamento, revisão e publicação dos modelos.
+- Editor da apresentação dos documentos que o Protocolo poderá produzir, sem pressupor um documento principal.
+- Editor visual do fluxo, com canvas predominantemente horizontal, paleta à direita, ligações diretas ou com blocos de decisão, divisões e convergências. O círculo “I” marca visualmente o início; a primeira etapa de trabalho é do tipo `I`. Duplo clique no bloco abre a edição de título, observações, formulário e scripts de inicialização e finalização.
+- Cada etapa possui um formulário e salva sua posição `X`/`Y` no canvas; o mesmo formulário poderá ser selecionado em várias etapas da versão do Protocolo.
+- Tipos de etapa `I` (inicial), `O` (operacional) e `F` (final). Cada versão publicada deverá ter exatamente uma `I` e uma ou mais `F`.
+- Ao configurar os destinatários de uma etapa no editor do fluxo, consultar `INSTITUICAO.SN_PERMITIR_DESTINATARIOS_UNICOS`. Com `FALSE`, avisar que a etapa precisa de ao menos uma regra que não dependa exclusivamente de um usuário nominal antes da publicação; usuários nominais podem ser alternativas. O backend confirmará essa regra na publicação.
+- Versionamento, revisão e publicação de Protocolos. A atualização dos nomes e papéis das telas existentes ocorrerá durante a implementação, sem presumir que a interface atual já foi alterada.
 
 ### Execução documental
 
@@ -53,6 +57,7 @@ Este documento reúne as definições e questões relacionadas ao frontend. Nenh
 - Indicação do estado de cada parte.
 - Salvamento parcial e salvamento completo.
 - Finalização explícita.
+- **Iniciar/Assumir etapa** é uma ação explícita; apenas abrir a tela não altera a situação. **Salvar rascunho** aceita dados incompletos; **Salvar etapa** valida o preenchimento sem encaminhar; **Finalizar etapa** valida e aciona o fluxo. O usuário pode preencher e finalizar sem passar obrigatoriamente pelos dois salvamentos anteriores. A interface só apresenta a etapa como finalizada após confirmação de sucesso do backend.
 - Devolução a fase anterior quando autorizada.
 - Histórico do documento.
 - Visualização do PDF gerado.
