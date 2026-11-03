@@ -144,6 +144,22 @@ public final class DocumentosService {
 		}
 	}
 
+	public void exigirPastaParaProtocolo( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idPasta ) throws Exception {
+
+		if( !usuario.papeis().contains( "CONSULTA_DOCUMENTOS" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar as pastas." );
+		}
+		Map<UUID, Pasta> pastas = carregarPastas( conexao );
+		if( !pastas.containsKey( idPasta ) ) throw new ArgousFormsApiException( 404, "PASTA_NAO_ENCONTRADA", "Pasta não encontrada ou indisponível." );
+		Set<UUID> leitura = carregarPermissoes( conexao, usuario.idUsuario(), "L" );
+		Set<UUID> inclusao = carregarPermissoes( conexao, usuario.idUsuario(), "I" );
+		Set<UUID> gestores = usuario.papeis().contains( "GESTAO_DOCUMENTOS" ) ? carregarGestores( conexao, usuario.idUsuario() ) : Set.of();
+		Direitos direitos = calcularDireitos( idPasta, pastas, leitura, inclusao, gestores, new HashMap<>(), new HashSet<>() );
+		if( !( direitos.leitura() || direitos.gestao() ) || !( direitos.inclusao() || direitos.gestao() ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "A pasta precisa permitir leitura e inclusão para associá-la ao Protocolo." );
+		}
+	}
+
 	void exigirInclusao( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idPasta ) throws Exception {
 
 		if( !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
@@ -251,6 +267,11 @@ public final class DocumentosService {
 
 	public Conteudo conteudo( AutenticacaoLocalService.Usuario usuario, UUID idArquivo, boolean baixar ) throws Exception {
 
+		return conteudo( usuario, idArquivo, null, baixar );
+	}
+
+	public Conteudo conteudo( AutenticacaoLocalService.Usuario usuario, UUID idArquivo, UUID idVersao, boolean baixar ) throws Exception {
+
 		if( !usuario.papeis().contains( "CONSULTA_DOCUMENTOS" ) ) {
 			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode consultar documentos." );
 		}
@@ -264,9 +285,10 @@ public final class DocumentosService {
 				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode baixar este arquivo." );
 			}
 			String sql = "select ID_ARQUIVO_VERSAO, NR_TAMANHO_BYTES from Docs.ARQUIVO_VERSOES "
-				+ "where ID_ARQUIVO = ? order by NR_VERSAO desc limit 1";
+				+ "where ID_ARQUIVO = ? " + ( idVersao == null ? "order by NR_VERSAO desc limit 1" : "and ID_ARQUIVO_VERSAO = ?" );
 			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 				consulta.setObject( 1, idArquivo );
+				if( idVersao != null ) consulta.setObject( 2, idVersao );
 				try ( ResultSet resultado = consulta.executeQuery() ) {
 					if( !resultado.next() ) throw new ArgousFormsApiException( 404, "VERSAO_NAO_ENCONTRADA", "O arquivo não possui versão disponível." );
 					return new Conteudo( resultado.getObject( 1, UUID.class ), arquivo.getDsNomeArquivo(), arquivo.getCdContentType(), resultado.getLong( 2 ) );

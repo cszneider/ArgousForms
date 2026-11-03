@@ -74,6 +74,7 @@ import { ThemeToggle } from '../../components/theme/theme.js';
 import { Dashboards } from '../../programas/dashboard/dashboards.js';
 import { defaultDashboardFilters } from '../../programas/dashboard/dashboard.js';
 import { TemplateEditor } from '../../programas/modelos/template-editor.js';
+import Protocolos from '../../programas/protocolos/protocolos.js';
 import {
   DocumentView,
   Status,
@@ -94,6 +95,7 @@ const nav = [
   ['home', 'Visão geral', LayoutDashboard],
   ['dashboards', 'Dashboards', ChartNoAxesCombined],
   ['documents', 'Documentos', Files],
+  ['protocols', 'Protocolos', GitBranch],
   ['templates', 'Modelos', LayoutTemplate],
   ['organization', 'Organização e acessos', Users],
 ];
@@ -144,6 +146,13 @@ export default function Workspace() {
       newTitle: '',
       groupEdit: null,
       tagEdit: null,
+      remocaoOrganizacao: null,
+      vinculosEdit: null,
+      vinculosSaving: false,
+      filtroGrupos: '',
+      filtroTags: '',
+      filtroUsuarios: '',
+      filtroPessoas: '',
       organizacao: null,
       organizacaoLoading: false,
       organizacaoError: '',
@@ -156,6 +165,8 @@ export default function Workspace() {
       pessoasUsuariosLoading: false,
       pessoasUsuariosError: '',
       cadastroEdit: null,
+      remocaoCadastro: null,
+      cadastroRemoving: false,
       papelEdit: null,
       perfilEdit: null,
       remocaoAcesso: null,
@@ -198,6 +209,13 @@ export default function Workspace() {
     newTitle,
     groupEdit,
     tagEdit,
+    remocaoOrganizacao,
+    vinculosEdit,
+    vinculosSaving,
+    filtroGrupos,
+    filtroTags,
+    filtroUsuarios,
+    filtroPessoas,
     organizacao,
     organizacaoLoading,
     organizacaoError,
@@ -210,6 +228,8 @@ export default function Workspace() {
     pessoasUsuariosLoading,
     pessoasUsuariosError,
     cadastroEdit,
+    remocaoCadastro,
+    cadastroRemoving,
     papelEdit,
     perfilEdit,
     remocaoAcesso,
@@ -242,8 +262,8 @@ export default function Workspace() {
     dispatch({ field: 'organizacaoLoading', value: true });
     dispatch({ field: 'organizacaoError', value: '' });
     try {
-      const dados = await executar('LISTAR_ORGANIZACAO');
-      dispatch({ field: 'organizacao', value: dados });
+      const [dados, vinculos] = await Promise.all([executar('LISTAR_ORGANIZACAO'), executar('LISTAR_VINCULOS_ORGANIZACAO')]);
+      dispatch({ field: 'organizacao', value: { ...dados, ...vinculos } });
     } catch (erro) {
       dispatch({ field: 'organizacaoError', value: erro.message });
     } finally {
@@ -367,6 +387,53 @@ export default function Workspace() {
       dispatch({ field: 'toast', value: { text: erro.message, error: true } });
     } finally {
       dispatch({ field: 'organizacaoSaving', value: false });
+    }
+  };
+
+  const alterarVinculo = async (operacao, dados) => {
+    if (vinculosSaving) return;
+    dispatch({ field: 'vinculosSaving', value: true });
+    try {
+      await executar(operacao, dados);
+      await carregarOrganizacao();
+      dispatch({ field: 'toast', value: { text: 'Vínculo atualizado.', error: false } });
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'vinculosSaving', value: false });
+    }
+  };
+
+  const removerOrganizacao = async () => {
+    if (!remocaoOrganizacao || organizacaoSaving) return;
+    dispatch({ field: 'organizacaoSaving', value: true });
+    try {
+      const grupo = remocaoOrganizacao.tipo === 'grupo';
+      const resultado = await executar(grupo ? 'REMOVER_GRUPO' : 'REMOVER_TAG', grupo ? { idGrupo: remocaoOrganizacao.idGrupo } : { codigo: remocaoOrganizacao.codigo });
+      dispatch({ field: 'remocaoOrganizacao', value: null });
+      dispatch({ field: 'toast', value: { text: resultado.acao.startsWith('exclu') ? 'Registro excluído.' : 'Registro inativado porque já foi utilizado.', error: false } });
+      await carregarOrganizacao();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'organizacaoSaving', value: false });
+    }
+  };
+
+  const removerCadastro = async () => {
+    if (!remocaoCadastro || cadastroRemoving) return;
+    dispatch({ field: 'cadastroRemoving', value: true });
+    try {
+      const usuarioAlvo = remocaoCadastro.tipo === 'usuario';
+      await executar(usuarioAlvo ? 'REMOVER_USUARIO' : 'REMOVER_PESSOA', usuarioAlvo ? { idUsuario: remocaoCadastro.id } : { idPessoa: remocaoCadastro.id });
+      dispatch({ field: 'remocaoCadastro', value: null });
+      dispatch({ field: 'toast', value: { text: usuarioAlvo ? 'Conta excluída. A Pessoa foi preservada.' : 'Pessoa excluída.', error: false } });
+      await carregarPessoasUsuarios();
+      if (usuarioAlvo && usuario?.papeis?.includes('GESTOR_GRUPOS_TAGS')) await carregarOrganizacao();
+    } catch (erro) {
+      dispatch({ field: 'toast', value: { text: erro.message, error: true } });
+    } finally {
+      dispatch({ field: 'cadastroRemoving', value: false });
     }
   };
 
@@ -704,6 +771,7 @@ export default function Workspace() {
   const groupManager = Boolean(usuario) && hasRole('GESTOR_GRUPOS_TAGS');
   const accessManager = hasRole('GESTOR_ACESSOS');
   const designer = hasRole('MODELADOR');
+  const protocolCreator = hasRole('CRIADOR_DE_PROTOCOLOS') || designer;
   const canConsultDocuments = hasRole('CONSULTA_DOCUMENTOS');
   const canEditDocuments = hasRole('EDITOR_DE_DOCUMENTOS');
   const canManageOwnData = hasRole('AUTOGESTAO');
@@ -711,6 +779,7 @@ export default function Workspace() {
     (destination === 'settings' && canManageOwnData) ||
     (destination === 'documents' && canConsultDocuments) ||
     (destination === 'dashboards' && hasRole('ANALISTA_INDICADORES')) ||
+    (destination === 'protocols' && protocolCreator) ||
     (destination === 'templates' && designer) ||
     (destination === 'organization' && (admin || groupManager || accessManager));
   const managementAreas = [
@@ -1327,6 +1396,7 @@ export default function Workspace() {
                 {view === 'documents' && canConsultDocuments && (
                   <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} />
                 )}
+                {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} />}
                 {view === 'templates' && designer && (
                   <>
                     <div className="page-heading">
@@ -1480,12 +1550,13 @@ export default function Workspace() {
                         {organizacaoLoading && <LinearProgress sx={{ mb: 2 }} />}
                         {organizacaoError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarOrganizacao}>{tr('Tentar novamente')}</Button>}>{system(organizacaoError)}</Alert>}
                         <div className="panel-heading">
-                          <div><h2>{tr('Grupos')}</h2><p>{tr('Os integrantes poderão ser vinculados depois da criação do grupo.')}</p></div>
+                          <div><h2>{tr('Grupos')}</h2><p>{tr('Organize integrantes e tags dos grupos.')}</p></div>
                           <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => dispatch({ field: 'groupEdit', value: { idGrupo: null, nome: '', ativo: true, tags: [] } })}>{tr('Criar grupo')}</Button>
                         </div>
+                        <TextField label={tr('Buscar grupo')} value={filtroGrupos} onChange={(e) => dispatch({ field: 'filtroGrupos', value: e.target.value })} sx={{ mb: 2 }} />
                         {!organizacaoError && organizacao && (
                           organizacao.grupos.length ? <div className="group-grid">
-                            {organizacao.grupos.map((grupo) => <article className="panel group-card" key={grupo.idGrupo}>
+                            {organizacao.grupos.filter((grupo) => grupo.nome.toLocaleLowerCase('pt-BR').includes(filtroGrupos.toLocaleLowerCase('pt-BR'))).map((grupo) => <article className="panel group-card" key={grupo.idGrupo}>
                               <div className="template-card-top">
                                 <span className="template-icon"><Users size={24} /></span>
                                 <IconButton aria-label={`${tr('Editar grupo')} ${grupo.nome}`} onClick={() => dispatch({ field: 'groupEdit', value: { ...grupo, tags: grupo.tags || [] } })}><Settings2 size={18} /></IconButton>
@@ -1493,17 +1564,20 @@ export default function Workspace() {
                               <h2>{grupo.nome}</h2>
                               {!grupo.ativo && <Chip size="small" label={tr('Inativo')} />}
                               {!!grupo.tags?.length && <p>{grupo.tags.join(', ')}</p>}
+                              <p>{(organizacao.vinculos || []).filter((vinculo) => vinculo.idGrupo === grupo.idGrupo && vinculo.ativo).length} {tr('integrantes')}</p>
+                              <Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoOrganizacao', value: { tipo: 'grupo', idGrupo: grupo.idGrupo, nome: grupo.nome } })}>{tr('Remover')}</Button>
                             </article>)}
                           </div> : <Alert severity="info">{tr('Nenhum grupo cadastrado.')}</Alert>
                         )}
                         <div className="panel-heading" style={{ marginTop: 32 }}>
-                          <div><h2>{tr('Tags')}</h2><p>{tr('Cadastre tags de grupo, usuário ou vínculo. A atribuição será feita depois.')}</p></div>
+                          <div><h2>{tr('Tags')}</h2><p>{tr('Cadastre tags de grupo, usuário ou vínculo.')}</p></div>
                           <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => dispatch({ field: 'tagEdit', value: { editando: false, codigo: '', descricao: '', grupo: false, usuario: false, vinculo: false, ativo: true } })}>{tr('Criar tag')}</Button>
                         </div>
+                        <TextField label={tr('Buscar tag')} value={filtroTags} onChange={(e) => dispatch({ field: 'filtroTags', value: e.target.value })} sx={{ mb: 2 }} />
                         {!organizacaoError && organizacao && (
                           organizacao.tags.length ? <TableContainer className="panel"><Table>
                             <TableHead><TableRow><TableCell>{tr('CÓDIGO')}</TableCell><TableCell>{tr('DESCRIÇÃO')}</TableCell><TableCell>{tr('APLICAÇÕES')}</TableCell><TableCell>{tr('SITUAÇÃO')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
-                            <TableBody>{organizacao.tags.map((tag) => <TableRow key={tag.codigo}>
+                            <TableBody>{organizacao.tags.filter((tag) => `${tag.codigo} ${tag.descricao || ''}`.toLocaleLowerCase('pt-BR').includes(filtroTags.toLocaleLowerCase('pt-BR'))).map((tag) => <TableRow key={tag.codigo}>
                               <TableCell>{tag.codigo}</TableCell><TableCell>{tag.descricao || '—'}</TableCell>
                               <TableCell>{[
                                 tag.grupo && tr('Tag de Grupo'),
@@ -1511,10 +1585,22 @@ export default function Workspace() {
                                 tag.vinculo && tr('Tag de Vínculo'),
                               ].filter(Boolean).join(', ') || '—'}</TableCell>
                               <TableCell>{tr(tag.ativo ? 'Ativa' : 'Inativa')}</TableCell>
-                              <TableCell><IconButton aria-label={`${tr('Editar tag')} ${tag.codigo}`} onClick={() => dispatch({ field: 'tagEdit', value: { ...tag, editando: true } })}><Settings2 size={18} /></IconButton></TableCell>
+                              <TableCell><IconButton aria-label={`${tr('Editar tag')} ${tag.codigo}`} onClick={() => dispatch({ field: 'tagEdit', value: { ...tag, editando: true } })}><Settings2 size={18} /></IconButton><Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoOrganizacao', value: { tipo: 'tag', codigo: tag.codigo, nome: tag.codigo } })}>{tr('Remover')}</Button></TableCell>
                             </TableRow>)}</TableBody>
                           </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma tag cadastrada.')}</Alert>
                         )}
+                        <div className="panel-heading" style={{ marginTop: 32 }}>
+                          <div><h2>{tr('Vínculos e tags dos usuários')}</h2><p>{tr('Atribua grupos, tags de usuário e tags de vínculo.')}</p></div>
+                        </div>
+                        <TextField label={tr('Buscar usuário')} value={filtroUsuarios} onChange={(e) => dispatch({ field: 'filtroUsuarios', value: e.target.value })} sx={{ mb: 2 }} />
+                        {!organizacaoError && organizacao && (organizacao.usuarios?.length ? <TableContainer className="panel"><Table>
+                          <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('GRUPOS')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
+                          <TableBody>{organizacao.usuarios.filter((registro) => `${registro.nome} ${registro.email}`.toLocaleLowerCase('pt-BR').includes(filtroUsuarios.toLocaleLowerCase('pt-BR'))).map((registro) => <TableRow key={registro.idUsuario}>
+                            <TableCell>{registro.nome}</TableCell><TableCell>{registro.email}</TableCell>
+                            <TableCell>{(organizacao.vinculos || []).filter((vinculo) => vinculo.idUsuario === registro.idUsuario && vinculo.ativo).map((vinculo) => organizacao.grupos.find((grupo) => grupo.idGrupo === vinculo.idGrupo)?.nome).filter(Boolean).join(', ') || '—'}</TableCell>
+                            <TableCell><Button size="small" onClick={() => dispatch({ field: 'vinculosEdit', value: registro.idUsuario })}>{tr('Gerenciar vínculos')}</Button></TableCell>
+                          </TableRow>)}</TableBody>
+                        </Table></TableContainer> : <Alert severity="info">{tr('Nenhum usuário cadastrado.')}</Alert>)}
                       </>
                     )}
                     {activeManagementSection === 'access' && (
@@ -1555,21 +1641,25 @@ export default function Workspace() {
                         {pessoasUsuariosError && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={carregarPessoasUsuarios}>{tr('Tentar novamente')}</Button>}>{system(pessoasUsuariosError)}</Alert>}
                         <div className="panel-heading"><div><h2>{tr('Usuários')}</h2><p>{tr('Contas vinculadas a pessoas da instituição.')}</p></div>
                           <Button variant="contained" startIcon={<UserPlus size={17} />} onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario' } })}>{tr('Adicionar usuário')}</Button></div>
+                        <TextField label={tr('Buscar usuário')} value={filtroUsuarios} onChange={(e) => dispatch({ field: 'filtroUsuarios', value: e.target.value })} sx={{ mb: 2 }} />
                         {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.usuarios.length ? <TableContainer className="panel"><Table>
                           <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('PERFIS')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
-                          <TableBody>{pessoasUsuarios.usuarios.map((registro) => <TableRow key={registro.idUsuario}>
+                          <TableBody>{pessoasUsuarios.usuarios.filter((registro) => `${registro.nome} ${registro.email}`.toLocaleLowerCase('pt-BR').includes(filtroUsuarios.toLocaleLowerCase('pt-BR'))).map((registro) => <TableRow key={registro.idUsuario}>
                             <TableCell>{registro.nome}</TableCell><TableCell>{registro.email}</TableCell><TableCell>{registro.perfis.join(', ') || '—'}</TableCell>
-                            <TableCell><Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idUsuario: registro.idUsuario } })}>{tr('Editar')}</Button></TableCell>
+                            <TableCell><Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idUsuario: registro.idUsuario } })}>{tr('Editar')}</Button>
+                              {registro.idUsuario !== usuario.idUsuario && <Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoCadastro', value: { tipo: 'usuario', id: registro.idUsuario, nome: registro.nome } })}>{tr('Remover')}</Button>}</TableCell>
                           </TableRow>)}</TableBody>
                         </Table></TableContainer> : <Alert severity="info">{tr('Nenhum usuário cadastrado.')}</Alert>)}
                         <div className="panel-heading" style={{ marginTop: 32 }}><div><h2>{tr('Pessoas')}</h2><p>{tr('Pessoas sem conta de usuário.')}</p></div>
                           <Button variant="contained" startIcon={<Plus size={17} />} onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'pessoa' } })}>{tr('Adicionar pessoa')}</Button></div>
+                        <TextField label={tr('Buscar pessoa')} value={filtroPessoas} onChange={(e) => dispatch({ field: 'filtroPessoas', value: e.target.value })} sx={{ mb: 2 }} />
                         {!pessoasUsuariosError && pessoasUsuarios && (pessoasUsuarios.pessoas.length ? <TableContainer className="panel"><Table>
                           <TableHead><TableRow><TableCell>{tr('NOME')}</TableCell><TableCell>{tr('E-MAIL')}</TableCell><TableCell>{tr('TELEFONE')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
-                          <TableBody>{pessoasUsuarios.pessoas.map((registro) => <TableRow key={registro.idPessoa}>
+                          <TableBody>{pessoasUsuarios.pessoas.filter((registro) => `${registro.nome} ${registro.nomeSocial || ''} ${registro.email || ''}`.toLocaleLowerCase('pt-BR').includes(filtroPessoas.toLocaleLowerCase('pt-BR'))).map((registro) => <TableRow key={registro.idPessoa}>
                             <TableCell>{registro.nomeSocial || registro.nome}</TableCell><TableCell>{registro.email || '—'}</TableCell><TableCell>{registro.telefone || '—'}</TableCell>
                             <TableCell><Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'pessoa', idPessoa: registro.idPessoa } })}>{tr('Editar')}</Button>
-                              <Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idPessoa: registro.idPessoa } })}>{tr('Criar usuário')}</Button></TableCell>
+                              <Button size="small" onClick={() => dispatch({ field: 'cadastroEdit', value: { modo: 'usuario', idPessoa: registro.idPessoa } })}>{tr('Criar usuário')}</Button>
+                              {!registro.contaHistorica && <Button size="small" color="error" onClick={() => dispatch({ field: 'remocaoCadastro', value: { tipo: 'pessoa', id: registro.idPessoa, nome: registro.nome } })}>{tr('Remover')}</Button>}</TableCell>
                           </TableRow>)}</TableBody>
                         </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma pessoa cadastrada.')}</Alert>)}
                       </>
@@ -1887,7 +1977,7 @@ export default function Workspace() {
                   ))}
                   {!organizacao?.tags?.some((tag) => tag.grupo || groupEdit.tags.includes(tag.codigo)) && <p className="muted">{tr('Nenhuma tag de grupo cadastrada.')}</p>}
                 </div>
-                <p className="muted">{tr('Os participantes serão vinculados ao grupo em uma etapa posterior.')}</p>
+                <p className="muted">{tr('Gerencie integrantes na lista de vínculos e tags dos usuários.')}</p>
               </div>
             )}
           </DialogContent>
@@ -1922,6 +2012,53 @@ export default function Workspace() {
           <DialogActions>
             <Button onClick={() => dispatch({ field: 'tagEdit', value: null })}>{tr('Cancelar')}</Button>
             <Button variant="contained" disabled={!tagEdit?.codigo.trim() || !(tagEdit?.grupo || tagEdit?.usuario || tagEdit?.vinculo) || organizacaoSaving} onClick={salvarTag}>{tr('Salvar tag')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={!!vinculosEdit && groupManager} onClose={() => { if (!vinculosSaving) dispatch({ field: 'vinculosEdit', value: null }); }} fullWidth maxWidth="sm">
+          <DialogTitle>{tr('Vínculos e tags')} — {organizacao?.usuarios?.find((item) => item.idUsuario === vinculosEdit)?.nome}</DialogTitle>
+          <DialogContent>
+            {vinculosSaving && <LinearProgress sx={{ mb: 2 }} />}
+            <h3>{tr('Tags do usuário')}</h3>
+            {(organizacao?.tags || []).filter((tag) => tag.usuario).map((tag) => {
+              const selecionada = organizacao?.tagsUsuario?.some((item) => item.idUsuario === vinculosEdit && item.codigo === tag.codigo && item.ativo);
+              return <FormControlLabel key={tag.codigo} sx={{ display: 'flex' }} control={<Checkbox checked={!!selecionada} disabled={vinculosSaving || (!tag.ativo && !selecionada)} onChange={(e) => alterarVinculo('SALVAR_TAG_USUARIO', { idUsuario: vinculosEdit, codigo: tag.codigo, ativo: e.target.checked })} />} label={`${tag.codigo}${tag.descricao ? ` — ${tag.descricao}` : ''}`} />;
+            })}
+            <h3>{tr('Grupos')}</h3>
+            {(organizacao?.grupos || []).map((grupo) => {
+              const participa = organizacao?.vinculos?.some((item) => item.idUsuario === vinculosEdit && item.idGrupo === grupo.idGrupo && item.ativo);
+              return <div key={grupo.idGrupo} style={{ marginBottom: 8 }}>
+                <FormControlLabel control={<Checkbox checked={!!participa} disabled={vinculosSaving || (!grupo.ativo && !participa)} onChange={(e) => alterarVinculo('SALVAR_VINCULO_GRUPO', { idUsuario: vinculosEdit, idGrupo: grupo.idGrupo, ativo: e.target.checked })} />} label={grupo.nome} />
+                {participa && <div style={{ marginLeft: 36 }}>
+                  {(organizacao?.tags || []).filter((tag) => tag.vinculo).map((tag) => {
+                    const selecionada = organizacao?.tagsVinculo?.some((item) => item.idUsuario === vinculosEdit && item.idGrupo === grupo.idGrupo && item.codigo === tag.codigo && item.ativo);
+                    return <FormControlLabel key={tag.codigo} sx={{ display: 'flex' }} control={<Checkbox checked={!!selecionada} disabled={vinculosSaving || (!tag.ativo && !selecionada)} onChange={(e) => alterarVinculo('SALVAR_TAG_VINCULO', { idUsuario: vinculosEdit, idGrupo: grupo.idGrupo, codigo: tag.codigo, ativo: e.target.checked })} />} label={`${tr('Tag de vínculo')}: ${tag.codigo}`} />;
+                  })}
+                </div>}
+              </div>;
+            })}
+          </DialogContent>
+          <DialogActions><Button disabled={vinculosSaving} onClick={() => dispatch({ field: 'vinculosEdit', value: null })}>{tr('Fechar')}</Button></DialogActions>
+        </Dialog>
+        <Dialog open={!!remocaoOrganizacao && groupManager} onClose={() => { if (!organizacaoSaving) dispatch({ field: 'remocaoOrganizacao', value: null }); }} fullWidth maxWidth="xs">
+          <DialogTitle>{tr('Remover registro')}</DialogTitle>
+          <DialogContent>
+            <p>{tr('Deseja remover')} <strong>{remocaoOrganizacao?.nome}</strong>?</p>
+            <Alert severity="info">{tr('Registros usados por protocolos ou permissões documentais serão inativados. Os demais serão excluídos com seus vínculos.')}</Alert>
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={organizacaoSaving} onClick={() => dispatch({ field: 'remocaoOrganizacao', value: null })}>{tr('Cancelar')}</Button>
+            <Button disabled={organizacaoSaving} color="error" variant="contained" onClick={removerOrganizacao}>{tr('Remover')}</Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={!!remocaoCadastro && admin} onClose={() => { if (!cadastroRemoving) dispatch({ field: 'remocaoCadastro', value: null }); }} fullWidth maxWidth="xs">
+          <DialogTitle>{tr('Remover registro')}</DialogTitle>
+          <DialogContent>
+            <p>{tr('Deseja remover')} <strong>{remocaoCadastro?.nome}</strong>?</p>
+            <Alert severity="info">{tr(remocaoCadastro?.tipo === 'usuario' ? 'A conta será desativada e suas sessões encerradas. A Pessoa será preservada.' : 'A Pessoa sem referências históricas será excluída.')}</Alert>
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={cadastroRemoving} onClick={() => dispatch({ field: 'remocaoCadastro', value: null })}>{tr('Cancelar')}</Button>
+            <Button disabled={cadastroRemoving} color="error" variant="contained" onClick={removerCadastro}>{tr('Remover')}</Button>
           </DialogActions>
         </Dialog>
         <Dialog

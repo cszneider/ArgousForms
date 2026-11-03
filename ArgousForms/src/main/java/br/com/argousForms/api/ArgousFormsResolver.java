@@ -30,11 +30,13 @@ import br.com.argousForms.cadastro.LimiteCadastro;
 import br.com.argousForms.auth.AutenticacaoLocalService;
 import br.com.argousForms.acessos.AcessosService;
 import br.com.argousForms.organizacao.OrganizacaoService;
+import br.com.argousForms.organizacao.VinculosOrganizacaoService;
 import br.com.argousForms.documentos.DocumentosService;
 import br.com.argousForms.documentos.MongoArmazenamento;
 import br.com.argousForms.documentos.UploadArquivoService;
 import br.com.argousForms.pessoas.PessoasUsuariosService;
 import br.com.argousForms.pessoas.ManutencaoUsuarioService;
+import br.com.argousForms.protocolos.ProtocolosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -50,10 +52,12 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final AutenticacaoLocalService autenticacao = new AutenticacaoLocalService();
 	private final AcessosService acessos = new AcessosService();
 	private final OrganizacaoService organizacao = new OrganizacaoService();
+	private final VinculosOrganizacaoService vinculosOrganizacao = new VinculosOrganizacaoService();
 	private final DocumentosService documentos = new DocumentosService();
 	private final UploadArquivoService uploadArquivo = new UploadArquivoService();
 	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
 	private final ManutencaoUsuarioService manutencaoUsuarios = new ManutencaoUsuarioService();
+	private final ProtocolosService protocolos = new ProtocolosService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -121,6 +125,83 @@ public final class ArgousFormsResolver extends HttpServlet {
 		if( "SESSAO_ATUAL".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "idUsuario", usuario.idUsuario().toString(), "nome", usuario.nome(), "email", usuario.email(), "papeis", usuario.papeis(), "perfis", usuario.perfis() ) ) );
+			return;
+		}
+
+		if( "LISTAR_PROTOCOLOS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.listar( usuario ) );
+			return;
+		}
+
+		if( "CONSULTAR_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.consultar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "CRIAR_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 201, protocolos.criar( usuario, dados.optString( "titulo", "" ), dados.optString( "descricao", "" ) ) );
+			return;
+		}
+
+		if( "EXCLUIR_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.excluir( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "SALVAR_DADOS_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarDados( usuario, uuidObrigatorio( dados, "idProtocolo" ),
+				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ) ) );
+			return;
+		}
+
+		if( "ASSOCIAR_PASTA_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.associarPasta( usuario, uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idPasta" ) ) );
+			return;
+		}
+
+		if( "SALVAR_FORMULARIO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			if( !( dados.opt( "campos" ) instanceof JSONArray campos ) ) {
+				throw new ArgousFormsApiException( 400, "CAMPOS_INVALIDOS", "Informe a lista de campos do formulário." );
+			}
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarFormulario( usuario, uuidObrigatorio( dados, "idProtocolo" ),
+				uuidOpcional( dados, "idFormulario" ), dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), campos ) );
+			return;
+		}
+
+		if( "SALVAR_VARIAVEL_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarVariavel( usuario, uuidObrigatorio( dados, "idProtocolo" ),
+				uuidOpcional( dados, "idVariavel" ), dados.optString( "codigo", "" ), dados.optString( "nome", "" ),
+				dados.optString( "tipo", "" ), dados.optString( "descricao", "" ), dados.optJSONObject( "definicao" ) ) );
+			return;
+		}
+
+		if( "ALTERAR_MODELO_PDF".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.alterarModeloPdf( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ),
+				dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ) ) );
+			return;
+		}
+
+		if( "SALVAR_CAMPOS_MODELO_PDF".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarCamposPdf( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ), dados.optJSONArray( "campos" ) ) );
+			return;
+		}
+
+		if( "EXCLUIR_MODELO_PDF".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.excluirModeloPdf( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ) ) );
 			return;
 		}
 
@@ -230,7 +311,8 @@ public final class ArgousFormsResolver extends HttpServlet {
 
 		if( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao )
 			|| "LOCALIZAR_PESSOA".equals( operacao ) || "SALVAR_PESSOA".equals( operacao ) || "SALVAR_USUARIO".equals( operacao )
-			|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao ) ) {
+			|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao )
+			|| "REMOVER_USUARIO".equals( operacao ) || "REMOVER_PESSOA".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario autenticado = autenticacao.consultar( tokenSessao( request ) );
 			boolean administrador = autenticado.papeis().contains( "ADMINISTRADOR_USUARIOS" );
 			boolean autogestao = autenticado.papeis().contains( "AUTOGESTAO" );
@@ -257,6 +339,16 @@ public final class ArgousFormsResolver extends HttpServlet {
 			}
 			if( "SALVAR_PESSOA".equals( operacao ) ) {
 				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "idPessoa", manutencaoUsuarios.salvarPessoa( dados ).toString() ) );
+				return;
+			}
+			if( "REMOVER_USUARIO".equals( operacao ) ) {
+				manutencaoUsuarios.excluirUsuario( uuidObrigatorio( dados, "idUsuario" ), autenticado.idUsuario() );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "removido", true ) );
+				return;
+			}
+			if( "REMOVER_PESSOA".equals( operacao ) ) {
+				manutencaoUsuarios.excluirPessoa( uuidObrigatorio( dados, "idPessoa" ) );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "removido", true ) );
 				return;
 			}
 			if( "SALVAR_USUARIO".equals( operacao ) || "SALVAR_MEUS_DADOS".equals( operacao ) ) {
@@ -309,8 +401,39 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
-		if( "LISTAR_ORGANIZACAO".equals( operacao ) || "SALVAR_GRUPO".equals( operacao ) || "CRIAR_TAG".equals( operacao ) || "ALTERAR_TAG".equals( operacao ) ) {
+		if( "LISTAR_ORGANIZACAO".equals( operacao ) || "SALVAR_GRUPO".equals( operacao ) || "CRIAR_TAG".equals( operacao ) || "ALTERAR_TAG".equals( operacao )
+			|| "REMOVER_GRUPO".equals( operacao ) || "REMOVER_TAG".equals( operacao )
+			|| "LISTAR_VINCULOS_ORGANIZACAO".equals( operacao ) || "SALVAR_VINCULO_GRUPO".equals( operacao )
+			|| "SALVAR_TAG_USUARIO".equals( operacao ) || "SALVAR_TAG_VINCULO".equals( operacao ) ) {
 			exigirGestorGruposTags( request );
+			if( "LISTAR_VINCULOS_ORGANIZACAO".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, vinculosOrganizacao.listar() );
+				return;
+			}
+			if( "REMOVER_GRUPO".equals( operacao ) ) {
+				int idGrupo = dados.optInt( "idGrupo", -1 );
+				if( idGrupo <= 0 ) throw new ArgousFormsApiException( 400, "GRUPO_INVALIDO", "Informe um grupo válido." );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "acao", organizacao.removerGrupo( idGrupo ) ) );
+				return;
+			}
+			if( "REMOVER_TAG".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "acao", organizacao.removerTag( ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ) ) ) );
+				return;
+			}
+			if( "SALVAR_VINCULO_GRUPO".equals( operacao ) || "SALVAR_TAG_USUARIO".equals( operacao ) || "SALVAR_TAG_VINCULO".equals( operacao ) ) {
+				UUID idUsuario = uuidObrigatorio( dados, "idUsuario" );
+				Object valorAtivo = dados.opt( "ativo" );
+				if( !( valorAtivo instanceof Boolean ativo ) ) throw new ArgousFormsApiException( 400, "ESTADO_INVALIDO", "Informe se o vínculo está ativo." );
+				if( "SALVAR_TAG_USUARIO".equals( operacao ) ) vinculosOrganizacao.salvarTagUsuario( idUsuario, ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ), ativo );
+				else {
+					int idGrupo = dados.optInt( "idGrupo", -1 );
+					if( idGrupo <= 0 ) throw new ArgousFormsApiException( 400, "GRUPO_INVALIDO", "Informe um grupo válido." );
+					if( "SALVAR_TAG_VINCULO".equals( operacao ) ) vinculosOrganizacao.salvarTagVinculo( idUsuario, idGrupo, ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ), ativo );
+					else vinculosOrganizacao.salvarVinculo( idUsuario, idGrupo, ativo );
+				}
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "salvo", true ) );
+				return;
+			}
 			if( "LISTAR_ORGANIZACAO".equals( operacao ) ) {
 				ArgousFormsJson.enviarSucesso( response, 200, organizacao.listar() );
 				return;

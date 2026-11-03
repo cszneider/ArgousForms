@@ -1,9 +1,12 @@
 package br.com.argousForms.pessoas;
 
+import java.sql.PreparedStatement;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +40,7 @@ import br.com.argousForms.model.persistencia.cadastro.PessoaIdentificacao;
 import br.com.argousForms.model.persistencia.cadastro.PessoaIdentificacaoLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.PessoaLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.PessoaNacionalidade;
+import br.com.argousForms.model.persistencia.cadastro.PessoaNacionalidadeLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLogin;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioOrigemLoginLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioPerfil;
@@ -46,6 +50,7 @@ import br.com.argousForms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
 import br.com.argousForms.security.CodigoConfirmacao;
 import br.com.argousForms.security.PoliticaSenha;
 import br.com.argousForms.security.SenhaSegura;
+import br.com.argousForms.organizacao.VinculosOrganizacaoService;
 
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
@@ -197,6 +202,105 @@ public final class ManutencaoUsuarioService {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;
 			}
+		}
+	}
+
+	public void excluirUsuario( UUID idUsuario, UUID idAutenticado ) throws Exception {
+
+		if( idUsuario.equals( idAutenticado ) ) throw new ArgousFormsApiException( 409, "AUTOEXCLUSAO_NEGADA", "Você não pode excluir sua própria conta." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado ou já excluído." );
+				exigirOutroAdministrador( conexao, idUsuario );
+				revogarSessoes( conexao, idUsuario );
+				revogarPerfis( conexao, idUsuario );
+				revogarConfirmacoes( conexao, idUsuario );
+				new VinculosOrganizacaoService().desativarUsuario( conexao, idUsuario );
+				usuario.setCdHashSenha( null );
+				usuario.setDtExclusao( agora() );
+				new UsuarioSistemaNegocio( conexao, usuario ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public void excluirPessoa( UUID idPessoa ) throws Exception {
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Pessoa pessoa = pessoa( conexao, idPessoa );
+				if( pessoa == null || pessoa.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "PESSOA_NAO_ENCONTRADA", "Pessoa não encontrada ou já excluída." );
+				if( usuarioDaPessoa( conexao, idPessoa ) != null ) throw new ArgousFormsApiException( 409, "PESSOA_COM_HISTORICO", "Esta Pessoa já esteve vinculada a uma conta e não pode ser excluída." );
+				List<PessoaIdentificacao> identificacoes = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.PESSOA_IDENTIFICACOES where ID_PESSOA = :id" );
+					query.setParameter( "id", idPessoa.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						PessoaIdentificacao identificacao = new PessoaIdentificacao();
+						PessoaIdentificacaoLocalizador.buscaCampos( identificacao, query );
+						identificacoes.add( identificacao );
+					} while ( query.next() );
+				}
+				for( PessoaIdentificacao identificacao : identificacoes ) new PessoaIdentificacaoNegocio( conexao, identificacao ).exclui();
+				List<PessoaNacionalidade> nacionalidades = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.PESSOA_NACIONALIDADES where ID_PESSOA = :id" );
+					query.setParameter( "id", idPessoa.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						PessoaNacionalidade nacionalidade = new PessoaNacionalidade();
+						PessoaNacionalidadeLocalizador.buscaCampos( nacionalidade, query );
+						nacionalidades.add( nacionalidade );
+					} while ( query.next() );
+				}
+				for( PessoaNacionalidade nacionalidade : nacionalidades ) new PessoaNacionalidadeNegocio( conexao, nacionalidade ).exclui();
+				new PessoaNegocio( conexao, pessoa ).exclui();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private static void exigirOutroAdministrador( Conexao conexao, UUID idUsuario ) throws Exception {
+
+		try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_PERFIL from Cadastro.PERFIS where CD_PERFIL = 'ADMINISTRADOR' for update" ) ) {
+			bloqueio.executeQuery().close();
+		}
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select 1 from Cadastro.USUARIO_PERFIS up join Cadastro.PERFIS p on p.ID_PERFIL = up.ID_PERFIL where up.ID_USUARIO_SISTEMA = :id and p.CD_PERFIL = 'ADMINISTRADOR' and p.SN_ATIVO = true and p.DT_EXCLUSAO is null and up.DT_REVOGACAO is null and (up.DT_INICIO_VIGENCIA is null or up.DT_INICIO_VIGENCIA <= CURRENT_TIMESTAMP) and (up.DT_FIM_VIGENCIA is null or up.DT_FIM_VIGENCIA > CURRENT_TIMESTAMP)" );
+			query.setParameter( "id", idUsuario.toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) return;
+		}
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select 1 from Cadastro.USUARIOS_SISTEMA u join Cadastro.USUARIO_PERFIS up on up.ID_USUARIO_SISTEMA = u.ID_USUARIO_SISTEMA join Cadastro.PERFIS p on p.ID_PERFIL = up.ID_PERFIL where u.ID_USUARIO_SISTEMA <> :id and u.DT_EXCLUSAO is null and p.CD_PERFIL = 'ADMINISTRADOR' and p.SN_ATIVO = true and p.DT_EXCLUSAO is null and up.DT_REVOGACAO is null and (up.DT_INICIO_VIGENCIA is null or up.DT_INICIO_VIGENCIA <= CURRENT_TIMESTAMP) and (up.DT_FIM_VIGENCIA is null or up.DT_FIM_VIGENCIA > CURRENT_TIMESTAMP)" );
+			query.setParameter( "id", idUsuario.toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) throw new ArgousFormsApiException( 409, "ULTIMO_ADMINISTRADOR", "Defina outro administrador antes de excluir esta conta." );
+		}
+	}
+
+	private static void revogarConfirmacoes( Conexao conexao, UUID idUsuario ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :id and DT_CONFIRMACAO is null and DT_REVOGACAO is null" );
+			query.setParameter( "id", idUsuario.toString() );
+			query.executeQuery();
+			if( !query.isEmpty() ) do {
+				ConfirmacaoEmail confirmacao = new ConfirmacaoEmail();
+				ConfirmacaoEmailLocalizador.buscaCampos( confirmacao, query );
+				confirmacao.setDtRevogacao( agora() );
+				new ConfirmacaoEmailNegocio( conexao, confirmacao ).altera();
+			} while ( query.next() );
 		}
 	}
 
@@ -501,6 +605,7 @@ public final class ManutencaoUsuarioService {
 		}
 		for( UUID id : desejados ) if( !existentes.contains( id ) ) {
 			UsuarioPerfil perfil = new UsuarioPerfil();
+			perfil.setIdUsuarioPerfil( UUID.randomUUID() );
 			perfil.setIdUsuarioSistema( idUsuario );
 			perfil.setIdPerfil( id );
 			perfil.setDtInclusao( agora() );

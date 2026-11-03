@@ -1,0 +1,54 @@
+-- Aplicar pelo proprietário do schema Cadastro, após revisar vínculos existentes.
+-- Regras equivalentes são verificadas pelo serviço antes da gravação.
+BEGIN;
+
+CREATE OR REPLACE FUNCTION Cadastro.validar_usuario_grupo() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.SN_ATIVO AND NOT EXISTS (
+        SELECT 1 FROM Cadastro.USUARIOS_SISTEMA u JOIN Cadastro.GRUPOS g ON g.ID_GRUPO = NEW.ID_GRUPO
+        WHERE u.ID_USUARIO_SISTEMA = NEW.ID_USUARIO_SISTEMA AND u.DT_EXCLUSAO IS NULL AND g.SN_ATIVO
+    ) THEN
+        RAISE EXCEPTION 'Vínculo ativo exige usuário e grupo ativos.';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS TRG_VALIDAR_USUARIO_GRUPO ON Cadastro.USUARIO_GRUPOS;
+CREATE TRIGGER TRG_VALIDAR_USUARIO_GRUPO BEFORE INSERT OR UPDATE ON Cadastro.USUARIO_GRUPOS FOR EACH ROW EXECUTE FUNCTION Cadastro.validar_usuario_grupo();
+
+CREATE OR REPLACE FUNCTION Cadastro.validar_usuario_tag() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.SN_ATIVA AND NOT EXISTS (
+        SELECT 1 FROM Cadastro.USUARIOS_SISTEMA u JOIN Cadastro.TAGS t ON t.CD_TAG = NEW.CD_TAG
+        WHERE u.ID_USUARIO_SISTEMA = NEW.ID_USUARIO_SISTEMA AND u.DT_EXCLUSAO IS NULL AND t.SN_ATIVA AND t.SN_USUARIO
+    ) THEN
+        RAISE EXCEPTION 'Tag de usuário ativa exige usuário ativo e tag habilitada.';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS TRG_VALIDAR_USUARIO_TAG ON Cadastro.USUARIO_TAGS;
+CREATE TRIGGER TRG_VALIDAR_USUARIO_TAG BEFORE INSERT OR UPDATE ON Cadastro.USUARIO_TAGS FOR EACH ROW EXECUTE FUNCTION Cadastro.validar_usuario_tag();
+
+CREATE OR REPLACE FUNCTION Cadastro.validar_vinculo_tag() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.SN_ATIVO AND NOT EXISTS (
+        SELECT 1 FROM Cadastro.USUARIO_GRUPOS ug
+        JOIN Cadastro.USUARIOS_SISTEMA u ON u.ID_USUARIO_SISTEMA = ug.ID_USUARIO_SISTEMA
+        JOIN Cadastro.GRUPOS g ON g.ID_GRUPO = ug.ID_GRUPO
+        JOIN Cadastro.TAGS t ON t.CD_TAG = NEW.CD_TAG
+        WHERE ug.ID_USUARIO_SISTEMA = NEW.ID_USUARIO_SISTEMA AND ug.ID_GRUPO = NEW.ID_GRUPO
+          AND ug.SN_ATIVO AND u.DT_EXCLUSAO IS NULL AND g.SN_ATIVO AND t.SN_ATIVA AND t.SN_VINCULO
+    ) THEN
+        RAISE EXCEPTION 'Tag de vínculo ativa exige participação ativa e tag habilitada.';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS TRG_VALIDAR_VINCULO_TAG ON Cadastro.VINCULO_TAGS;
+CREATE TRIGGER TRG_VALIDAR_VINCULO_TAG BEFORE INSERT OR UPDATE ON Cadastro.VINCULO_TAGS FOR EACH ROW EXECUTE FUNCTION Cadastro.validar_vinculo_tag();
+
+COMMIT;

@@ -36,4 +36,19 @@ final class GrupoTagNegocioSeguro extends GrupoTagNegocio {
 		}
 		if( !aposAlterar( getConexao() ) ) throw new ErroDeNegocio( getMsgErro() );
 	}
+
+	@Override
+	public void exclui() throws QtSQLException, ErroDeNegocio {
+
+		if( !antesDeExcluir() ) throw new ErroDeNegocio( getMsgErro() );
+		GrupoTag vinculo = (GrupoTag) getTabelaBasica();
+		try ( PreparedStatement comando = getConexao().getConnection().prepareStatement( "delete from Cadastro.GRUPO_TAGS where ID_GRUPO = ? and CD_TAG = ?" ) ) {
+			comando.setInt( 1, vinculo.getIdGrupo() );
+			comando.setString( 2, vinculo.getCdTag() );
+			if( comando.executeUpdate() != 1 ) throw new QtSQLException( "Não foi possível excluir a tag do grupo." );
+		} catch ( SQLException e ) {
+			throw new QtSQLException( e );
+		}
+		if( !aposExcluir( getConexao() ) ) throw new ErroDeNegocio( getMsgErro() );
+	}
 }

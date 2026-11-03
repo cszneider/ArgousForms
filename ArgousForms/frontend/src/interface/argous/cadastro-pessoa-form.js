@@ -174,5 +174,6 @@ export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved,
       <Button type="submit" variant="contained" disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
       {onCancel && <Button type="button" onClick={onCancel} disabled={saving}>Fechar</Button>}
     </Box>
+    {erro && <Alert severity="error">{erro}</Alert>}
   </Box>;
 }

@@ -111,7 +111,8 @@ public final class PessoasUsuariosService {
 		Map<String, JSONObject> usuariosPorId = new HashMap<>();
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select p.ID_PESSOA, p.DS_NOME_PESSOA, p.DS_NOME_SOCIAL, p.DS_END_EMAIL, p.DS_TELEFONE "
+				query.setSQL( "select p.ID_PESSOA, p.DS_NOME_PESSOA, p.DS_NOME_SOCIAL, p.DS_END_EMAIL, p.DS_TELEFONE, "
+					+ "exists (select 1 from Cadastro.USUARIOS_SISTEMA u where u.ID_PESSOA = p.ID_PESSOA) as CONTA_HISTORICA "
 					+ "from Cadastro.PESSOAS p where p.DT_EXCLUSAO is null "
 					+ "and not exists (select 1 from Cadastro.USUARIOS_SISTEMA u where u.ID_PESSOA = p.ID_PESSOA and u.DT_EXCLUSAO is null) "
 					+ "order by p.DS_NOME_PESSOA, p.ID_PESSOA" );
@@ -124,6 +125,7 @@ public final class PessoasUsuariosService {
 						pessoa.put( "nomeSocial", query.getString( "DS_NOME_SOCIAL" ) );
 						pessoa.put( "email", query.getString( "DS_END_EMAIL" ) );
 						pessoa.put( "telefone", query.getString( "DS_TELEFONE" ) );
+						pessoa.put( "contaHistorica", query.getBoolean( "CONTA_HISTORICA" ) );
 						pessoas.put( pessoa );
 					} while ( query.next() );
 				}

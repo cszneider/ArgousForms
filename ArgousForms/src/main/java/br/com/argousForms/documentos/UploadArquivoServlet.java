@@ -42,7 +42,8 @@ public final class UploadArquivoServlet extends HttpServlet {
 		try {
 			request.setCharacterEncoding( "UTF-8" );
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
-			if( !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
+			UUID idProtocoloModelo = request.getParameter( "idProtocoloModelo" ) == null ? null : uuid( request.getParameter( "idProtocoloModelo" ) );
+			if( idProtocoloModelo == null && !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
 				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode enviar arquivos." );
 			}
 			int limite = upload.limiteBytes();
@@ -53,19 +54,24 @@ public final class UploadArquivoServlet extends HttpServlet {
 			if( parte.getSize() > limite ) throw limiteExcedido( limite );
 
 			String nome = nomeSeguro( parte.getSubmittedFileName() );
-			UUID idPasta = uuid( request.getParameter( "idPasta" ) );
-			String classificacao = request.getParameter( "classificacao" );
-			String titulo = request.getParameter( "titulo" );
-			String descricao = request.getParameter( "descricao" );
-			Integer dias = dias( request.getParameter( "diasValidade" ) );
-			boolean novaVersao = "NOVA_VERSAO".equals( request.getParameter( "modoConflito" ) );
+			UUID idPasta = idProtocoloModelo == null ? uuid( request.getParameter( "idPasta" ) ) : null;
+			String classificacao = idProtocoloModelo == null ? request.getParameter( "classificacao" ) : "L";
+			String titulo = idProtocoloModelo == null ? request.getParameter( "titulo" ) : nome;
+			String descricao = idProtocoloModelo == null ? request.getParameter( "descricao" ) : null;
+			Integer dias = idProtocoloModelo == null ? dias( request.getParameter( "diasValidade" ) ) : null;
+			boolean novaVersao = idProtocoloModelo == null && "NOVA_VERSAO".equals( request.getParameter( "modoConflito" ) );
 
 			temporario = Files.createTempFile( "agforms-upload-", ".bin" );
 			MessageDigest digest = MessageDigest.getInstance( "SHA-256" );
 			int tamanho = copiarLimitado( parte, temporario, digest, limite );
+			if( idProtocoloModelo != null && !pdfValido( temporario ) ) {
+				throw new ArgousFormsApiException( 400, "PDF_INVALIDO", "Escolha um arquivo PDF válido para o modelo." );
+			}
 			String hash = HexFormat.of().formatHex( digest.digest() );
 			ArgousFormsJson.enviarSucesso( response, 201, upload.enviar( usuario, getServletContext(), idPasta, temporario,
-				nome, titulo, descricao, parte.getContentType(), classificacao, dias, novaVersao, tamanho, hash ) );
+				nome, titulo, descricao, idProtocoloModelo == null ? parte.getContentType() : "application/pdf",
+				classificacao, dias, novaVersao, tamanho, hash, idProtocoloModelo,
+				request.getParameter( "codigoModelo" ), request.getParameter( "observacoesModelo" ) ) );
 		} catch ( ArgousFormsApiException e ) {
 			ArgousFormsJson.enviarErro( response, e.getStatusHttp(), e.getCodigoErro(), e.getMessage() );
 		} catch ( MongoException e ) {
@@ -84,6 +90,13 @@ public final class UploadArquivoServlet extends HttpServlet {
 			if( parte != null ) {
 				try { parte.delete(); } catch ( IOException e ) { LOG.log( Level.WARNING, "Falha ao limpar arquivo temporário do multipart", e ); }
 			}
+		}
+	}
+
+	private boolean pdfValido( Path arquivo ) throws IOException {
+
+		try ( InputStream entrada = Files.newInputStream( arquivo ) ) {
+			return entrada.read() == '%' && entrada.read() == 'P' && entrada.read() == 'D' && entrada.read() == 'F' && entrada.read() == '-';
 		}
 	}
 

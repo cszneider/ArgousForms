@@ -40,13 +40,18 @@ public final class ArquivoConteudoServlet extends HttpServlet {
 			UUID idArquivo;
 			try { idArquivo = UUID.fromString( request.getParameter( "idArquivo" ) ); }
 			catch ( Exception e ) { throw new ArgousFormsApiException( 400, "ARQUIVO_INVALIDO", "Informe um arquivo válido." ); }
+			UUID idVersao = null;
+			if( request.getParameter( "idArquivoVersao" ) != null ) {
+				try { idVersao = UUID.fromString( request.getParameter( "idArquivoVersao" ) ); }
+				catch ( Exception e ) { throw new ArgousFormsApiException( 400, "VERSAO_INVALIDA", "Informe uma versão válida do arquivo." ); }
+			}
 			String modo = request.getParameter( "modo" );
 			if( !( "visualizar".equals( modo ) || "baixar".equals( modo ) ) ) {
 				throw new ArgousFormsApiException( 400, "MODO_INVALIDO", "Informe visualizar ou baixar." );
 			}
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			boolean baixar = "baixar".equals( modo );
-			DocumentosService.Conteudo conteudo = documentos.conteudo( usuario, idArquivo, baixar );
+			DocumentosService.Conteudo conteudo = documentos.conteudo( usuario, idArquivo, idVersao, baixar );
 			String mime = conteudo.contentType() == null ? "application/octet-stream" : conteudo.contentType().toLowerCase( Locale.ROOT );
 			if( !mime.matches( "[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+" ) ) mime = "application/octet-stream";
 			if( !baixar && !visualizavel( mime ) ) {

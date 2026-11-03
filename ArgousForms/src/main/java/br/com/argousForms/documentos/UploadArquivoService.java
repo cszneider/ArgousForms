@@ -21,6 +21,7 @@ import br.com.argousForms.model.negocio.docs.ArquivoNegocio;
 import br.com.argousForms.model.negocio.docs.ArquivoVersaoNegocio;
 import br.com.argousForms.model.persistencia.docs.Arquivo;
 import br.com.argousForms.model.persistencia.docs.ArquivoVersao;
+import br.com.argousForms.protocolos.ProtocolosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
@@ -45,9 +46,10 @@ public final class UploadArquivoService {
 
 	public JSONObject enviar( AutenticacaoLocalService.Usuario usuario, ServletContext contexto, UUID idPasta, Path temporario,
 		String nomeInformado, String tituloInformado, String descricaoInformada, String contentTypeInformado,
-		String classificacao, Integer diasValidade, boolean novaVersao, int tamanho, String hash ) throws Exception {
+		String classificacao, Integer diasValidade, boolean novaVersao, int tamanho, String hash, UUID idProtocoloModelo,
+		String codigoModelo, String observacoesModelo ) throws Exception {
 
-		if( idPasta == null ) throw new ArgousFormsApiException( 400, "PASTA_OBRIGATORIA", "Escolha a pasta de destino." );
+		if( idPasta == null && idProtocoloModelo == null ) throw new ArgousFormsApiException( 400, "PASTA_OBRIGATORIA", "Escolha a pasta de destino." );
 		String nome = nomeInformado == null ? "" : nomeInformado.strip();
 		String titulo = tituloInformado == null || tituloInformado.isBlank() ? nome : tituloInformado.strip();
 		String descricao = descricaoInformada == null || descricaoInformada.isBlank() ? null : descricaoInformada.strip();
@@ -69,7 +71,9 @@ public final class UploadArquivoService {
 			boolean enviado = false;
 			boolean commitTentado = false;
 			try {
-				documentos.exigirInclusao( conexao, usuario, idPasta );
+				if( idProtocoloModelo != null ) idPasta = new ProtocolosService().prepararPastaModelos( conexao, usuario, idProtocoloModelo );
+				if( idProtocoloModelo == null ) documentos.exigirInclusao( conexao, usuario, idPasta );
+				else new ProtocolosService().exigirPastaModelos( conexao, usuario, idProtocoloModelo, idPasta );
 				bloquearPasta( conexao, idPasta );
 				Arquivo existente = localizarArquivo( conexao, idPasta, nome );
 				Arquivo arquivo;
@@ -107,6 +111,10 @@ public final class UploadArquivoService {
 				versao.setDtInclusao( new QtData( Instant.now().toEpochMilli() ) );
 				new ArquivoVersaoNegocio( conexao, versao ).insere();
 				idVersao = versao.getIdArquivoVersao();
+				if( idProtocoloModelo != null ) {
+					new ProtocolosService().registrarModeloPdf( conexao, usuario, idProtocoloModelo, idVersao,
+						codigoModelo, titulo, observacoesModelo );
+				}
 
 				try ( InputStream conteudo = Files.newInputStream( temporario ) ) {
 					mongo.enviar( arquivo.getIdArquivo(), idVersao, nome, arquivo.getDsTitulo(), arquivo.getCdContentType(), conteudo );
