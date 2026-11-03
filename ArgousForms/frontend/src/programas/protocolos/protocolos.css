@@ -3,37 +3,49 @@
   margin: 0 auto;
   padding: 18px 18px 60px;
 }
-.pdf-campos-controles {
+.pdf-campos-barra {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px 0;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--theme-border, #d7e1de);
+  border-radius: 8px;
+  background: var(--theme-surface, #fff);
+  box-shadow: 0 2px 8px #0001;
 }
-.pdf-campos-ferramentas {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.pdf-campos-ferramentas-linha {
-  display: flex;
+.pdf-campos-grupo {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 2px;
+  min-height: 42px;
+  padding: 0 8px;
+  border-right: 1px solid var(--theme-border, #d7e1de);
 }
-.pdf-campos-ferramentas-linha strong {
-  margin-right: 4px;
-  font-size: 13px;
+.pdf-campos-grupo-pagina {
+  border-right: 0;
 }
-.pdf-campos-ferramentas-linha > span {
+.pdf-campos-grupo-pagina > span {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.pdf-campos-ferramenta-ativa {
+  background: var(--theme-canvas, #edf5f2) !important;
+  color: var(--theme-primary, #19766e) !important;
+}
+.pdf-campos-barra-estado {
+  flex-basis: 100%;
+  padding: 2px 8px 0;
   color: var(--theme-text-secondary, #697a89);
   font-size: 12px;
 }
 .pdf-campos-cor {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
 }
 .pdf-campos-cor input {
   width: 38px;
@@ -88,6 +100,15 @@
   border: 2px solid #1761c0;
   background: #c7dcffbb;
   color: #123e72;
+}
+.pdf-campos-marcador-referencia {
+  outline: 2px solid #db8b18;
+  outline-offset: 2px;
+}
+.pdf-campos-referencia {
+  margin-left: 8px;
+  color: #a45c00;
+  font-size: 11px;
 }
 .pdf-campos-mover {
   display: block;
