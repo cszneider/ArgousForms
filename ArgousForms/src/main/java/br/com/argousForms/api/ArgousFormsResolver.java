@@ -37,6 +37,7 @@ import br.com.argousForms.documentos.UploadArquivoService;
 import br.com.argousForms.pessoas.PessoasUsuariosService;
 import br.com.argousForms.pessoas.ManutencaoUsuarioService;
 import br.com.argousForms.protocolos.ProtocolosService;
+import br.com.argousForms.protocolos.FluxoProtocolosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -58,6 +59,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
 	private final ManutencaoUsuarioService manutencaoUsuarios = new ManutencaoUsuarioService();
 	private final ProtocolosService protocolos = new ProtocolosService();
+	private final FluxoProtocolosService fluxoProtocolos = new FluxoProtocolosService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -172,6 +174,25 @@ public final class ArgousFormsResolver extends HttpServlet {
 			}
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarFormulario( usuario, uuidObrigatorio( dados, "idProtocolo" ),
 				uuidOpcional( dados, "idFormulario" ), dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), campos ) );
+			return;
+		}
+
+		if( "CATALOGO_DESTINATARIOS_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.catalogo( usuario ) );
+			return;
+		}
+
+		if( "CONSULTAR_FLUXO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.consultar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "SALVAR_FLUXO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.salvar( usuario, uuidObrigatorio( dados, "idProtocolo" ),
+				dados.optJSONArray( "etapas" ), dados.optJSONArray( "ligacoes" ), dados.optString( "inicio", null ) ) );
 			return;
 		}
 

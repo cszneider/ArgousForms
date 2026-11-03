@@ -28,16 +28,15 @@ BEGIN
         END IF;
         IF TG_OP = 'INSERT' THEN RAISE EXCEPTION 'Crie o rascunho antes de publicar o Protocolo.'; END IF;
 
-        SELECT count(*) FILTER (WHERE TP_ETAPA = 'I'), count(*) FILTER (WHERE TP_ETAPA = 'F')
-          INTO iniciais, finais FROM Processos.PROTOCOLOS_ETAPAS
-         WHERE ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO;
+        SELECT count(*) FILTER (WHERE NOT EXISTS (
+                   SELECT 1 FROM Processos.ENCAMINHAMENTOS caminho
+                    WHERE caminho.ID_PROTOCOLO_VERSAO = etapa.ID_PROTOCOLO_VERSAO
+                      AND caminho.ID_PROXIMA_ETAPA = etapa.ID_PROTOCOLO_ETAPA)),
+               count(*) FILTER (WHERE etapa.ID_ENCAMINHAMENTO IS NULL)
+          INTO iniciais, finais FROM Processos.PROTOCOLOS_ETAPAS etapa
+         WHERE etapa.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO;
         IF iniciais <> 1 OR finais < 1 THEN
-            RAISE EXCEPTION 'Publicação requer uma etapa inicial e pelo menos uma final.';
-        END IF;
-        IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS
-                    WHERE ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO
-                      AND TP_ETAPA = 'F' AND ID_ENCAMINHAMENTO IS NOT NULL) THEN
-            RAISE EXCEPTION 'Etapa final não pode ter encaminhamento.';
+            RAISE EXCEPTION 'Publicação requer uma etapa após o início e pelo menos uma etapa que leve ao fim.';
         END IF;
         IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS e
                     WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO
@@ -146,9 +145,6 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM Processos.FORMULARIOS WHERE ID_FORMULARIO = NEW.ID_FORMULARIO
                    AND ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO) THEN
         RAISE EXCEPTION 'Formulário e etapa devem pertencer à mesma versão do Protocolo.';
-    END IF;
-    IF NEW.TP_ETAPA = 'F' AND NEW.ID_ENCAMINHAMENTO IS NOT NULL THEN
-        RAISE EXCEPTION 'Etapa final não pode ter encaminhamento.';
     END IF;
     IF NEW.ID_ENCAMINHAMENTO IS NOT NULL AND NOT EXISTS
        (SELECT 1 FROM Processos.ENCAMINHAMENTOS WHERE ID_ENCAMINHAMENTO = NEW.ID_ENCAMINHAMENTO

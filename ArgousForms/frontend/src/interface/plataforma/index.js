@@ -1,5 +1,6 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
+import { lerMenuCompacto, salvarMenuCompacto } from '../../utils/sidebar-preference.js';
 import PlatformUsers from './users.js';
 import PlatformClients from './clients.js';
 import UserSettings from '../configuracoes/index.js';
@@ -37,6 +38,7 @@ export default function Platform() {
       loading: false,
       view: 'overview',
       mobile: false,
+      sidebarCollapsed: false,
       data: null,
       workspace: null,
       error: '',
@@ -64,6 +66,16 @@ export default function Platform() {
   );
 
   const { t } = useI18n();
+
+  useEffect(() => {
+    dispatch({ field: 'sidebarCollapsed', value: lerMenuCompacto() });
+  }, []);
+
+  const alternarMenu = useCallback(() => {
+    const compacto = !pageState.sidebarCollapsed;
+    salvarMenuCompacto(compacto);
+    dispatch({ field: 'sidebarCollapsed', value: compacto });
+  }, [pageState.sidebarCollapsed]);
 
   const refresh = useCallback(() => {
     try {
@@ -112,11 +124,12 @@ export default function Platform() {
       initialStateRef,
       refresh,
       signOut,
+      alternarMenu,
     };
-  }, [pageState, clients, refresh, signOut]);
+  }, [pageState, clients, refresh, signOut, alternarMenu]);
   return (
     <PlatformContext.Provider value={contextValues}>
-      <div className="app-shell">
+      <div className={`app-shell${pageState.sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         <PlatformNavigation />
         <div className="app-body">
           <header className="topbar no-print">

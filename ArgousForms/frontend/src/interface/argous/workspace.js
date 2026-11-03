@@ -1,5 +1,6 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
+import { lerMenuCompacto, salvarMenuCompacto } from '../../utils/sidebar-preference.js';
 import UserSettings from '../configuracoes/index.js';
 import CadastroPessoaForm from './cadastro-pessoa-form.js';
 import GestorDocumentos from '../../programas/gestor-documentos/gestor-documentos.js';
@@ -66,6 +67,8 @@ import {
   CheckCircle2,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   FileText,
   Settings2,
   UserPlus,
@@ -140,6 +143,7 @@ export default function Workspace() {
       documentId: null,
       editor: null,
       mobile: false,
+      sidebarCollapsed: false,
       toast: null,
       newOpen: false,
       newTemplate: '',
@@ -203,6 +207,7 @@ export default function Workspace() {
     documentId,
     editor,
     mobile,
+    sidebarCollapsed,
     toast,
     newOpen,
     newTemplate,
@@ -257,6 +262,16 @@ export default function Workspace() {
   );
 
   const { t: tr, locale, system } = useI18n();
+
+  useEffect(() => {
+    dispatch({ field: 'sidebarCollapsed', value: lerMenuCompacto() });
+  }, []);
+
+  const alternarMenu = () => {
+    const compacto = !sidebarCollapsed;
+    salvarMenuCompacto(compacto);
+    dispatch({ field: 'sidebarCollapsed', value: compacto });
+  };
 
   const carregarOrganizacao = useCallback(async () => {
     dispatch({ field: 'organizacaoLoading', value: true });
@@ -928,11 +943,16 @@ export default function Workspace() {
   };
   const sidebar = (
     <div className="sidebar-inner">
-      <div className="brand sidebar-brand" role="img" aria-label="ArgousDocs">
-        <span className="brand-icon">
-          <FileStack size={23} />
-        </span>
-        Argous<span>Docs</span>
+      <div className="sidebar-heading">
+        <div className="brand sidebar-brand" role="img" aria-label="ArgousDocs">
+          <span className="brand-icon"><FileStack size={23} /></span>
+          <span className="sidebar-brand-name">Argous<span>Docs</span></span>
+        </div>
+        <IconButton className="sidebar-collapse-toggle" onClick={alternarMenu}
+          aria-label={tr(sidebarCollapsed ? 'Expandir menu' : 'Recolher menu')}
+          title={tr(sidebarCollapsed ? 'Expandir menu' : 'Recolher menu')}>
+          {sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+        </IconButton>
       </div>
       <span className="nav-label">{tr('ESPAÇO DE TRABALHO')}</span>
       <nav className="side-nav">
@@ -942,6 +962,8 @@ export default function Workspace() {
             <button
               className={view === v ? 'active' : ''}
               key={v}
+              aria-label={tr(label)}
+              title={sidebarCollapsed ? tr(label) : undefined}
               onClick={() => navigate(v)}
             >
               <Icon size={19} />
@@ -954,6 +976,7 @@ export default function Workspace() {
           {canManageOwnData && <Button
             onClick={(event) => dispatch({ field: 'menuPessoalAnchor', value: event.currentTarget })}
             aria-label={tr('Menu do usuário')}
+            title={sidebarCollapsed ? tr('Menu do usuário') : undefined}
             aria-haspopup="menu"
             aria-expanded={Boolean(menuPessoalAnchor)}
             sx={{
@@ -978,7 +1001,7 @@ export default function Workspace() {
             >
               {initials(usuario?.nome || person.name)}
             </Avatar>
-            <div>
+            <div className="sidebar-profile-copy">
               <strong>{(usuario?.nome || person.name).trim().split(/\s+/)[0]}</strong>
               <small title={usuario?.perfis?.join(', ')}>{usuario ? profileSummary(usuario.perfis) : tr(roleLabel(person))}</small>
             </div>
@@ -1130,7 +1153,7 @@ export default function Workspace() {
   );
   return (
     <WorkspaceContext.Provider value={contextValues}>
-      <div className="app-shell">
+      <div className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         <aside className="desktop-sidebar">{sidebar}</aside>
         <Drawer
           open={mobile}

@@ -566,6 +566,73 @@ footer {
   padding: 29px 23px 28px;
   font-size: 22px;
 }
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-heading .sidebar-brand {
+  min-width: 0;
+  padding-left: 14px;
+  padding-right: 0;
+  font-size: 19px;
+}
+.sidebar-heading .sidebar-brand .brand-icon {
+  width: 35px;
+  height: 35px;
+  margin-right: 7px;
+}
+.sidebar-heading .sidebar-brand-name {
+  font-weight: 750;
+}
+.sidebar-brand-name > span {
+  font-weight: 400;
+}
+.sidebar-collapse-toggle.MuiIconButton-root {
+  flex: 0 0 auto;
+  margin-right: 9px;
+}
+.app-shell.sidebar-collapsed .desktop-sidebar {
+  width: 72px;
+}
+.app-shell.sidebar-collapsed .app-body {
+  margin-left: 72px;
+}
+.sidebar-collapsed .sidebar-heading {
+  flex-direction: column;
+}
+.sidebar-collapsed .sidebar-heading .sidebar-brand {
+  padding: 20px 0 6px;
+}
+.sidebar-collapsed .sidebar-brand-name,
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .side-nav button span,
+.sidebar-collapsed .sidebar-profile-copy {
+  display: none;
+}
+.sidebar-collapsed .sidebar-collapse-toggle.MuiIconButton-root {
+  margin: 0 0 14px;
+}
+.sidebar-collapsed .side-nav {
+  padding: 0 10px;
+}
+.sidebar-collapsed .side-nav button {
+  justify-content: center;
+  padding: 13px 0;
+}
+.sidebar-collapsed .sidebar-bottom {
+  padding: 20px 8px;
+}
+.sidebar-collapsed .profile-exit {
+  flex-direction: column;
+  justify-content: center;
+}
+.sidebar-collapsed .profile-exit .MuiButton-root {
+  justify-content: center !important;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
 .nav-label {
   font-size: 10px;
   letter-spacing: 1.1px;
@@ -1852,6 +1919,12 @@ footer {
   }
   .app-body {
     margin-left: 0;
+  }
+  .app-shell.sidebar-collapsed .app-body {
+    margin-left: 0;
+  }
+  .sidebar-collapse-toggle.MuiIconButton-root {
+    display: none;
   }
   .mobile-menu.MuiIconButton-root {
     display: inline-flex;

@@ -39,6 +39,7 @@ import {
 } from './protocolos-store.js';
 import SeletorPasta from './seletor-pasta.js';
 import PdfCampos from './pdf-campos.js';
+import FluxoEditorCarregador from './fluxo-editor-carregador.js';
 import { REGEX_PRONTAS, normalizarValorExemplo, validarDefinicaoTexto } from './variavel-texto.js';
 
 const areas = [
@@ -988,24 +989,13 @@ export default function Protocolos({ usuarioId }) {
                       <h2>{t('Fluxo')}</h2>
                       <p>
                         {t(
-                          'Aqui serão conectadas as etapas inicial, operacionais e finais.',
+                          'Aqui serão conectadas as etapas do Protocolo, do início aos pontos finais.',
                         )}
                       </p>
                     </div>
                   </div>
-                  <div className="protocolos-canvas-shell">
-                    <div className="protocolos-start-marker">I</div>
-                    <div className="protocolos-canvas-line" />
-                    <div className="protocolos-canvas-placeholder">
-                      <GitBranch size={24} />
-                      <strong>{t('Editor visual do fluxo')}</strong>
-                      <span>
-                        {t(
-                          'O canvas será desenvolvido na próxima etapa da interface.',
-                        )}
-                      </span>
-                    </div>
-                  </div>
+                  <FluxoEditorCarregador key={protocolo.id} idProtocolo={protocolo.id} formularios={protocolo.rascunho.formularios}
+                    variaveis={protocolo.rascunho.variaveis} documentos={protocolo.rascunho.documentos} />
                 </>
               )}
               {area === 'documentos' && (
