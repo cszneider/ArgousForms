@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
+import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, TextField, Tooltip } from '@mui/material';
+import { AlignCenter, AlignEndHorizontal, AlignLeft, AlignRight, AlignStartHorizontal, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bold, ChevronLeft, ChevronRight, Eye, Italic, Underline } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
-import { alinharCampos, apresentacaoCampo } from './pdf-campos-layout.js';
+import { alinharCampos, apresentacaoCampo, moverCamposComSetas } from './pdf-campos-layout.js';
 
 const arredondar = (valor) => Math.round(valor * 100) / 100;
 const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(maximo, valor));
@@ -146,9 +147,27 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
   }
 
   function alinhar(direcao) {
-    if (selecionados.length < 2) return;
-    setCampos((atuais) => alinharCampos(atuais, selecionados, direcao));
+    if (selecionados.length < 2 || !tamanho) return;
+    if (alinharCampos(campos, selecionados, direcao, tamanho) === campos) {
+      setErro(t('O alinhamento ultrapassaria os limites da página.'));
+      return;
+    }
+    setErro('');
+    setCampos((atuais) => alinharCampos(atuais, selecionados, direcao, tamanho));
     setAlterado(true);
+  }
+
+  function deslocar(direcao) {
+    if (!selecionados.length || !tamanho || salvando || carregando) return;
+    setCampos((atuais) => moverCamposComSetas(atuais, selecionados, direcao, tamanho));
+    setAlterado(true);
+  }
+
+  function aoPressionarTecla(evento) {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(evento.key) || !selecionados.length || urlPrevia) return;
+    if (evento.target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"]')) return;
+    evento.preventDefault();
+    deslocar(evento.key);
   }
 
   function alterarApresentacao(chave, valor) {
@@ -203,69 +222,82 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
 
   const campoSelecionado = campos.find((campo) => campo.id === selecionados[0]);
   const estiloSelecionado = campoSelecionado ? apresentacaoCampo(campoSelecionado) : null;
+  const variavelReferencia = variaveis.find((item) => item.id === campoSelecionado?.idVariavel);
 
-  return <><Dialog open onClose={fechar} fullWidth maxWidth="lg">
+  return <><Dialog open onClose={fechar} onKeyDown={aoPressionarTecla} fullWidth maxWidth="lg">
     <DialogTitle>{t('Posicionar campos')} · {modelo.titulo}</DialogTitle>
     <DialogContent>
       {erro && <Alert severity="error" sx={{ mb: 2 }}>{erro}</Alert>}
-      <div className="pdf-campos-controles">
-        <TextField select size="small" label={t('Variável')} value={variavel} disabled={!variaveis.length || salvando}
-          onChange={(evento) => setVariavel(evento.target.value)} sx={{ minWidth: 220 }}>
-          <MenuItem value="">{t('Selecione uma variável')}</MenuItem>
-          {variaveis.map((item) => <MenuItem key={item.id} value={item.id}>{item.nome} · {'{{'}{item.codigo}{'}}'}</MenuItem>)}
-        </TextField>
-        <span>{t(variavel ? 'Clique no PDF para posicionar a variável.' :
-          variaveis.length ? 'Escolha uma variável para posicionar.' : 'Este Protocolo ainda não possui variáveis.')}</span>
-        {!variaveis.length && <Button onClick={aoCriarVariavel}>{t('Cadastrar variável')}</Button>}
-        <Button disabled={pagina <= 1 || salvando} onClick={() => { setSelecionados([]); setPagina(pagina - 1); }}>{t('Anterior')}</Button>
-        <span>{t('Página')} {pagina} {t('de')} {totalPaginas || '…'}</span>
-        <Button disabled={pagina >= totalPaginas || salvando} onClick={() => { setSelecionados([]); setPagina(pagina + 1); }}>{t('Próxima')}</Button>
-        <Button variant="outlined" disabled={carregando || salvando || gerandoPrevia || !campos.length}
-          onClick={abrirPrevia}>
-          {t(gerandoPrevia ? 'Gerando prévia…' : 'Pré-visualizar PDF')}
-        </Button>
-      </div>
-      <div className="pdf-campos-ferramentas">
-        <div className="pdf-campos-ferramentas-linha">
-          <strong>{t('Alinhar campos')}</strong>
-          {[
-            ['topo', 'Topo'], ['baixo', 'Base'], ['esquerda', 'Esquerda'],
-            ['centro', 'Centralizar'], ['direita', 'Direita'],
-          ].map(([direcao, rotulo]) => <Button key={direcao} size="small" variant="outlined"
-            disabled={selecionados.length < 2 || salvando} onClick={() => alinhar(direcao)}>
-            {t(rotulo)}
-          </Button>)}
-          <span>{t('Selecione dois ou mais campos da mesma página.')}</span>
+      <div className="pdf-campos-barra" role="toolbar" aria-label={t('Ferramentas dos campos do PDF')}>
+        <div className="pdf-campos-grupo pdf-campos-grupo-variavel">
+          <TextField select size="small" label={t('Variável')} value={variavel} disabled={!variaveis.length || salvando}
+            onChange={(evento) => setVariavel(evento.target.value)} sx={{ minWidth: 210 }}>
+            <MenuItem value="">{t('Selecione uma variável')}</MenuItem>
+            {variaveis.map((item) => <MenuItem key={item.id} value={item.id}>{item.nome} · {'{{'}{item.codigo}{'}}'}</MenuItem>)}
+          </TextField>
+          {!variaveis.length && <Button onClick={aoCriarVariavel}>{t('Cadastrar variável')}</Button>}
         </div>
-        {estiloSelecionado && <div className="pdf-campos-ferramentas-linha">
-          <strong>{t('Fonte dos campos selecionados')}</strong>
-          <span>{selecionados.length} {t(selecionados.length === 1 ? 'campo' : 'campos')}</span>
-          <TextField select size="small" label={t('Fonte')} value={estiloSelecionado.fonte}
-            disabled={salvando} sx={{ minWidth: 145 }}
+        <div className="pdf-campos-grupo" aria-label={t('Alinhar campos')}>
+          {[
+            ['topo', 'Topo', AlignStartHorizontal], ['baixo', 'Base', AlignEndHorizontal],
+            ['esquerda', 'Esquerda', AlignLeft], ['centro', 'Centralizar', AlignCenter],
+            ['direita', 'Direita', AlignRight],
+          ].map(([direcao, rotulo, Icone]) => <Tooltip key={direcao} title={t(rotulo)}>
+            <span><IconButton size="small" aria-label={t(rotulo)} disabled={selecionados.length < 2 || salvando}
+              onClick={() => alinhar(direcao)}><Icone size={18} /></IconButton></span>
+          </Tooltip>)}
+        </div>
+        <div className="pdf-campos-grupo" aria-label={t('Mover 1 ponto')}>
+          {[[ArrowUp, 'ArrowUp', 'Para cima'], [ArrowDown, 'ArrowDown', 'Para baixo'],
+            [ArrowLeft, 'ArrowLeft', 'Para esquerda'], [ArrowRight, 'ArrowRight', 'Para direita']]
+            .map(([Icone, direcao, rotulo]) => <Tooltip key={direcao} title={t(rotulo)}>
+              <span><IconButton size="small" aria-label={t(rotulo)} disabled={!selecionados.length || salvando || carregando}
+                onClick={() => deslocar(direcao)}><Icone size={18} /></IconButton></span>
+            </Tooltip>)}
+        </div>
+        <div className="pdf-campos-grupo pdf-campos-grupo-fonte" aria-label={t('Fonte dos campos selecionados')}>
+          <TextField select size="small" label={t('Fonte')} value={estiloSelecionado?.fonte || ''}
+            disabled={!estiloSelecionado || salvando} sx={{ minWidth: 125 }}
             onChange={(evento) => alterarApresentacao('fonte', evento.target.value)}>
             <MenuItem value="HELVETICA">Helvetica</MenuItem>
             <MenuItem value="TIMES">Times</MenuItem>
             <MenuItem value="COURIER">Courier</MenuItem>
           </TextField>
-          <TextField size="small" type="number" label={t('Tamanho (pt)')} value={estiloSelecionado.tamanho}
-            disabled={salvando} inputProps={{ min: 4, max: 72, step: 0.5 }} sx={{ width: 125 }}
+          <TextField size="small" type="number" label={t('Tamanho (pt)')} value={estiloSelecionado?.tamanho ?? ''}
+            disabled={!estiloSelecionado || salvando} inputProps={{ min: 4, max: 72, step: 0.5 }} sx={{ width: 115 }}
             onChange={(evento) => {
               const tamanhoFonte = Number(evento.target.value);
               if (tamanhoFonte >= 4 && tamanhoFonte <= 72) alterarApresentacao('tamanho', tamanhoFonte);
             }} />
-          <label className="pdf-campos-cor">{t('Cor da fonte')}
-            <input type="color" value={estiloSelecionado.cor} disabled={salvando}
+          <label className="pdf-campos-cor" title={t('Cor da fonte')} aria-label={t('Cor da fonte')}>
+            <input type="color" value={estiloSelecionado?.cor || '#000000'} disabled={!estiloSelecionado || salvando}
               onChange={(evento) => alterarApresentacao('cor', evento.target.value)} />
           </label>
           {[
-            ['negrito', 'Negrito'], ['italico', 'Itálico'], ['sublinhado', 'Sublinhado'],
-          ].map(([chave, rotulo]) => <Button key={chave} size="small"
-            variant={estiloSelecionado[chave] ? 'contained' : 'outlined'} disabled={salvando}
-            aria-pressed={estiloSelecionado[chave]}
-            onClick={() => alterarApresentacao(chave, !estiloSelecionado[chave])}>
-            {t(rotulo)}
-          </Button>)}
-        </div>}
+            ['negrito', 'Negrito', Bold], ['italico', 'Itálico', Italic], ['sublinhado', 'Sublinhado', Underline],
+          ].map(([chave, rotulo, Icone]) => <Tooltip key={chave} title={t(rotulo)}>
+            <span><IconButton size="small" className={estiloSelecionado?.[chave] ? 'pdf-campos-ferramenta-ativa' : ''}
+              disabled={!estiloSelecionado || salvando} aria-label={t(rotulo)} aria-pressed={!!estiloSelecionado?.[chave]}
+              onClick={() => alterarApresentacao(chave, !estiloSelecionado[chave])}><Icone size={18} /></IconButton></span>
+          </Tooltip>)}
+        </div>
+        <div className="pdf-campos-grupo pdf-campos-grupo-pagina" aria-label={t('Página')}>
+          <Tooltip title={t('Anterior')}><span><IconButton size="small" aria-label={t('Anterior')}
+            disabled={pagina <= 1 || salvando} onClick={() => { setSelecionados([]); setPagina(pagina - 1); }}>
+            <ChevronLeft size={18} /></IconButton></span></Tooltip>
+          <span>{t('Página')} {pagina} {t('de')} {totalPaginas || '…'}</span>
+          <Tooltip title={t('Próxima')}><span><IconButton size="small" aria-label={t('Próxima')}
+            disabled={pagina >= totalPaginas || salvando} onClick={() => { setSelecionados([]); setPagina(pagina + 1); }}>
+            <ChevronRight size={18} /></IconButton></span></Tooltip>
+          <Tooltip title={t('Pré-visualizar PDF')}><span><IconButton size="small" aria-label={t('Pré-visualizar PDF')}
+            disabled={carregando || salvando || gerandoPrevia || !campos.length} onClick={abrirPrevia}>
+            <Eye size={18} /></IconButton></span></Tooltip>
+        </div>
+        <div className="pdf-campos-barra-estado" aria-live="polite">
+          {t(variavel ? 'Clique no PDF para posicionar a variável.' :
+            variaveis.length ? 'Escolha uma variável para posicionar.' : 'Este Protocolo ainda não possui variáveis.')}
+          {campoSelecionado && ` · ${t('Referência:')} ${variavelReferencia?.nome || t('Campo')} ${campos.indexOf(campoSelecionado) + 1}`}
+        </div>
       </div>
       <div className="pdf-campos-rolagem">
         {carregando && <p>{t('Carregando página…')}</p>}
@@ -277,7 +309,7 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
             const item = variaveis.find((v) => v.id === campo.idVariavel);
             const posicao = { left: `${campo.x / tamanho.largura * 100}%`, top: `${campo.y / tamanho.altura * 100}%`,
               width: `${campo.largura / tamanho.largura * 100}%`, height: `${campo.altura / tamanho.altura * 100}%` };
-            return <div className={`pdf-campos-marcador${selecionados.includes(campo.id) ? ' pdf-campos-marcador-selecionado' : ''}`} key={campo.id}
+            return <div className={`pdf-campos-marcador${selecionados.includes(campo.id) ? ' pdf-campos-marcador-selecionado' : ''}${selecionados[0] === campo.id ? ' pdf-campos-marcador-referencia' : ''}`} key={campo.id}
               style={posicao}>
               <button type="button" className="pdf-campos-mover" disabled={salvando}
                 aria-label={`${t('Mover variável')} ${item?.nome || ''}`}
@@ -300,6 +332,7 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
             inputProps={{ 'aria-label': `${t('Selecionar campo')} ${item?.nome || indice + 1}` }}
             onChange={() => selecionarCampo(campo, true)} />
           {indice + 1}. {item?.nome || t('Variável')} · {t('Página')} {campo.pagina} · X {campo.x} · Y {campo.y}
+          {selecionados[0] === campo.id && <strong className="pdf-campos-referencia">{t('Referência')}</strong>}
           <Button size="small" disabled={salvando} onClick={() => {
             setCampos((atuais) => atuais.filter((valor) => valor.id !== campo.id));
             setSelecionados((atuais) => atuais.filter((id) => id !== campo.id));

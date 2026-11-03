@@ -2729,4 +2729,13 @@ export const translations = {
   'Tamanho (pt)': ['Size (pt)', 'Tamaño (pt)'],
   'Cor da fonte': ['Font color', 'Color de fuente'],
   'Selecionar campo': ['Select field', 'Seleccionar campo'],
+  'Referência:': ['Reference:', 'Referencia:'],
+  Referência: ['Reference', 'Referencia'],
+  'Mover 1 ponto': ['Move 1 point', 'Mover 1 punto'],
+  'Para cima': ['Up', 'Arriba'],
+  'Para baixo': ['Down', 'Abajo'],
+  'Para esquerda': ['Left', 'Izquierda'],
+  'Para direita': ['Right', 'Derecha'],
+  'As teclas de seta também movem os campos selecionados.': ['Arrow keys also move selected fields.', 'Las teclas de flecha también mueven los campos seleccionados.'],
+  'O alinhamento ultrapassaria os limites da página.': ['Alignment would move a field beyond the page.', 'La alineación movería un campo fuera de la página.'],
 };
