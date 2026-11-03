@@ -1,0 +1,978 @@
+package br.com.argousForms.protocolos;
+
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import br.com.argousForms.api.ArgousFormsApiException;
+import br.com.argousForms.auth.AutenticacaoLocalService;
+import br.com.argousForms.documentos.DocumentosService;
+import br.com.argousForms.model.negocio.docs.PastaNegocio;
+import br.com.argousForms.model.negocio.processos.FormularioNegocio;
+import br.com.argousForms.model.negocio.processos.FormularioVariavelNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPDFNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPdfCampoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoVersaoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloVariavelNegocio;
+import br.com.argousForms.model.negocio.processos.ProcotoloVariavelVersaoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloVersaoDocumentoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloVersaoNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloVersaoVariavelNegocio;
+import br.com.argousForms.model.persistencia.docs.Pasta;
+import br.com.argousForms.model.persistencia.processos.Formulario;
+import br.com.argousForms.model.persistencia.processos.FormularioLocalizador;
+import br.com.argousForms.model.persistencia.processos.FormularioVariavel;
+import br.com.argousForms.model.persistencia.processos.FormularioVariavelLocalizador;
+import br.com.argousForms.model.persistencia.processos.Protocolo;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumento;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPDF;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPDFLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPdfCampo;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoVersao;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoVersaoLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVariavel;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVariavelLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersao;
+import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersaoLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersao;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoDocumento;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoDocumentoLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoVariavel;
+import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoVariavelLocalizador;
+import quatro.sql.Conexao;
+import quatro.sql.PoolDeConexoes;
+import quatro.sql.Query;
+import quatro.util.QtData;
+
+public final class ProtocolosService {
+
+	private final DocumentosService documentos = new DocumentosService();
+
+	public JSONObject associarPasta( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idPasta ) throws Exception {
+
+		exigirCriador( usuario );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				String idVersao = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				if( idPasta != null ) documentos.exigirPastaParaProtocolo( conexao, usuario, idPasta );
+				Protocolo protocolo = ProtocoloLocalizador.buscaProtocolo( conexao, idProtocolo );
+				if( !Objects.equals( idPasta, protocolo.getIdPasta() ) && existe( conexao,
+					"select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS where ID_PROTOCOLO_VERSAO = :id", UUID.fromString( idVersao ) ) ) {
+					throw new ArgousFormsApiException( 409, "PASTA_COM_MODELOS", "Remova os modelos PDF antes de trocar a pasta do Protocolo." );
+				}
+				protocolo.setIdPasta( idPasta );
+				new ProtocoloNegocio( conexao, protocolo ).altera();
+				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
+				versao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+				new ProtocoloVersaoNegocio( conexao, versao ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, idProtocolo );
+	}
+
+	public JSONObject salvarVariavel( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idVariavel, String codigoInformado, String nomeInformado, String tipoInformado, String descricaoInformada, JSONObject definicaoInformada ) throws Exception {
+
+		exigirCriador( usuario );
+		String codigo = codigoInformado == null ? "" : codigoInformado.strip();
+		String nome = nomeInformado == null ? "" : nomeInformado.strip();
+		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
+		if( codigo.isEmpty() || codigo.length() > 100 || nome.isEmpty() || nome.length() > 255 || tipoInformado == null || !tipoInformado.matches( "[SIRMVBODHT]" ) ) {
+			throw new ArgousFormsApiException( 400, "VARIAVEL_INVALIDA", "Informe código, nome e tipo válidos para a variável." );
+		}
+		String definicaoJson = definicaoInformada == null ? null : DefinicaoVariavelTexto.validar( tipoInformado, definicaoInformada ).toString();
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				String idVersao = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				QtData agora = new QtData( Instant.now().toEpochMilli() );
+				ProtocoloVariavel variavel;
+				ProcotoloVariavelVersao definicao;
+				if( idVariavel == null ) {
+					variavel = new ProtocoloVariavel();
+					variavel.setIdProtocolo( idProtocolo );
+					variavel.setDtInclusao( agora );
+					variavel.setCdVariavel( codigo );
+					variavel.setTpDado( tipoInformado );
+					variavel.setDsDescricao( descricao.isEmpty() ? null : descricao );
+					new ProtocoloVariavelNegocio( conexao, variavel ).insere();
+					definicao = new ProcotoloVariavelVersao();
+					definicao.setIdVariavel( variavel.getIdVariavel() );
+					definicao.setNrVersao( 1 );
+					definicao.setDtInclusao( agora );
+					definicao.setJsDefinicao( definicaoJson == null ? "{}" : definicaoJson );
+				} else {
+					variavel = ProtocoloVariavelLocalizador.buscaProtocoloVariavel( conexao, idVariavel );
+					if( variavel == null || !idProtocolo.equals( variavel.getIdProtocolo() ) ) {
+						throw new ArgousFormsApiException( 404, "VARIAVEL_NAO_ENCONTRADA", "Variável não encontrada neste Protocolo." );
+					}
+					ProtocoloVersaoVariavel associacao = ProtocoloVersaoVariavelLocalizador.buscaPorProtocoloPorVariavel( conexao, UUID.fromString( idVersao ), idVariavel );
+					if( associacao == null ) throw new ArgousFormsApiException( 404, "VARIAVEL_NAO_ENCONTRADA", "Variável não encontrada neste rascunho." );
+					if( variavelPublicada( conexao, idVariavel ) ) {
+						throw new ArgousFormsApiException( 409, "VARIAVEL_PUBLICADA", "Esta variável pertence a uma versão publicada; sua edição requer uma nova versão." );
+					}
+					variavel.setCdVariavel( codigo );
+					variavel.setTpDado( tipoInformado );
+					variavel.setDsDescricao( descricao.isEmpty() ? null : descricao );
+					new ProtocoloVariavelNegocio( conexao, variavel ).altera();
+					definicao = ProcotoloVariavelVersaoLocalizador.buscaPorVariaveisPorVersao( conexao, idVariavel, associacao.getNrVersao() );
+				}
+				definicao.setDsNome( nome );
+				if( definicaoJson != null ) definicao.setJsDefinicao( definicaoJson );
+				if( idVariavel == null ) {
+					new ProcotoloVariavelVersaoNegocio( conexao, definicao ).insere();
+					ProtocoloVersaoVariavel associacao = new ProtocoloVersaoVariavel();
+					associacao.setIdProtocoloVersao( UUID.fromString( idVersao ) );
+					associacao.setIdVariavel( variavel.getIdVariavel() );
+					associacao.setNrVersao( 1 );
+					new ProtocoloVersaoVariavelNegocio( conexao, associacao ).insere();
+				} else new ProcotoloVariavelVersaoNegocio( conexao, definicao ).altera();
+
+				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
+				versao.setDtAlteracao( agora );
+				new ProtocoloVersaoNegocio( conexao, versao ).altera();
+				conexao.commit();
+				return new JSONObject().put( "idVariavel", variavel.getIdVariavel().toString() );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private boolean variavelPublicada( Conexao conexao, UUID idVariavel ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select x.ID_VARIAVEL from Processos.PROTOCOLO_VERSAO_VARIAVEIS x join Processos.PROTOCOLO_VERSOES v "
+				+ "on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_VARIAVEL = :variavel and v.NR_VERSAO > 0" );
+			query.setParameter( "variavel", idVariavel.toString() );
+			query.executeQuery();
+			return !query.isEmpty();
+		}
+	}
+
+	public JSONObject criar( AutenticacaoLocalService.Usuario usuario, String tituloInformado, String descricaoInformada ) throws Exception {
+
+		exigirCriador( usuario );
+		String titulo = titulo( tituloInformado );
+		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
+		UUID id;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				QtData agora = new QtData( Instant.now().toEpochMilli() );
+				Protocolo protocolo = new Protocolo();
+				protocolo.setIdUsuarioCriador( usuario.idUsuario() );
+				protocolo.setDsTitulo( titulo );
+				protocolo.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				protocolo.setDtInclusao( agora );
+				protocolo.setSnAtivo( false );
+				new ProtocoloNegocio( conexao, protocolo ).insere();
+
+				ProtocoloVersao versao = new ProtocoloVersao();
+				versao.setIdProtocolo( protocolo.getIdProtocolo() );
+				versao.setNrVersao( -1 );
+				versao.setTpSituacao( "R" );
+				versao.setIdUsuarioAbriu( usuario.idUsuario() );
+				versao.setIdUsuarioResponsavel( usuario.idUsuario() );
+				versao.setDtInclusao( agora );
+				versao.setDtAlteracao( agora );
+				versao.setSnPermiteConvidados( false );
+				versao.setDsTitulo( titulo );
+				versao.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				new ProtocoloVersaoNegocio( conexao, versao ).insere();
+
+				id = protocolo.getIdProtocolo();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, id );
+	}
+
+	public JSONObject excluir( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo ) throws Exception {
+
+		exigirCriador( usuario );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UUID idVersao = UUID.fromString( exigirRascunho( conexao, usuario.idUsuario(), idProtocolo ) );
+				if( existe( conexao, "select 1 from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO where v.ID_PROTOCOLO = :id", idProtocolo ) ) {
+					throw new ArgousFormsApiException( 409, "PROTOCOLO_EM_USO", "Um Processo já foi iniciado a partir deste Protocolo." );
+				}
+				if( existe( conexao, "select 1 from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = :id and NR_VERSAO > 0", idProtocolo ) ) {
+					throw new ArgousFormsApiException( 409, "PROTOCOLO_PUBLICADO", "A exclusão de Protocolos publicados ainda não está disponível." );
+				}
+				if( existe( conexao, "select 1 from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = :id", idVersao ) ) {
+					throw new ArgousFormsApiException( 409, "PROTOCOLO_COM_FLUXO", "Este Protocolo já possui etapas; sua exclusão exige revisão do fluxo." );
+				}
+				List<UUID> modelos = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select ID_PROTOCOLO_DOCUMENTO from Processos.PROTOCOLO_VERSAO_DOCUMENTOS where ID_PROTOCOLO_VERSAO = :versao" );
+					query.setParameter( "versao", idVersao.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do { modelos.add( UUID.fromString( query.getString( "ID_PROTOCOLO_DOCUMENTO" ) ) ); }
+					while ( query.next() );
+				}
+				for( UUID idModelo : modelos ) excluirModeloPdf( conexao, idVersao, idModelo );
+
+				List<FormularioVariavel> campos = new ArrayList<>();
+				List<Formulario> formularios = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select fv.* from Processos.FORMULARIO_VARIAVEIS fv join Processos.FORMULARIOS f on f.ID_FORMULARIO = fv.ID_FORMULARIO where f.ID_PROTOCOLO_VERSAO = :id" );
+					query.setParameter( "id", idVersao.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						FormularioVariavel campo = new FormularioVariavel();
+						FormularioVariavelLocalizador.buscaCampos( campo, query );
+						campos.add( campo );
+					} while ( query.next() );
+				}
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Processos.FORMULARIOS where ID_PROTOCOLO_VERSAO = :id" );
+					query.setParameter( "id", idVersao.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						Formulario formulario = new Formulario();
+						FormularioLocalizador.buscaCampos( formulario, query );
+						formularios.add( formulario );
+					} while ( query.next() );
+				}
+				for( FormularioVariavel campo : campos ) new FormularioVariavelNegocio( conexao, campo ).exclui();
+				for( Formulario formulario : formularios ) new FormularioNegocio( conexao, formulario ).exclui();
+
+				List<ProtocoloVersaoVariavel> associacoes = new ArrayList<>();
+				List<ProcotoloVariavelVersao> definicoes = new ArrayList<>();
+				List<ProtocoloVariavel> variaveis = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Processos.PROTOCOLO_VERSAO_VARIAVEIS where ID_PROTOCOLO_VERSAO = :id" );
+					query.setParameter( "id", idVersao.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						ProtocoloVersaoVariavel associacao = new ProtocoloVersaoVariavel();
+						ProtocoloVersaoVariavelLocalizador.buscaCampos( associacao, query );
+						associacoes.add( associacao );
+					} while ( query.next() );
+				}
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select vv.* from Processos.PROTOCOLO_VARIAVEL_VERSOES vv join Processos.PROTOCOLO_VARIAVEIS v on v.ID_VARIAVEL = vv.ID_VARIAVEL where v.ID_PROTOCOLO = :id" );
+					query.setParameter( "id", idProtocolo.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						ProcotoloVariavelVersao definicao = new ProcotoloVariavelVersao();
+						ProcotoloVariavelVersaoLocalizador.buscaCampos( definicao, query );
+						definicoes.add( definicao );
+					} while ( query.next() );
+				}
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Processos.PROTOCOLO_VARIAVEIS where ID_PROTOCOLO = :id" );
+					query.setParameter( "id", idProtocolo.toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						ProtocoloVariavel variavel = new ProtocoloVariavel();
+						ProtocoloVariavelLocalizador.buscaCampos( variavel, query );
+						variaveis.add( variavel );
+					} while ( query.next() );
+				}
+				for( ProtocoloVersaoVariavel associacao : associacoes ) new ProtocoloVersaoVariavelNegocio( conexao, associacao ).exclui();
+				for( ProcotoloVariavelVersao definicao : definicoes ) new ProcotoloVariavelVersaoNegocio( conexao, definicao ).exclui();
+				for( ProtocoloVariavel variavel : variaveis ) new ProtocoloVariavelNegocio( conexao, variavel ).exclui();
+				new ProtocoloVersaoNegocio( conexao, ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, idVersao ) ).exclui();
+				new ProtocoloNegocio( conexao, ProtocoloLocalizador.buscaProtocolo( conexao, idProtocolo ) ).exclui();
+				conexao.commit();
+				return new JSONObject().put( "excluido", true );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private boolean existe( Conexao conexao, String sql, UUID id ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( sql );
+			query.setParameter( "id", id.toString() );
+			query.executeQuery();
+			return !query.isEmpty();
+		}
+	}
+
+	public JSONObject salvarDados( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, String tituloInformado, String descricaoInformada ) throws Exception {
+
+		exigirCriador( usuario );
+		String titulo = titulo( tituloInformado );
+		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				String idVersao = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				Protocolo protocolo = ProtocoloLocalizador.buscaProtocolo( conexao, idProtocolo );
+				protocolo.setDsTitulo( titulo );
+				protocolo.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				new ProtocoloNegocio( conexao, protocolo ).altera();
+
+				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
+				versao.setDsTitulo( titulo );
+				versao.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				versao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+				new ProtocoloVersaoNegocio( conexao, versao ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, idProtocolo );
+	}
+
+	private String titulo( String informado ) throws ArgousFormsApiException {
+
+		String titulo = informado == null ? "" : informado.strip();
+		if( titulo.isEmpty() || titulo.length() > 255 ) {
+			throw new ArgousFormsApiException( 400, "PROTOCOLO_INVALIDO", "Informe um título de Protocolo com até 255 caracteres." );
+		}
+		return titulo;
+	}
+
+	public JSONObject salvarFormulario( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idFormulario, String tituloInformado, String descricaoInformada, JSONArray campos ) throws Exception {
+
+		exigirCriador( usuario );
+		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
+		if( titulo.isEmpty() || titulo.length() > 255 ) throw new ArgousFormsApiException( 400, "FORMULARIO_INVALIDO", "Informe um título de formulário com até 255 caracteres." );
+		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
+		if( campos.length() > Short.MAX_VALUE ) throw new ArgousFormsApiException( 400, "CAMPOS_INVALIDOS", "O formulário contém campos demais." );
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				String idVersao = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				Formulario formulario;
+				if( idFormulario == null ) {
+					formulario = new Formulario();
+					formulario.setIdProtocoloVersao( UUID.fromString( idVersao ) );
+					formulario.setDtInclusao( new QtData( Instant.now().toEpochMilli() ) );
+				} else {
+					formulario = FormularioLocalizador.buscaFormulario( conexao, idFormulario );
+					if( formulario == null || !UUID.fromString( idVersao ).equals( formulario.getIdProtocoloVersao() ) ) {
+						throw new ArgousFormsApiException( 404, "FORMULARIO_NAO_ENCONTRADO", "Formulário não encontrado neste rascunho." );
+					}
+				}
+				formulario.setDsTitulo( titulo );
+				formulario.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				if( idFormulario == null ) new FormularioNegocio( conexao, formulario ).insere();
+				else new FormularioNegocio( conexao, formulario ).altera();
+
+				Set<UUID> ids = new HashSet<>();
+				for( int indice = 0; indice < campos.length(); indice++ ) {
+					JSONObject campo = campos.getJSONObject( indice );
+					UUID idVariavel = UUID.fromString( campo.getString( "idVariavel" ) );
+					if( !ids.add( idVariavel ) ) throw new ArgousFormsApiException( 400, "CAMPOS_DUPLICADOS", "A mesma variável não pode aparecer duas vezes no formulário." );
+					if( !variavelDaVersao( conexao, idVersao, idVariavel ) ) {
+						throw new ArgousFormsApiException( 400, "VARIAVEL_INVALIDA", "A variável não pertence ao rascunho deste Protocolo." );
+					}
+					String acesso = campo.optString( "acesso", "E" );
+					String apresentacao = campo.optString( "apresentacao", "1" );
+					if( !( "L".equals( acesso ) || "E".equals( acesso ) ) || !apresentacao.matches( "[1-6]" ) ) {
+						throw new ArgousFormsApiException( 400, "CAMPO_INVALIDO", "Acesso ou apresentação inválidos em um campo." );
+					}
+					FormularioVariavel vinculo = FormularioVariavelLocalizador.buscaFormularioVariavel( conexao, formulario.getIdFormulario(), idVariavel );
+					if( vinculo == null ) {
+						vinculo = new FormularioVariavel();
+						vinculo.setIdFormulario( formulario.getIdFormulario() );
+						vinculo.setIdVariavel( idVariavel );
+					}
+					vinculo.setTpAcesso( acesso );
+					vinculo.setTpApresentacao( apresentacao );
+					vinculo.setSnObrigatoria( campo.optBoolean( "obrigatorio", false ) );
+					vinculo.setNrOrdem( indice + 1 );
+					if( FormularioVariavelLocalizador.existe( conexao, formulario.getIdFormulario(), idVariavel ) ) new FormularioVariavelNegocio( conexao, vinculo ).altera();
+					else new FormularioVariavelNegocio( conexao, vinculo ).insere();
+				}
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Processos.FORMULARIO_VARIAVEIS where ID_FORMULARIO = :formulario" );
+					query.setParameter( "formulario", formulario.getIdFormulario().toString() );
+					query.executeQuery();
+					if( !query.isEmpty() ) {
+						do {
+							UUID idVariavel = UUID.fromString( query.getString( "ID_VARIAVEL" ) );
+							if( ids.contains( idVariavel ) ) continue;
+							FormularioVariavel antigo = new FormularioVariavel();
+							FormularioVariavelLocalizador.buscaCampos( antigo, query );
+							new FormularioVariavelNegocio( conexao, antigo ).exclui();
+						} while ( query.next() );
+					}
+				}
+				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
+				versao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+				new ProtocoloVersaoNegocio( conexao, versao ).altera();
+				conexao.commit();
+				return new JSONObject().put( "idFormulario", formulario.getIdFormulario().toString() );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private String exigirRascunho( Conexao conexao, UUID idUsuario, UUID idProtocolo ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select v.ID_PROTOCOLO_VERSAO from Processos.PROTOCOLO_VERSOES v "
+				+ "join Processos.PROTOCOLOS p on p.ID_PROTOCOLO = v.ID_PROTOCOLO "
+				+ "where p.ID_PROTOCOLO = :protocolo and p.ID_USUARIO_CRIADOR = :usuario and v.NR_VERSAO = -1 and v.ID_USUARIO_RESPONSAVEL = :usuario" );
+			query.setParameter( "protocolo", idProtocolo.toString() );
+			query.setParameter( "usuario", idUsuario.toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) throw new ArgousFormsApiException( 404, "RASCUNHO_NAO_ENCONTRADO", "Rascunho não encontrado ou indisponível para edição." );
+			return query.getString( "ID_PROTOCOLO_VERSAO" );
+		}
+	}
+
+	private boolean variavelDaVersao( Conexao conexao, String idVersao, UUID idVariavel ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select ID_VARIAVEL from Processos.PROTOCOLO_VERSAO_VARIAVEIS where ID_PROTOCOLO_VERSAO = :versao and ID_VARIAVEL = :variavel" );
+			query.setParameter( "versao", idVersao );
+			query.setParameter( "variavel", idVariavel.toString() );
+			query.executeQuery();
+			return !query.isEmpty();
+		}
+	}
+
+	public JSONObject listar( AutenticacaoLocalService.Usuario usuario ) throws Exception {
+
+		exigirCriador( usuario );
+		JSONArray protocolos = new JSONArray();
+		try ( Conexao conexao = PoolDeConexoes.getConexao(); Query query = new Query( conexao ) ) {
+			query.setSQL( "select p.ID_PROTOCOLO, p.DS_TITULO, p.DS_DESCRICAO, p.DT_INCLUSAO, p.SN_ATIVO, "
+				+ "v.ID_PROTOCOLO_VERSAO, v.DT_ALTERACAO, "
+				+ "(select max(NR_VERSAO) from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = p.ID_PROTOCOLO and NR_VERSAO > 0) as NR_PUBLICADA "
+				+ "from Processos.PROTOCOLOS p left join Processos.PROTOCOLO_VERSOES v "
+				+ "on v.ID_PROTOCOLO = p.ID_PROTOCOLO and v.NR_VERSAO = -1 "
+				+ "where p.ID_USUARIO_CRIADOR = :usuario order by coalesce(v.DT_ALTERACAO, p.DT_INCLUSAO) desc" );
+			query.setParameter( "usuario", usuario.idUsuario().toString() );
+			query.executeQuery();
+			if( !query.isEmpty() ) {
+				do {
+					JSONObject protocolo = new JSONObject();
+					protocolo.put( "id", query.getString( "ID_PROTOCOLO" ) );
+					protocolo.put( "titulo", query.getString( "DS_TITULO" ) );
+					protocolo.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) );
+					protocolo.put( "criadoEm", query.getString( "DT_INCLUSAO" ) );
+					protocolo.put( "atualizadoEm", query.getString( "DT_ALTERACAO" ) == null ? query.getString( "DT_INCLUSAO" ) : query.getString( "DT_ALTERACAO" ) );
+					protocolo.put( "ativo", query.getBoolean( "SN_ATIVO" ) );
+					String versao = query.getString( "NR_PUBLICADA" );
+					protocolo.put( "versaoPublicada", versao == null ? 0 : Integer.parseInt( versao ) );
+					protocolo.put( "temRascunho", query.getString( "ID_PROTOCOLO_VERSAO" ) != null );
+					protocolos.put( protocolo );
+				} while ( query.next() );
+			}
+		}
+		return new JSONObject().put( "protocolos", protocolos );
+	}
+
+	public JSONObject consultar( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo ) throws Exception {
+
+		exigirCriador( usuario );
+		JSONObject protocolo = null;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			try ( Query query = new Query( conexao ) ) {
+				query.setSQL( "select p.ID_PROTOCOLO, p.DS_TITULO, p.DS_DESCRICAO, p.DT_INCLUSAO, p.SN_ATIVO, p.ID_PASTA, d.DS_NOME as PASTA_NOME, "
+					+ "v.ID_PROTOCOLO_VERSAO, v.ID_USUARIO_RESPONSAVEL, v.DT_ALTERACAO, "
+					+ "(select max(NR_VERSAO) from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = p.ID_PROTOCOLO and NR_VERSAO > 0) as NR_PUBLICADA "
+					+ "from Processos.PROTOCOLOS p left join Docs.PASTAS d on d.ID_PASTA = p.ID_PASTA left join Processos.PROTOCOLO_VERSOES v "
+					+ "on v.ID_PROTOCOLO = p.ID_PROTOCOLO and v.NR_VERSAO = -1 "
+					+ "where p.ID_PROTOCOLO = :protocolo and p.ID_USUARIO_CRIADOR = :usuario" );
+				query.setParameter( "protocolo", idProtocolo.toString() );
+				query.setParameter( "usuario", usuario.idUsuario().toString() );
+				query.executeQuery();
+				if( query.isEmpty() ) throw new ArgousFormsApiException( 404, "PROTOCOLO_NAO_ENCONTRADO", "Protocolo não encontrado." );
+				protocolo = new JSONObject().put( "id", query.getString( "ID_PROTOCOLO" ) )
+					.put( "titulo", query.getString( "DS_TITULO" ) )
+					.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) )
+					.put( "criadoEm", query.getString( "DT_INCLUSAO" ) )
+					.put( "atualizadoEm", query.getString( "DT_ALTERACAO" ) == null ? query.getString( "DT_INCLUSAO" ) : query.getString( "DT_ALTERACAO" ) )
+					.put( "ativo", query.getBoolean( "SN_ATIVO" ) );
+				String publicada = query.getString( "NR_PUBLICADA" );
+				protocolo.put( "versaoPublicada", publicada == null ? 0 : Integer.parseInt( publicada ) );
+				String idVersao = query.getString( "ID_PROTOCOLO_VERSAO" );
+				if( idVersao != null ) {
+					JSONObject rascunho = new JSONObject().put( "id", idVersao ).put( "idUsuarioResponsavel", query.getString( "ID_USUARIO_RESPONSAVEL" ) )
+						.put( "numero", -1 ).put( "variaveis", new JSONArray() ).put( "formularios", new JSONArray() )
+						.put( "etapas", new JSONArray() ).put( "documentos", new JSONArray() );
+					String idPasta = query.getString( "ID_PASTA" );
+					rascunho.put( "pasta", idPasta == null ? JSONObject.NULL : idPasta );
+					rascunho.put( "pastaNome", query.getString( "PASTA_NOME" ) == null ? JSONObject.NULL : query.getString( "PASTA_NOME" ) );
+					protocolo.put( "rascunho", rascunho );
+				}
+			}
+			if( !protocolo.has( "rascunho" ) ) return protocolo;
+			JSONObject rascunho = protocolo.getJSONObject( "rascunho" );
+			if( !rascunho.isNull( "pasta" ) ) rascunho.put( "pastaCaminho", caminhoPasta( conexao, rascunho.getString( "pasta" ) ) );
+			carregarVariaveis( conexao, rascunho );
+			carregarFormularios( conexao, rascunho );
+			carregarModelosPdf( conexao, rascunho );
+		}
+		return protocolo;
+	}
+
+	private void carregarModelosPdf( Conexao conexao, JSONObject rascunho ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select d.ID_PROTOCOLO_DOCUMENTO, d.CD_DOCUMENTO, d.DS_TITULO, d.DS_OBSERVACOES, " +
+				"v.ID_PROTOCOLO_DOCUMENTO_VERSAO, v.NR_VERSAO, pdf.ID_ARQUIVO_MODELO_PDF, " +
+				"a.ID_ARQUIVO, a.DS_NOME_ARQUIVO " +
+				"from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x " +
+				"join Processos.PROTOCOLO_DOCUMENTOS d on d.ID_PROTOCOLO_DOCUMENTO = x.ID_PROTOCOLO_DOCUMENTO " +
+				"join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO " +
+				"join Processos.PROTOCOLO_DOCUMENTO_PDF pdf on pdf.ID_PROTOCOLO_DOCUMENTO_VERSAO = v.ID_PROTOCOLO_DOCUMENTO_VERSAO " +
+				"join Docs.ARQUIVO_VERSOES av on av.ID_ARQUIVO_VERSAO = pdf.ID_ARQUIVO_MODELO_PDF " +
+				"join Docs.ARQUIVOS a on a.ID_ARQUIVO = av.ID_ARQUIVO " +
+				"where x.ID_PROTOCOLO_VERSAO = :versao order by d.DS_TITULO" );
+			query.setParameter( "versao", rascunho.getString( "id" ) );
+			query.executeQuery();
+			if( !query.isEmpty() ) do {
+				rascunho.getJSONArray( "documentos" ).put( new JSONObject()
+					.put( "id", query.getString( "ID_PROTOCOLO_DOCUMENTO" ) )
+					.put( "codigo", query.getString( "CD_DOCUMENTO" ) )
+					.put( "titulo", query.getString( "DS_TITULO" ) )
+					.put( "observacoes", query.getString( "DS_OBSERVACOES" ) == null ? "" : query.getString( "DS_OBSERVACOES" ) )
+					.put( "idVersao", query.getString( "ID_PROTOCOLO_DOCUMENTO_VERSAO" ) )
+					.put( "versao", query.getInt( "NR_VERSAO" ) )
+					.put( "idArquivoVersao", query.getString( "ID_ARQUIVO_MODELO_PDF" ) )
+					.put( "idArquivo", query.getString( "ID_ARQUIVO" ) )
+					.put( "arquivoNome", query.getString( "DS_NOME_ARQUIVO" ) )
+					.put( "campos", carregarCamposPdf( conexao, UUID.fromString( query.getString( "ID_PROTOCOLO_DOCUMENTO_VERSAO" ) ) ) ) );
+			} while ( query.next() );
+		}
+	}
+
+	private JSONArray carregarCamposPdf( Conexao conexao, UUID idVersaoModelo ) throws Exception {
+
+		JSONArray campos = new JSONArray();
+		String sql = "select ID_PDF_CAMPO, ID_VARIAVEL, NR_PAGINA, VL_POS_X, VL_POS_Y, VL_LARGURA, VL_ALTURA, JS_APRESENTACAO " +
+			"from Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS where ID_PROTOCOLO_DOCUMENTO_VERSAO = ? order by NR_PAGINA, ID_PDF_CAMPO";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idVersaoModelo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				while( resultado.next() ) {
+					campos.put( new JSONObject().put( "id", resultado.getString( "ID_PDF_CAMPO" ) )
+						.put( "idVariavel", resultado.getString( "ID_VARIAVEL" ) ).put( "pagina", resultado.getInt( "NR_PAGINA" ) )
+						.put( "x", resultado.getBigDecimal( "VL_POS_X" ) ).put( "y", resultado.getBigDecimal( "VL_POS_Y" ) )
+						.put( "largura", resultado.getBigDecimal( "VL_LARGURA" ) ).put( "altura", resultado.getBigDecimal( "VL_ALTURA" ) )
+						.put( "apresentacao", new JSONObject( resultado.getString( "JS_APRESENTACAO" ) ) ) );
+				}
+			}
+		}
+		return campos;
+	}
+
+	private String caminhoPasta( Conexao conexao, String idPasta ) throws Exception {
+
+		String sql = "with recursive caminho as (" +
+				"select ID_PASTA, ID_PASTA_PAI, DS_NOME::text as CAMINHO, array[ID_PASTA] as VISITADOS from Docs.PASTAS where ID_PASTA = ? " +
+				"union all select pai.ID_PASTA, pai.ID_PASTA_PAI, pai.DS_NOME || ' / ' || atual.CAMINHO, atual.VISITADOS || pai.ID_PASTA " +
+				"from Docs.PASTAS pai join caminho atual on pai.ID_PASTA = atual.ID_PASTA_PAI where not pai.ID_PASTA = any(atual.VISITADOS)) " +
+				"select CAMINHO from caminho order by cardinality(VISITADOS) desc limit 1";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, UUID.fromString( idPasta ) );
+			try ( ResultSet resultado = consulta.executeQuery() ) { return resultado.next() ? resultado.getString( 1 ) : ""; }
+		}
+	}
+
+	public void registrarModeloPdf( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idArquivoVersao,
+		String codigoInformado, String tituloInformado, String observacoesInformadas ) throws Exception {
+
+		exigirCriador( usuario );
+		String codigo = codigoInformado == null ? "" : codigoInformado.strip();
+		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
+		String observacoes = observacoesInformadas == null ? "" : observacoesInformadas.strip();
+		if( codigo.isEmpty() || codigo.length() > 30 || titulo.isEmpty() || titulo.length() > 70 ) {
+			throw new ArgousFormsApiException( 400, "MODELO_INVALIDO", "Informe código de até 30 caracteres e título de até 70 caracteres." );
+		}
+
+		UUID idProtocoloVersao = UUID.fromString( exigirRascunho( conexao, usuario.idUsuario(), idProtocolo ) );
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select av.ID_ARQUIVO_VERSAO from Docs.ARQUIVO_VERSOES av " +
+				"join Docs.ARQUIVOS a on a.ID_ARQUIVO = av.ID_ARQUIVO " +
+				"join Docs.PASTAS pasta on pasta.ID_PASTA = a.ID_PASTA " +
+				"join Processos.PROTOCOLOS p on p.ID_PASTA = pasta.ID_PASTA_PAI " +
+				"where p.ID_PROTOCOLO = :protocolo and av.ID_ARQUIVO_VERSAO = :arquivo " +
+				"and av.ID_USUARIO_INCLUIU = :usuario and upper(pasta.DS_NOME) = 'MODELOS' " +
+				"and a.CD_CONTENT_TYPE = 'application/pdf' and a.DT_LIXEIRA is null and a.DT_EXCLUSAO is null " +
+				"and pasta.DT_LIXEIRA is null and pasta.DT_EXCLUSAO is null" );
+			query.setParameter( "protocolo", idProtocolo.toString() );
+			query.setParameter( "arquivo", idArquivoVersao.toString() );
+			query.setParameter( "usuario", usuario.idUsuario().toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) throw new ArgousFormsApiException( 400, "PDF_INVALIDO", "O PDF precisa estar na subpasta MODELOS deste Protocolo e ter sido enviado por você." );
+		}
+
+		QtData agora = new QtData( Instant.now().toEpochMilli() );
+		ProtocoloDocumento documento = new ProtocoloDocumento();
+		documento.setIdProtocolo( idProtocolo );
+		documento.setCdDocumento( codigo );
+		documento.setDsTitulo( titulo );
+		documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
+		documento.setDtInclusao( agora );
+		new ProtocoloDocumentoNegocio( conexao, documento ).insere();
+
+		ProtocoloDocumentoVersao versao = new ProtocoloDocumentoVersao();
+		versao.setIdProtocoloDocumento( documento.getIdProtocoloDocumento() );
+		versao.setNrVersao( 1 );
+		versao.setTpModelo( "P" );
+		versao.setDtInclusao( agora );
+		new ProtocoloDocumentoVersaoNegocio( conexao, versao ).insere();
+
+		ProtocoloDocumentoPDF pdf = new ProtocoloDocumentoPDF();
+		pdf.setIdProtocoloDocumentoVersao( versao.getIdProtocoloDocumentoVersao() );
+		pdf.setIdArquivoModeloPdf( idArquivoVersao );
+		pdf.setDtInclusao( agora );
+		new ProtocoloDocumentoPDFNegocio( conexao, pdf ).insere();
+
+		ProtocoloVersaoDocumento vinculo = new ProtocoloVersaoDocumento();
+		vinculo.setIdProtocoloVersao( idProtocoloVersao );
+		vinculo.setIdProtocoloDocumento( documento.getIdProtocoloDocumento() );
+		vinculo.setIdProtocoloDocumentoVersao( versao.getIdProtocoloDocumentoVersao() );
+		new ProtocoloVersaoDocumentoNegocio( conexao, vinculo ).insere();
+
+		ProtocoloVersao protocoloVersao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, idProtocoloVersao );
+		protocoloVersao.setDtAlteracao( agora );
+		new ProtocoloVersaoNegocio( conexao, protocoloVersao ).altera();
+	}
+
+	public JSONObject salvarCamposPdf( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idModelo, JSONArray campos ) throws Exception {
+
+		exigirCriador( usuario );
+		if( campos == null || campos.length() > 500 ) {
+			throw new ArgousFormsApiException( 400, "CAMPOS_INVALIDOS", "Envie até 500 campos do PDF." );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				String idRascunho = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				UUID idVersaoModelo = exigirModeloPdfRascunho( conexao, UUID.fromString( idRascunho ), idModelo );
+				List<ProtocoloDocumentoPdfCampo> novos = new ArrayList<>();
+				for( int indice = 0; indice < campos.length(); indice++ ) {
+					JSONObject informado = campos.optJSONObject( indice );
+					if( informado == null ) throw new ArgousFormsApiException( 400, "CAMPO_INVALIDO", "Há um campo PDF inválido." );
+					UUID idVariavel;
+					try { idVariavel = UUID.fromString( informado.getString( "idVariavel" ) ); }
+					catch ( Exception e ) { throw new ArgousFormsApiException( 400, "VARIAVEL_INVALIDA", "Escolha uma variável válida." ); }
+					if( !variavelDaVersao( conexao, idRascunho, idVariavel ) ) {
+						throw new ArgousFormsApiException( 400, "VARIAVEL_INVALIDA", "Uma variável não pertence a este Protocolo." );
+					}
+					int pagina = informado.optInt( "pagina" );
+					if( pagina < 1 || pagina > 32767 ) throw new ArgousFormsApiException( 400, "PAGINA_INVALIDA", "Informe uma página válida." );
+					ProtocoloDocumentoPdfCampo campo = new ProtocoloDocumentoPdfCampo();
+					campo.setIdProtocoloDocumentoVersao( idVersaoModelo );
+					campo.setIdVariavel( idVariavel );
+					campo.setNrPagina( pagina );
+					campo.setVlPosX( numeroCampoPdf( informado, "x", false ) );
+					campo.setVlPosY( numeroCampoPdf( informado, "y", false ) );
+					campo.setVlLargura( numeroCampoPdf( informado, "largura", true ) );
+					campo.setVlAltura( numeroCampoPdf( informado, "altura", true ) );
+						campo.setJsApresentacao( apresentacaoCampoPdf( informado ) );
+					novos.add( campo );
+				}
+				excluirCamposPdf( conexao, idVersaoModelo );
+				for( ProtocoloDocumentoPdfCampo campo : novos ) new ProtocoloDocumentoPdfCampoNegocio( conexao, campo ).insere();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, idProtocolo );
+	}
+
+	private UUID exigirModeloPdfRascunho( Conexao conexao, UUID idRascunho, UUID idModelo ) throws Exception {
+
+		String sql = "select x.ID_PROTOCOLO_DOCUMENTO_VERSAO from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x " +
+			"join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO " +
+			"where x.ID_PROTOCOLO_VERSAO = ? and x.ID_PROTOCOLO_DOCUMENTO = ? and v.TP_MODELO = 'P' for update of x";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idRascunho );
+			consulta.setObject( 2, idModelo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				if( !resultado.next() ) throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo PDF não encontrado neste rascunho." );
+				return resultado.getObject( 1, UUID.class );
+			}
+		}
+	}
+
+	private BigDecimal numeroCampoPdf( JSONObject informado, String nome, boolean positivo ) throws ArgousFormsApiException {
+
+		try {
+			BigDecimal valor = new BigDecimal( informado.get( nome ).toString() );
+			if( valor.scale() > 2 || valor.precision() > 10 || valor.signum() < 0 || positivo && valor.signum() == 0 ) {
+				throw new NumberFormatException();
+			}
+			return valor;
+		} catch ( Exception e ) {
+			throw new ArgousFormsApiException( 400, "DIMENSAO_INVALIDA", "Posição e dimensões do campo PDF devem ser valores válidos em pontos, com duas casas decimais." );
+		}
+	}
+
+	private String apresentacaoCampoPdf( JSONObject informado ) throws Exception {
+
+		if( !informado.has( "apresentacao" ) ) return "{}";
+		JSONObject recebida = informado.optJSONObject( "apresentacao" );
+		if( recebida == null ) throw new ArgousFormsApiException( 400, "APRESENTACAO_INVALIDA", "A apresentação do campo PDF deve ser um objeto." );
+		JSONObject validada = new JSONObject();
+		if( recebida.has( "fonte" ) ) {
+			Object fonte = recebida.opt( "fonte" );
+			if( !(fonte instanceof String valor) || !(valor.equals( "HELVETICA" ) || valor.equals( "TIMES" ) || valor.equals( "COURIER" )) ) {
+				throw new ArgousFormsApiException( 400, "FONTE_INVALIDA", "Escolha uma fonte disponível para o campo PDF." );
+			}
+			validada.put( "fonte", fonte );
+		}
+		if( recebida.has( "cor" ) ) {
+			Object cor = recebida.opt( "cor" );
+			if( !(cor instanceof String valor) || !valor.matches( "#[0-9A-Fa-f]{6}" ) ) {
+				throw new ArgousFormsApiException( 400, "COR_INVALIDA", "Informe a cor no formato #RRGGBB." );
+			}
+			validada.put( "cor", cor );
+		}
+		if( recebida.has( "tamanho" ) ) {
+			Object tamanho = recebida.opt( "tamanho" );
+			if( !(tamanho instanceof Number numero) || !Double.isFinite( numero.doubleValue() ) || numero.doubleValue() < 4 || numero.doubleValue() > 72 ) {
+				throw new ArgousFormsApiException( 400, "TAMANHO_FONTE_INVALIDO", "O tamanho da fonte deve estar entre 4 e 72 pontos." );
+			}
+			validada.put( "tamanho", tamanho );
+		}
+		for( String nome : new String[] { "negrito", "italico", "sublinhado" } ) {
+			if( !recebida.has( nome ) ) continue;
+			Object valor = recebida.opt( nome );
+			if( !(valor instanceof Boolean) ) throw new ArgousFormsApiException( 400, "ESTILO_INVALIDO", "As opções de estilo devem ser verdadeiras ou falsas." );
+			validada.put( nome, valor );
+		}
+		return validada.toString();
+	}
+
+	private void excluirCamposPdf( Conexao conexao, UUID idVersaoModelo ) throws Exception {
+
+		List<UUID> ids = new ArrayList<>();
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+			"select ID_PDF_CAMPO from Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {
+			consulta.setObject( 1, idVersaoModelo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				while( resultado.next() ) ids.add( resultado.getObject( 1, UUID.class ) );
+			}
+		}
+		for( UUID id : ids ) {
+			ProtocoloDocumentoPdfCampo campo = new ProtocoloDocumentoPdfCampo();
+			campo.setIdPdfCampo( id );
+			new ProtocoloDocumentoPdfCampoNegocio( conexao, campo ).exclui();
+		}
+	}
+
+	public JSONObject excluirModeloPdf( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idModelo ) throws Exception {
+
+		exigirCriador( usuario );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UUID idVersao = UUID.fromString( exigirRascunho( conexao, usuario.idUsuario(), idProtocolo ) );
+				excluirModeloPdf( conexao, idVersao, idModelo );
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, idProtocolo );
+	}
+
+	public JSONObject alterarModeloPdf( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idModelo,
+		String tituloInformado, String observacoesInformadas ) throws Exception {
+
+		exigirCriador( usuario );
+		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
+		String observacoes = observacoesInformadas == null ? "" : observacoesInformadas.strip();
+		if( titulo.isEmpty() || titulo.length() > 70 ) throw new ArgousFormsApiException( 400, "MODELO_INVALIDO", "Informe um título de até 70 caracteres." );
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UUID idVersao = UUID.fromString( exigirRascunho( conexao, usuario.idUsuario(), idProtocolo ) );
+				if( ProtocoloVersaoDocumentoLocalizador.buscaProtocoloVersaoDocumento( conexao, idVersao, idModelo ) == null ) {
+					throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo PDF não encontrado neste rascunho." );
+				}
+				ProtocoloDocumento documento = ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo );
+				documento.setDsTitulo( titulo );
+				documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
+				new ProtocoloDocumentoNegocio( conexao, documento ).altera();
+				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, idVersao );
+				versao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+				new ProtocoloVersaoNegocio( conexao, versao ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return consultar( usuario, idProtocolo );
+	}
+
+	private void excluirModeloPdf( Conexao conexao, UUID idVersaoProtocolo, UUID idModelo ) throws Exception {
+
+		ProtocoloVersaoDocumento vinculo = ProtocoloVersaoDocumentoLocalizador.buscaProtocoloVersaoDocumento( conexao, idVersaoProtocolo, idModelo );
+		if( vinculo == null ) throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo PDF não encontrado neste rascunho." );
+		if( existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo ) ) {
+			throw new ArgousFormsApiException( 409, "MODELO_PUBLICADO", "Um modelo já utilizado por versão publicada não pode ser excluído." );
+		}
+		UUID idVersaoModelo = vinculo.getIdProtocoloDocumentoVersao();
+		excluirCamposPdf( conexao, idVersaoModelo );
+		ProtocoloDocumentoPDF pdf = ProtocoloDocumentoPDFLocalizador.buscaProtocoloDocumentoPDF( conexao, idVersaoModelo );
+		if( pdf != null ) new ProtocoloDocumentoPDFNegocio( conexao, pdf ).exclui();
+		new ProtocoloVersaoDocumentoNegocio( conexao, vinculo ).exclui();
+		new ProtocoloDocumentoVersaoNegocio( conexao, ProtocoloDocumentoVersaoLocalizador.buscaProtocoloDocumentoVersao( conexao, idVersaoModelo ) ).exclui();
+		new ProtocoloDocumentoNegocio( conexao, ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo ) ).exclui();
+	}
+
+	public UUID prepararPastaModelos( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idProtocolo ) throws Exception {
+
+		exigirCriador( usuario );
+		exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+		UUID idPasta;
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+			"select ID_PASTA from Processos.PROTOCOLOS where ID_PROTOCOLO = ? for update" ) ) {
+			consulta.setObject( 1, idProtocolo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				resultado.next();
+				idPasta = resultado.getObject( 1, UUID.class );
+			}
+		}
+		if( idPasta == null ) throw new ArgousFormsApiException( 409, "PASTA_OBRIGATORIA", "Associe uma pasta ao Protocolo antes de enviar o PDF." );
+		documentos.exigirPastaParaProtocolo( conexao, usuario, idPasta );
+
+		UUID idModelos = null;
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+			"select ID_PASTA from Docs.PASTAS where ID_PASTA_PAI = ? and upper(DS_NOME) = 'MODELOS' and DT_LIXEIRA is null and DT_EXCLUSAO is null" ) ) {
+			consulta.setObject( 1, idPasta );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				if( resultado.next() ) idModelos = resultado.getObject( 1, UUID.class );
+			}
+		}
+		if( idModelos == null ) {
+			Pasta pasta = new Pasta();
+			pasta.setIdPastaPai( idPasta );
+			pasta.setDsNome( "MODELOS" );
+			pasta.setIdUsuarioCriou( usuario.idUsuario() );
+			QtData agora = new QtData( Instant.now().toEpochMilli() );
+			pasta.setDtInclusao( agora );
+			pasta.setDtAlteracao( agora );
+			new PastaNegocio( conexao, pasta ).insere();
+			idModelos = pasta.getIdPasta();
+		}
+		return idModelos;
+	}
+
+	public void exigirPastaModelos( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idPastaModelos ) throws Exception {
+
+		exigirCriador( usuario );
+		exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+		UUID idPastaProtocolo;
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select p.ID_PASTA from Processos.PROTOCOLOS p join Docs.PASTAS modelos " +
+				"on modelos.ID_PASTA_PAI = p.ID_PASTA where p.ID_PROTOCOLO = :protocolo " +
+				"and modelos.ID_PASTA = :pasta and upper(modelos.DS_NOME) = 'MODELOS' " +
+				"and modelos.DT_LIXEIRA is null and modelos.DT_EXCLUSAO is null" );
+			query.setParameter( "protocolo", idProtocolo.toString() );
+			query.setParameter( "pasta", idPastaModelos.toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) throw new ArgousFormsApiException( 403, "PASTA_MODELOS_INVALIDA", "A pasta de modelos não pertence a este Protocolo." );
+			idPastaProtocolo = UUID.fromString( query.getString( "ID_PASTA" ) );
+		}
+		documentos.exigirPastaParaProtocolo( conexao, usuario, idPastaProtocolo );
+	}
+
+	private void carregarVariaveis( Conexao conexao, JSONObject rascunho ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, x.DS_DESCRICAO, vv.DS_NOME, vv.JS_DEFINICAO "
+				+ "from Processos.PROTOCOLO_VERSAO_VARIAVEIS a "
+				+ "join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = a.ID_VARIAVEL "
+				+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = a.ID_VARIAVEL and vv.NR_VERSAO = a.NR_VERSAO "
+				+ "where a.ID_PROTOCOLO_VERSAO = :versao order by vv.DS_NOME" );
+			query.setParameter( "versao", rascunho.getString( "id" ) );
+			query.executeQuery();
+			if( !query.isEmpty() ) {
+				do {
+					rascunho.getJSONArray( "variaveis" ).put( new JSONObject().put( "id", query.getString( "ID_VARIAVEL" ) )
+						.put( "codigo", query.getString( "CD_VARIAVEL" ) ).put( "tipo", query.getString( "TP_DADO" ) )
+						.put( "nome", query.getString( "DS_NOME" ) )
+							.put( "definicao", new JSONObject( query.getString( "JS_DEFINICAO" ) ) )
+						.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) ) );
+				} while ( query.next() );
+			}
+		}
+	}
+
+	private void carregarFormularios( Conexao conexao, JSONObject rascunho ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select f.ID_FORMULARIO, f.DS_TITULO, f.DS_DESCRICAO from Processos.FORMULARIOS f "
+				+ "where f.ID_PROTOCOLO_VERSAO = :versao order by f.DT_INCLUSAO, f.ID_FORMULARIO" );
+			query.setParameter( "versao", rascunho.getString( "id" ) );
+			query.executeQuery();
+			if( !query.isEmpty() ) {
+				do {
+					JSONObject formulario = new JSONObject().put( "id", query.getString( "ID_FORMULARIO" ) )
+						.put( "titulo", query.getString( "DS_TITULO" ) )
+						.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) )
+						.put( "campos", new JSONArray() );
+					carregarCampos( conexao, formulario );
+					rascunho.getJSONArray( "formularios" ).put( formulario );
+				} while ( query.next() );
+			}
+		}
+	}
+
+	private void carregarCampos( Conexao conexao, JSONObject formulario ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select ID_VARIAVEL, TP_ACESSO, SN_OBRIGATORIA, TP_APRESENTACAO "
+				+ "from Processos.FORMULARIO_VARIAVEIS where ID_FORMULARIO = :formulario order by NR_ORDEM" );
+			query.setParameter( "formulario", formulario.getString( "id" ) );
+			query.executeQuery();
+			if( !query.isEmpty() ) {
+				do {
+					formulario.getJSONArray( "campos" ).put( new JSONObject().put( "idVariavel", query.getString( "ID_VARIAVEL" ) )
+						.put( "acesso", query.getString( "TP_ACESSO" ) ).put( "obrigatorio", query.getBoolean( "SN_OBRIGATORIA" ) )
+						.put( "apresentacao", query.getString( "TP_APRESENTACAO" ) ) );
+				} while ( query.next() );
+			}
+		}
+	}
+
+	private void exigirCriador( AutenticacaoLocalService.Usuario usuario ) throws ArgousFormsApiException {
+
+		if( !usuario.papeis().contains( "CRIADOR_DE_PROTOCOLOS" ) && !usuario.papeis().contains( "MODELADOR" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode criar Protocolos." );
+		}
+	}
+}

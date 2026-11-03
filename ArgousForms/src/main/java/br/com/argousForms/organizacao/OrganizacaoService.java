@@ -1,6 +1,7 @@
 package br.com.argousForms.organizacao;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,12 +16,19 @@ import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.model.negocio.cadastro.GrupoNegocio;
 import br.com.argousForms.model.negocio.cadastro.GrupoTagNegocio;
 import br.com.argousForms.model.negocio.cadastro.TagNegocio;
+import br.com.argousForms.model.negocio.cadastro.UsuarioGrupoNegocio;
 import br.com.argousForms.model.persistencia.cadastro.Grupo;
 import br.com.argousForms.model.persistencia.cadastro.GrupoLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.GrupoTag;
 import br.com.argousForms.model.persistencia.cadastro.GrupoTagLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.Tag;
 import br.com.argousForms.model.persistencia.cadastro.TagLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioGrupo;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioGrupoLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioTag;
+import br.com.argousForms.model.persistencia.cadastro.UsuarioTagLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.VinculoTag;
+import br.com.argousForms.model.persistencia.cadastro.VinculoTagLocalizador;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -241,13 +249,171 @@ public final class OrganizacaoService {
 				tag.setSnVinculo( vinculo );
 				tag.setSnAtiva( ativa );
 				tag.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
-				new TagNegocio( conexao, tag ).altera();
+				new TagNegocioSeguro( conexao, tag ).altera();
 				conexao.commit();
 				return codigo;
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;
 			}
+		}
+	}
+
+	public String removerGrupo( int idGrupo ) throws Exception {
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Grupo grupo = new Grupo();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.GRUPOS where ID_GRUPO = :id" );
+					query.setParameter( "id", idGrupo );
+					query.executeQuery();
+					if( query.isEmpty() ) throw new ArgousFormsApiException( 404, "GRUPO_NAO_ENCONTRADO", "Grupo não encontrado." );
+					GrupoLocalizador.buscaCampos( grupo, query );
+				}
+				boolean utilizado = existe( conexao, "select 1 from Processos.PROTOCOLO_ETAPA_DESTINATARIOS where ID_GRUPO = :id", idGrupo )
+					|| existe( conexao, "select 1 from Processos.PROTOCOLO_GESTORES_ELEGIVEIS where ID_GRUPO = :id", idGrupo )
+					|| existe( conexao, "select 1 from Docs.PASTA_PERMISSOES where ID_GRUPO = :id", idGrupo )
+					|| existe( conexao, "select 1 from Docs.ARQUIVO_PERMISSOES where ID_GRUPO = :id", idGrupo );
+				if( utilizado ) {
+					if( grupo.isSnAtivo() ) {
+						grupo.setSnAtivo( false );
+						grupo.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+						new GrupoNegocio( conexao, grupo ).altera();
+					}
+					conexao.commit();
+					return "inativado";
+				}
+
+				List<VinculoTag> tagsVinculo = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.VINCULO_TAGS where ID_GRUPO = :id" );
+					query.setParameter( "id", idGrupo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						VinculoTag tag = new VinculoTag();
+						VinculoTagLocalizador.buscaCampos( tag, query );
+						tagsVinculo.add( tag );
+					} while ( query.next() );
+				}
+				for( VinculoTag tag : tagsVinculo ) new VinculoTagNegocioSeguro( conexao, tag ).exclui();
+				List<GrupoTag> tagsGrupo = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.GRUPO_TAGS where ID_GRUPO = :id" );
+					query.setParameter( "id", idGrupo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						GrupoTag tag = new GrupoTag();
+						GrupoTagLocalizador.buscaCampos( tag, query );
+						tagsGrupo.add( tag );
+					} while ( query.next() );
+				}
+				for( GrupoTag tag : tagsGrupo ) new GrupoTagNegocioSeguro( conexao, tag ).exclui();
+				List<UsuarioGrupo> integrantes = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.USUARIO_GRUPOS where ID_GRUPO = :id" );
+					query.setParameter( "id", idGrupo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						UsuarioGrupo integrante = new UsuarioGrupo();
+						UsuarioGrupoLocalizador.buscaCampos( integrante, query );
+						integrantes.add( integrante );
+					} while ( query.next() );
+				}
+				for( UsuarioGrupo integrante : integrantes ) new UsuarioGrupoNegocio( conexao, integrante ).exclui();
+				new GrupoNegocio( conexao, grupo ).exclui();
+				conexao.commit();
+				return "excluido";
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public String removerTag( String codigoInformado ) throws Exception {
+
+		String codigo = codigoInformado == null ? "" : codigoInformado.strip().toUpperCase( Locale.ROOT );
+		if( codigo.isEmpty() ) throw new ArgousFormsApiException( 400, "TAG_INVALIDA", "Informe a tag." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Tag tag = new Tag();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.TAGS where CD_TAG = :codigo" );
+					query.setParameter( "codigo", codigo );
+					query.executeQuery();
+					if( query.isEmpty() ) throw new ArgousFormsApiException( 404, "TAG_NAO_ENCONTRADA", "Tag não encontrada." );
+					TagLocalizador.buscaCampos( tag, query );
+				}
+				boolean utilizada = existe( conexao, "select 1 from Processos.PROTOCOLO_ETAPA_DESTINATARIOS where :id in (CD_TAG_GRUPO, CD_TAG_USUARIO, CD_TAG_VINCULO)", codigo )
+					|| existe( conexao, "select 1 from Processos.PROTOCOLO_GESTORES_ELEGIVEIS where :id in (CD_TAG_GRUPO, CD_TAG_USUARIO, CD_TAG_VINCULO)", codigo )
+					|| existe( conexao, "select 1 from Docs.PASTA_PERMISSOES where CD_TAG = :id", codigo )
+					|| existe( conexao, "select 1 from Docs.ARQUIVO_PERMISSOES where CD_TAG = :id", codigo );
+				if( utilizada ) {
+					if( tag.isSnAtiva() ) {
+						tag.setSnAtiva( false );
+						tag.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+						new TagNegocioSeguro( conexao, tag ).altera();
+					}
+					conexao.commit();
+					return "inativada";
+				}
+
+				List<VinculoTag> tagsVinculo = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.VINCULO_TAGS where CD_TAG = :codigo" );
+					query.setParameter( "codigo", codigo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						VinculoTag vinculo = new VinculoTag();
+						VinculoTagLocalizador.buscaCampos( vinculo, query );
+						tagsVinculo.add( vinculo );
+					} while ( query.next() );
+				}
+				for( VinculoTag vinculo : tagsVinculo ) new VinculoTagNegocioSeguro( conexao, vinculo ).exclui();
+				List<UsuarioTag> tagsUsuario = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.USUARIO_TAGS where CD_TAG = :codigo" );
+					query.setParameter( "codigo", codigo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						UsuarioTag vinculo = new UsuarioTag();
+						UsuarioTagLocalizador.buscaCampos( vinculo, query );
+						tagsUsuario.add( vinculo );
+					} while ( query.next() );
+				}
+				for( UsuarioTag vinculo : tagsUsuario ) new UsuarioTagNegocioSeguro( conexao, vinculo ).exclui();
+				List<GrupoTag> tagsGrupo = new ArrayList<>();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.GRUPO_TAGS where CD_TAG = :codigo" );
+					query.setParameter( "codigo", codigo );
+					query.executeQuery();
+					if( !query.isEmpty() ) do {
+						GrupoTag vinculo = new GrupoTag();
+						GrupoTagLocalizador.buscaCampos( vinculo, query );
+						tagsGrupo.add( vinculo );
+					} while ( query.next() );
+				}
+				for( GrupoTag vinculo : tagsGrupo ) new GrupoTagNegocioSeguro( conexao, vinculo ).exclui();
+				new TagNegocioSeguro( conexao, tag ).exclui();
+				conexao.commit();
+				return "excluida";
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	private boolean existe( Conexao conexao, String sql, Object id ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( sql );
+			query.setParameter( "id", id );
+			query.executeQuery();
+			return !query.isEmpty();
 		}
 	}
 

@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './color-modes.css';
+@import '../programas/protocolos/protocolos.css';
 :root {
   --background: var(--theme-canvas, #f5f7fa);
   --foreground: var(--theme-text-strong, #172b41);

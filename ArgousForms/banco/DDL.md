@@ -1,13 +1,13 @@
 # Complementos ao DDL exportado pelo CASE
 
-Este arquivo concentra as diferenças a preservar nos DDLs do CASE e as pendências de estrutura, índices, restrições e triggers. A seção de `Processos` acompanha o export de 26/10/2026; ele é a fonte da estrutura modelada e os complementos abaixo serão aplicados **ao gerar o script executável**, sem executar o export diretamente. Os comandos de `Processos` ainda não foram aplicados ao banco.
+Este arquivo concentra as diferenças a preservar nos DDLs do CASE e as pendências de estrutura, índices, restrições e triggers. A seção histórica de `Processos` acompanha o export de 26/10/2026. A estrutura executável e suas validações estão em `estrutura-processos.sql` e `validar-processos.sql`; o gestor informou sua aplicação ao banco em 29/10/2026. Antes de uma nova geração, comparar o export com esses scripts para não duplicar complementos.
 
 ## Cadastro e Docs: preservar nos próximos exports
 
 - O índice único de identificação pessoal por país já foi aplicado pelo gestor ao banco; conferir sua presença no próximo export de `Cadastro` para não perdê-lo ao recriar a estrutura.
 - `estrutura-inicial.sql` e `estrutura-docs.sql` já contêm ajustes posteriores aos exports de 13 e 15/10/2026, incluindo dois campos novos de `Cadastro.INSTITUICAO` e a possibilidade de a pasta RAIZ não ter pai. Comparar os próximos exports com esses scripts antes de regenerá-los.
 - `estrutura-docs.sql` e `adequar-estrutura-documentos-2026-10-15.sql` criam índices únicos para nome de arquivo ativo na pasta e número de versão no arquivo. Preservá-los no modelo ou no ajuste posterior do script gerado.
-- Os scripts existentes `validar-papeis-perfis.sql`, `validar-pais-identificacao.sql`, `validar-aplicacoes-tags.sql` e `validar-alteracao-tags.sql` implementam regras adicionais de banco. Conferir sua aplicação na instalação e não perdê-los na regeneração. As regras de atribuição inicial de tags a grupos, usuários e vínculos ainda dependem de definição funcional; não acrescentar restrições por inferência.
+- Os scripts existentes `validar-papeis-perfis.sql`, `validar-pais-identificacao.sql`, `validar-aplicacoes-tags.sql`, `validar-alteracao-tags.sql` e `validar-vinculos-organizacao.sql` implementam regras adicionais de banco. Conferir sua aplicação na instalação e não perdê-los na regeneração. `validar-vinculos-organizacao.sql` foi preparado para os cadastros de vínculos e ainda depende de aplicação manual pelo proprietário do schema.
 - Novos objetos criados por outro papel proprietário precisarão das mesmas concessões de acesso de dados ao usuário da aplicação; `ALTER DEFAULT PRIVILEGES` de um proprietário não abrange objetos criados por outro.
 
 ## Questões de modelagem ainda abertas
@@ -20,7 +20,9 @@ Este arquivo concentra as diferenças a preservar nos DDLs do CASE e as pendênc
 
 ## Alteração estrutural aprovada
 
-Em `Processos.PROTOCOLO_DOCUMENTO_PDF`, substituir `CD_ARQUIVO_GRIDFS CHAR(24)` por `ID_ARQUIVO_VERSAO UUID NOT NULL`. Esse campo aponta para a versão exata do PDF de origem em `Docs.ARQUIVO_VERSOES`. O arquivo pertence a `Docs.ARQUIVOS`, na subpasta `MODELOS` da pasta associada ao Protocolo por `PROTOCOLOS.ID_PASTA`. Não alterar a estrutura das tabelas de `Docs` por causa desse vínculo.
+O nome aprovado para a tabela de campos do PDF é `Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS`, conforme a classe gerada `ProtocoloDocumentoPdfCampo`. `estrutura-processos.sql` foi ajustado para esse nome. Nas instalações existentes que ainda tenham a tabela no singular, executar `ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPO RENAME TO PROTOCOLO_DOCUMENTO_PDF_CAMPOS;` antes de gravar os campos pelo aplicativo.
+
+Em `Processos.PROTOCOLO_DOCUMENTO_PDF`, o campo atual `ID_ARQUIVO_MODELO_PDF UUID NOT NULL` aponta para a versão exata do PDF de origem em `Docs.ARQUIVO_VERSOES`. O arquivo pertence a `Docs.ARQUIVOS`, na subpasta `MODELOS` da pasta associada ao Protocolo por `PROTOCOLOS.ID_PASTA`. Não alterar a estrutura das tabelas de `Docs` por causa desse vínculo.
 
 Enquanto a versão do documento for rascunho, a troca do PDF deverá criar uma nova versão em `Docs.ARQUIVO_VERSOES` e atualizar o ponteiro em `PROTOCOLO_DOCUMENTO_PDF`. Uma versão publicada conservará o ponteiro para o PDF usado na publicação. As versões anteriores de `Docs` permanecem no histórico, conforme a política já definida para arquivos. A operação entre PostgreSQL e GridFS e sua compensação deverão ser implementadas no serviço, sem presumir transação distribuída.
 
@@ -55,7 +57,7 @@ ALTER TABLE Processos.PROCESSO_VARIAVEIS_ATUAIS ADD CONSTRAINT fk_variavel_atual
 
 ## FKs entre schemas aprovadas
 
-Adicionar depois que os schemas `Cadastro` e `Docs` e suas tabelas referenciadas estiverem disponíveis. Uma FK para campo opcional aceita `NULL`; quando preenchido, exige registro existente. `PROTOCOLO_DOCUMENTO_PDF.ID_ARQUIVO_VERSAO` depende da alteração estrutural acima.
+Adicionar depois que os schemas `Cadastro` e `Docs` e suas tabelas referenciadas estiverem disponíveis. Uma FK para campo opcional aceita `NULL`; quando preenchido, exige registro existente. `PROTOCOLO_DOCUMENTO_PDF.ID_ARQUIVO_MODELO_PDF` já consta do DDL atual.
 
 ### Usuários
 
@@ -95,7 +97,7 @@ ALTER TABLE Processos.PROTOCOLO_GESTORES_ELEGIVEIS ADD FOREIGN KEY (CD_TAG_VINCU
 
 ```sql
 ALTER TABLE Processos.PROTOCOLOS ADD FOREIGN KEY (ID_PASTA) REFERENCES Docs.PASTAS (ID_PASTA) ON UPDATE RESTRICT ON DELETE RESTRICT;
-ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF ADD FOREIGN KEY (ID_ARQUIVO_VERSAO) REFERENCES Docs.ARQUIVO_VERSOES (ID_ARQUIVO_VERSAO) ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF ADD FOREIGN KEY (ID_ARQUIVO_MODELO_PDF) REFERENCES Docs.ARQUIVO_VERSOES (ID_ARQUIVO_VERSAO) ON UPDATE RESTRICT ON DELETE RESTRICT;
 ALTER TABLE Processos.PROCESSO_ANEXOS ADD FOREIGN KEY (ID_ARQUIVO_VERSAO) REFERENCES Docs.ARQUIVO_VERSOES (ID_ARQUIVO_VERSAO) ON UPDATE RESTRICT ON DELETE RESTRICT;
 ```
 

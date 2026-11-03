@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createId } from '../src/utils/uid.js';
 import { seed } from '../src/programas/documentos/seed.js';
+import { novoProtocolo } from '../src/programas/protocolos/protocolos-store.js';
 
 test('uses native randomUUID when available', () => {
   const provider = {
@@ -46,6 +47,25 @@ test('initial workspace loads when the browser has no randomUUID', () => {
     const workspace = seed();
     assert.equal(workspace.documents.length, 0);
     assert.equal(workspace.templates.length, 0);
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', original);
+  }
+});
+
+test('creates a protocol draft over HTTP without randomUUID', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const provider = {
+    getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
+  };
+  try {
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: provider,
+    });
+    const protocolo = novoProtocolo('Compras', '', 'usuario-1');
+    assert.match(protocolo.id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+    assert.match(protocolo.rascunho.id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+    assert.notEqual(protocolo.id, protocolo.rascunho.id);
   } finally {
     Object.defineProperty(globalThis, 'crypto', original);
   }

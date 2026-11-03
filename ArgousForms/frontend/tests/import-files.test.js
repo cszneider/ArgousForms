@@ -88,6 +88,29 @@ try {
   console.log(
     'PASS: PDF import, original content, filled export, accents and rotated page.',
   );
+  const { gerarPreviaPdf } = await server.ssrLoadModule(
+    '/src/programas/protocolos/pdf-campos-preview.js',
+  );
+  const origemPrevia = await original.save();
+  const documentoLido = await openPdf(origemPrevia.slice(0));
+  const blobPrevia = await gerarPreviaPdf(origemPrevia, documentoLido,
+    [{ idVariavel: 'cnpj', pagina: 1, x: 50, y: 180, largura: 160, altura: 22,
+      apresentacao: { fonte: 'TIMES', cor: '#AA2244', tamanho: 11,
+        negrito: true, italico: true, sublinhado: true } },
+      { idVariavel: 'cnpj', pagina: 2, x: 50, y: 180, largura: 160, altura: 22 }],
+    [{ id: 'cnpj', codigo: 'CNPJ', nome: 'CNPJ', tipo: 'S',
+      definicao: { valorExemplo: '0000123', texto: { mascara: '0000009' } } }]);
+  await documentoLido.destroy();
+  const documentoPrevia = await openPdf(await blobPrevia.arrayBuffer());
+  const conteudoPrevia = (await (await documentoPrevia.getPage(1)).getTextContent()).items
+    .map((item) => item.str).join(' ');
+  if (!conteudoPrevia.includes('Original preserved') || !conteudoPrevia.includes('0000123'))
+    throw Error('PDF preview text mismatch: ' + conteudoPrevia);
+  const paginaGiradas = (await (await documentoPrevia.getPage(2)).getTextContent()).items
+    .map((item) => item.str).join(' ');
+  if (!paginaGiradas.includes('0000123')) throw Error('Rotated PDF preview text mismatch: ' + paginaGiradas);
+  await documentoPrevia.destroy();
+  console.log('PASS: PDF preview includes example values without altering the source.');
   const JSZip = require('jszip'),
     zip = new JSZip();
   zip.file(

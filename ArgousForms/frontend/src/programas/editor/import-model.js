@@ -1,12 +1,19 @@
 import { saveAsset } from './assets.js';
 import { cleanHtml } from './content.js';
 import { MAX_IMPORT_BYTES, MAX_HTML_BYTES } from './layout-rules.js';
-// Vite's ?url import exposes the worker asset URL.
-// oxlint-disable-next-line import/default
-import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
+let workerUrl;
+
+async function getWorkerUrl() {
+  if (!workerUrl) {
+    const { default: codigo } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?raw');
+    workerUrl = URL.createObjectURL(new Blob([codigo], { type: 'text/javascript' }));
+  }
+  return workerUrl;
+}
+
 export async function openPdf(data) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  if (typeof window !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = await getWorkerUrl();
   const { PdfAssets } = await import('./pdf-assets.js');
   return pdfjs.getDocument({
     data: new Uint8Array(data),
