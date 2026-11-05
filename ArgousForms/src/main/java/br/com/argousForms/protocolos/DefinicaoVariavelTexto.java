@@ -23,6 +23,37 @@ public final class DefinicaoVariavelTexto {
 	public static JSONObject validar( String tipo, JSONObject definicao ) throws ArgousFormsApiException, JSONException {
 
 		JSONObject resultado = definicao == null ? new JSONObject() : definicao;
+		if( resultado.has( "origem" ) ) {
+			JSONObject origem = resultado.optJSONObject( "origem" );
+			if( origem == null ) throw invalida( "A origem da variável deve ser um objeto." );
+			String tipoOrigem = origem.optString( "tipo", "" );
+			switch( tipoOrigem ) {
+				case "MANUAL" -> { }
+				case "SISTEMA" -> {
+					String codigo = origem.optString( "codigo", "" );
+					boolean conhecida = VariaveisSistema.definicoes().stream().anyMatch( item -> item.codigo().equals( codigo ) && item.tipoDado().equals( tipo ) );
+					if( !conhecida ) throw invalida( "Escolha uma variável de sistema compatível com o tipo de dado." );
+				}
+				case "INSTITUICAO" -> {
+					if( !"S".equals( tipo ) || !(origem.opt( "idAtributo" ) instanceof Integer id) || id <= 0 ) {
+						throw invalida( "Escolha uma variável textual da instituição." );
+					}
+				}
+				case "INTEGRACAO" -> {
+					String codigo = origem.optString( "codigo", "" );
+					if( !codigo.matches( "[A-Za-z][A-Za-z0-9_.-]{0,99}" ) ) {
+						throw invalida( "Informe um código de integração de até 100 caracteres." );
+					}
+				}
+				default -> throw invalida( "Escolha uma origem válida para a variável." );
+			}
+		}
+		if( resultado.has( "scriptAoSairDoCampo" ) ) {
+			Object script = resultado.opt( "scriptAoSairDoCampo" );
+			if( !(script instanceof String texto) || texto.length() > 20000 || texto.indexOf( '\0' ) >= 0 ) {
+				throw invalida( "O script ao sair do campo deve ter até 20000 caracteres e não pode conter caracteres nulos." );
+			}
+		}
 		if( resultado.has( "valorExemplo" ) ) {
 			Object exemplo = resultado.opt( "valorExemplo" );
 			if( !(exemplo instanceof String valor) || valor.length() > 500 || valor.codePoints().anyMatch( DefinicaoVariavelTexto::caractereInvalido ) ) {

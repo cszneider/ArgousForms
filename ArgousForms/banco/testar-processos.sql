@@ -55,9 +55,9 @@ BEGIN
     VALUES (formulario, variavel, 'E', 1, false, '1');
 
     INSERT INTO Processos.PROTOCOLOS_ETAPAS
-        (ID_PROTOCOLO_ETAPA, ID_PROTOCOLO_VERSAO, ID_FORMULARIO, TP_ETAPA, DS_TITULO, NR_POSICAO_X, NR_POSICAO_Y)
-    VALUES (etapa_inicial, versao, formulario, 'I', 'Início', 0, 0),
-           (etapa_final, versao, formulario, 'F', 'Fim', 400, 0);
+        (ID_PROTOCOLO_ETAPA, ID_PROTOCOLO_VERSAO, ID_FORMULARIO, DS_TITULO, NR_POSICAO_X, NR_POSICAO_Y)
+    VALUES (etapa_inicial, versao, formulario, 'Início', 0, 0),
+           (etapa_final, versao, formulario, 'Fim', 400, 0);
     INSERT INTO Processos.PROTOCOLO_ETAPA_DESTINATARIOS
         (ID_ETAPA_DESTINATARIO, ID_PROTOCOLO_ETAPA, ID_USUARIO_SISTEMA)
     VALUES (gen_random_uuid(), etapa_inicial, usuario),

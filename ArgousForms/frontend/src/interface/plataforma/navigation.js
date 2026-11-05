@@ -7,12 +7,14 @@ import {
   FileStack,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Users,
 } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
 export default function PlatformNavigation() {
-  const { value, dispatch, signOut } = useContext(PlatformContext);
-  const { view, mobile } = value;
+  const { value, dispatch, signOut, alternarMenu } = useContext(PlatformContext);
+  const { view, mobile, sidebarCollapsed } = value;
   const onClose = () => dispatch({ field: 'mobile', value: false });
   const { t } = useI18n();
 
@@ -22,17 +24,24 @@ export default function PlatformNavigation() {
   };
   const content = (
     <div className="sidebar-inner" style={{ minHeight: 0, overflowY: 'auto' }}>
-      <div className="brand sidebar-brand" aria-label="ArgousDocs">
-        <span className="brand-icon">
-          <FileStack size={23} />
-        </span>
-        Argous<span>Docs</span>
+      <div className="sidebar-heading">
+        <div className="brand sidebar-brand" aria-label="ArgousDocs">
+          <span className="brand-icon"><FileStack size={23} /></span>
+          <span className="sidebar-brand-name">Argous<span>Docs</span></span>
+        </div>
+        <IconButton className="sidebar-collapse-toggle" onClick={alternarMenu}
+          aria-label={t(sidebarCollapsed ? 'Expandir menu' : 'Recolher menu')}
+          title={t(sidebarCollapsed ? 'Expandir menu' : 'Recolher menu')}>
+          {sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+        </IconButton>
       </div>
       <span className="nav-label">{t('AMBIENTE ADMINISTRADOR')}</span>
       <nav className="side-nav" aria-label={t('AMBIENTE ADMINISTRADOR')}>
         <button
           className={view === 'overview' ? 'active' : ''}
           onClick={() => select('overview')}
+          aria-label={t('Visão geral')}
+          title={sidebarCollapsed ? t('Visão geral') : undefined}
           aria-current={view === 'overview' ? 'page' : undefined}
         >
           <LayoutDashboard size={19} />
@@ -41,6 +50,8 @@ export default function PlatformNavigation() {
         <button
           className={view === 'clients' ? 'active' : ''}
           onClick={() => select('clients')}
+          aria-label={t('Clientes')}
+          title={sidebarCollapsed ? t('Clientes') : undefined}
           aria-current={view === 'clients' ? 'page' : undefined}
         >
           <Building2 size={19} />
@@ -49,6 +60,8 @@ export default function PlatformNavigation() {
         <button
           className={view === 'users' ? 'active' : ''}
           onClick={() => select('users')}
+          aria-label={t('Usuários')}
+          title={sidebarCollapsed ? t('Usuários') : undefined}
           aria-current={view === 'users' ? 'page' : undefined}
         >
           <Users size={19} />
@@ -61,6 +74,7 @@ export default function PlatformNavigation() {
             <Button
               onClick={() => select('settings')}
               aria-label={t('Configurações do usuário')}
+              title={sidebarCollapsed ? t('Configurações do usuário') : undefined}
               sx={{
                 display: 'flex',
                 gap: 1.25,
@@ -83,7 +97,7 @@ export default function PlatformNavigation() {
               >
                 AD
               </Avatar>
-              <div>
+              <div className="sidebar-profile-copy">
                 <strong>{t('Administrador')}</strong>
                 <small>adm@argous.com.br</small>
               </div>

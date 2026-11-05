@@ -40,6 +40,7 @@ DROP TABLE IF EXISTS Cadastro.USUARIO_ORIGENS_LOGIN;
 DROP TABLE IF EXISTS Cadastro.CONFIRMACOES_EMAIL;
 DROP TABLE IF EXISTS Cadastro.USUARIOS_SISTEMA;
 DROP TABLE IF EXISTS Cadastro.PESSOAS;
+DROP TABLE IF EXISTS Cadastro.VARIAVEIS_INSTITUICAO;
 DROP TABLE IF EXISTS Cadastro.INSTITUICAO;
 DROP TABLE IF EXISTS Cadastro.ORIGENS_LOGIN;
 DROP TABLE IF EXISTS Cadastro.PERFIL_PERMISSOES;
@@ -216,12 +217,35 @@ Create table  Cadastro.INSTITUICAO
 (
 	ID_INSTITUICAO Smallint NOT NULL Default 1 Constraint ck_instituicoes_registro_unico Check (ID_INSTITUICAO = 1 ),
 	DS_NOME Varchar(200) NOT NULL,
-	NR_DIAS_PERMANENCIA_LIXEIRA Integer NOT NULL Default 30,
-	NR_TAMANHO_MAXIMO_ARQUIVO_BYTES Integer NOT NULL Default 33554432 Constraint ck_instituicao_tamanho_maximo_positivo Check (NR_TAMANHO_MAXIMO_ARQUIVO_BYTES > 0),
+	NR_DIAS_PERMANENCIA_LIXEIRA Integer NOT NULL Default 30 Check (NR_DIAS_PERMANENCIA_LIXEIRA > 0),
+	NR_TAMANHO_MAXIMO_ARQUIVO_BYTES BigInt NOT NULL Default 33554432 Check (NR_TAMANHO_MAXIMO_ARQUIVO_BYTES > 0),
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_ALTERACAO Timestamp NOT NULL,
+	SN_PERMITIR_DESTINATARIOS_UNICOS Boolean NOT NULL Default true,
+	CD_FUSO_HORARIO Varchar(64) NOT NULL Check (BTRIM(CD_FUSO_HORARIO) <> ''),
+	DS_URL_WEBHOOK Text NULL Check (DS_URL_WEBHOOK IS NULL OR BTRIM(DS_URL_WEBHOOK) <> ''),
+	DS_URL_WEBHOOK_ALTERNATIVO Text NULL Check (DS_URL_WEBHOOK_ALTERNATIVO IS NULL OR (DS_URL_WEBHOOK IS NOT NULL AND BTRIM(DS_URL_WEBHOOK_ALTERNATIVO) <> '')),
  primary key (ID_INSTITUICAO)
 );
+
+Create table Cadastro.VARIAVEIS_INSTITUICAO
+(
+	ID_ATRIBUTO Serial NOT NULL,
+	ID_ATRIBUTO_PAI Integer NULL,
+	CD_NOME_TECNICO Varchar(21) NOT NULL,
+	TP_ATRIBUTO Char(1) NOT NULL,
+	VL_ATRIBUTO Varchar(255) NULL Check (TP_ATRIBUTO IS NOT NULL AND ((TP_ATRIBUTO = 'G' AND VL_ATRIBUTO IS NULL) OR (TP_ATRIBUTO = 'V' AND VL_ATRIBUTO IS NOT NULL AND BTRIM(VL_ATRIBUTO) <> ''))),
+	DT_INCLUSAO Timestamp with time zone NOT NULL,
+	DT_ALTERACAO Timestamp with time zone NOT NULL,
+	DT_INVALIDACAO Timestamp with time zone NULL,
+ primary key (ID_ATRIBUTO)
+);
+
+Comment on table Cadastro.VARIAVEIS_INSTITUICAO Is 'Variáveis globais da instituição cliente. Package: br.com.argousForms.model.persistencia.cadastro';
+Comment on column Cadastro.VARIAVEIS_INSTITUICAO.ID_ATRIBUTO_PAI Is 'Identificador do atributo pai';
+Comment on column Cadastro.VARIAVEIS_INSTITUICAO.CD_NOME_TECNICO Is 'Nome técnico do atributo';
+Comment on column Cadastro.VARIAVEIS_INSTITUICAO.TP_ATRIBUTO Is 'G: grupo; V: valor';
+Comment on column Cadastro.VARIAVEIS_INSTITUICAO.VL_ATRIBUTO Is 'Obrigatório para atributos de valor e nulo para grupos';
 
 Create table  Cadastro.CONFIRMACOES_EMAIL
 (
@@ -409,6 +433,7 @@ Alter table Cadastro.VINCULO_TAGS add  foreign key (ID_USUARIO_SISTEMA,ID_GRUPO)
 Alter table Cadastro.GRUPO_TAGS add  foreign key (CD_TAG) references Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
 Alter table Cadastro.USUARIO_TAGS add  foreign key (CD_TAG) references Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
 Alter table Cadastro.VINCULO_TAGS add  foreign key (CD_TAG) references Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
+Alter table Cadastro.VARIAVEIS_INSTITUICAO add foreign key (ID_ATRIBUTO_PAI) references Cadastro.VARIAVEIS_INSTITUICAO (ID_ATRIBUTO) on update restrict on delete restrict;
 
 -- Executar a estrutura com um proprietário distinto do usuário da aplicação.
 REVOKE CREATE ON SCHEMA Cadastro FROM PUBLIC;

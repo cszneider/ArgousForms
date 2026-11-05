@@ -37,6 +37,9 @@ import br.com.argousForms.documentos.UploadArquivoService;
 import br.com.argousForms.pessoas.PessoasUsuariosService;
 import br.com.argousForms.pessoas.ManutencaoUsuarioService;
 import br.com.argousForms.protocolos.ProtocolosService;
+import br.com.argousForms.protocolos.FluxoProtocolosService;
+import br.com.argousForms.protocolos.VariaveisSistema;
+import br.com.argousForms.protocolos.VariaveisInstituicaoService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -58,6 +61,8 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
 	private final ManutencaoUsuarioService manutencaoUsuarios = new ManutencaoUsuarioService();
 	private final ProtocolosService protocolos = new ProtocolosService();
+	private final FluxoProtocolosService fluxoProtocolos = new FluxoProtocolosService();
+	private final VariaveisInstituicaoService variaveisInstituicao = new VariaveisInstituicaoService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -175,6 +180,62 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "CATALOGO_DESTINATARIOS_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.catalogo( usuario ) );
+			return;
+		}
+
+		if( "CATALOGO_VARIAVEIS_SISTEMA".equals( operacao ) ) {
+			autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "variaveis", VariaveisSistema.catalogo() ) );
+			return;
+		}
+
+		if( "LISTAR_VARIAVEIS_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, variaveisInstituicao.listar( usuario ) );
+			return;
+		}
+
+		if( "SALVAR_VARIAVEL_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			Integer id = idAtributo( dados, "idAtributo", false );
+			Integer idPai = idAtributo( dados, "idAtributoPai", false );
+			ArgousFormsJson.enviarSucesso( response, 200, variaveisInstituicao.salvar( usuario, id, idPai,
+				dados.optString( "codigo", "" ), dados.optString( "tipo", "" ), dados.optString( "valor", "" ) ) );
+			return;
+		}
+
+		if( "DEFINIR_VARIAVEL_INSTITUICAO_ATIVA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			if( !( dados.opt( "ativa" ) instanceof Boolean ) ) {
+				throw new ArgousFormsApiException( 400, "SITUACAO_INVALIDA", "Informe se a variável deve ficar ativa." );
+			}
+			ArgousFormsJson.enviarSucesso( response, 200, variaveisInstituicao.definirAtiva( usuario,
+				idAtributo( dados, "idAtributo", true ), dados.optBoolean( "ativa" ) ) );
+			return;
+		}
+
+		if( "CONSULTAR_FLUXO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.consultar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "PUBLICAR_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.publicar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "SALVAR_FLUXO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, fluxoProtocolos.salvar( usuario, uuidObrigatorio( dados, "idProtocolo" ),
+				dados.optJSONArray( "etapas" ), dados.optJSONArray( "ligacoes" ), dados.optString( "inicio", null ) ) );
+			return;
+		}
+
 		if( "SALVAR_VARIAVEL_PROTOCOLO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarVariavel( usuario, uuidObrigatorio( dados, "idProtocolo" ),
@@ -191,6 +252,15 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "SALVAR_MODELO_HTML".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarModeloHtml( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idModelo" ),
+				dados.optString( "codigo", "" ), dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ),
+				dados.optString( "css", "" ), dados.optJSONArray( "partes" ) ) );
+			return;
+		}
+
 		if( "SALVAR_CAMPOS_MODELO_PDF".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarCamposPdf( usuario,
@@ -201,6 +271,13 @@ public final class ArgousFormsResolver extends HttpServlet {
 		if( "EXCLUIR_MODELO_PDF".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.excluirModeloPdf( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ) ) );
+			return;
+		}
+
+		if( "EXCLUIR_MODELO_HTML".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.excluirModeloHtml( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ) ) );
 			return;
 		}
@@ -545,6 +622,16 @@ public final class ArgousFormsResolver extends HttpServlet {
 		UUID id = uuidOpcional( dados, campo );
 		if( id == null ) throw new ArgousFormsApiException( 400, "IDENTIFICADOR_INVALIDO", "Informe um identificador válido." );
 		return id;
+	}
+
+	private Integer idAtributo( JSONObject dados, String campo, boolean obrigatorio ) throws ArgousFormsApiException {
+
+		Object valor = dados.opt( campo );
+		if( ( valor == null || JSONObject.NULL.equals( valor ) ) && !obrigatorio ) return null;
+		if( !( valor instanceof Integer numero ) || numero <= 0 ) {
+			throw new ArgousFormsApiException( 400, "IDENTIFICADOR_INVALIDO", "Informe um identificador de atributo válido." );
+		}
+		return numero;
 	}
 
 	private UUID uuidOpcional( JSONObject dados, String campo ) throws ArgousFormsApiException {
