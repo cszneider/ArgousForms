@@ -113,8 +113,9 @@ CREATE TRIGGER trg_etapa_destinatarios_publicados BEFORE INSERT OR UPDATE OR DEL
 CREATE TRIGGER trg_variavel_versoes_publicadas BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_VARIAVEL_VERSOES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('variavel');
 CREATE TRIGGER trg_documento_versoes_publicadas BEFORE UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_VERSOES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_html_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
+CREATE TRIGGER trg_documento_html_parte_publicada BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_pdf_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
-CREATE TRIGGER trg_documento_pdf_campo_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPO FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
+CREATE TRIGGER trg_documento_pdf_campo_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 
 CREATE OR REPLACE FUNCTION Processos.bloquear_identidade_publicada() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -333,6 +334,9 @@ FOR EACH ROW EXECUTE FUNCTION Processos.validar_pdf_protocolo();
 
 CREATE OR REPLACE FUNCTION Processos.validar_pdf_campo() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+    IF NEW.ID_ATRIBUTO IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM Processos.PROTOCOLO_DOCUMENTO_VERSOES dv
         JOIN Processos.PROTOCOLO_DOCUMENTOS d USING (ID_PROTOCOLO_DOCUMENTO)
@@ -345,7 +349,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE TRIGGER trg_validar_pdf_campo BEFORE INSERT OR UPDATE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPO
+CREATE TRIGGER trg_validar_pdf_campo BEFORE INSERT OR UPDATE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS
 FOR EACH ROW EXECUTE FUNCTION Processos.validar_pdf_campo();
 
 -- Impede que um PDF referenciado deixe de ser legível por lixeira, mudança de MIME ou pasta.

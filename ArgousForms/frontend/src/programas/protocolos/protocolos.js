@@ -39,6 +39,8 @@ import {
 } from './protocolos-store.js';
 import SeletorPasta from './seletor-pasta.js';
 import PdfCampos from './pdf-campos.js';
+import ModeloHtmlEditor from './modelo-html-editor.js';
+import VariaveisInstituicao from './variaveis-instituicao.js';
 import FluxoEditorCarregador from './fluxo-editor-carregador.js';
 import { REGEX_PRONTAS, normalizarValorExemplo, validarDefinicaoTexto } from './variavel-texto.js';
 
@@ -78,7 +80,7 @@ function Vazio({ titulo, descricao, acao, aoClicar }) {
   );
 }
 
-export default function Protocolos({ usuarioId }) {
+export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
   const { t, locale } = useI18n();
   const [carregado, setCarregado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -89,6 +91,7 @@ export default function Protocolos({ usuarioId }) {
   const [filtro, setFiltro] = useState('rascunhos');
   const [cadastro, setCadastro] = useState(null);
   const [exclusao, setExclusao] = useState(null);
+  const [publicacao, setPublicacao] = useState(false);
   const [variavelEdicao, setVariavelEdicao] = useState(null);
   const [formularioEdicao, setFormularioEdicao] = useState(null);
   const [formularioAberto, setFormularioAberto] = useState(null);
@@ -97,9 +100,17 @@ export default function Protocolos({ usuarioId }) {
   const [erro, setErro] = useState('');
   const [seletorPastaAberto, setSeletorPastaAberto] = useState(false);
   const [modeloPdf, setModeloPdf] = useState(null);
+  const [modeloHtml, setModeloHtml] = useState(null);
   const [modeloExclusao, setModeloExclusao] = useState(null);
   const [modeloCampos, setModeloCampos] = useState(null);
+  const [variaveisInstituicaoPdf, setVariaveisInstituicaoPdf] = useState([]);
+  const [variaveisInstituicaoCadastro, setVariaveisInstituicaoCadastro] = useState([]);
+  const [variaveisSistema, setVariaveisSistema] = useState([]);
+  const [erroVariaveisInstituicaoPdf, setErroVariaveisInstituicaoPdf] = useState('');
   const [progressoPdf, setProgressoPdf] = useState(0);
+  const [mostrarVariaveisInstituicao, setMostrarVariaveisInstituicao] = useState(false);
+  const buscandoVariaveis = Boolean(modeloCampos || variavelEdicao);
+  const editandoVariavel = Boolean(variavelEdicao);
 
   useEffect(() => {
     let cancelado = false;
@@ -110,7 +121,47 @@ export default function Protocolos({ usuarioId }) {
     return () => { cancelado = true; };
   }, [usuarioId]);
 
+  useEffect(() => {
+    if (!buscandoVariaveis) return;
+    let cancelado = false;
+    executar('LISTAR_VARIAVEIS_INSTITUICAO')
+      .then((dados) => {
+        if (cancelado) return;
+        const atributos = dados.variaveis || [];
+        setVariaveisInstituicaoCadastro(atributos.filter((item) => item.tipo === 'V' && item.ativo));
+        const porId = new Map(atributos.map((item) => [item.idAtributo, item]));
+        const caminho = (item) => {
+          const partes = [item.codigo];
+          const visitados = new Set([item.idAtributo]);
+          let pai = porId.get(item.idAtributoPai);
+          while (pai && !visitados.has(pai.idAtributo)) {
+            partes.unshift(pai.codigo);
+            visitados.add(pai.idAtributo);
+            pai = porId.get(pai.idAtributoPai);
+          }
+          return partes.join('.');
+        };
+        setVariaveisInstituicaoPdf(atributos.filter((item) => item.tipo === 'V').map((item) => ({
+          id: `instituicao:${item.idAtributo}`, idAtributo: item.idAtributo,
+          codigo: caminho(item), nome: caminho(item), tipo: 'S', valorInstituicao: item.valor, ativo: item.ativo,
+        })));
+        setErroVariaveisInstituicaoPdf('');
+      })
+      .catch((falha) => { if (!cancelado) setErroVariaveisInstituicaoPdf(falha.message); });
+    return () => { cancelado = true; };
+  }, [buscandoVariaveis]);
+
+  useEffect(() => {
+    if (!editandoVariavel) return;
+    let cancelado = false;
+    executar('CATALOGO_VARIAVEIS_SISTEMA')
+      .then((dados) => { if (!cancelado) setVariaveisSistema(dados.variaveis || []); })
+      .catch((falha) => { if (!cancelado) setErro(falha.message); });
+    return () => { cancelado = true; };
+  }, [editandoVariavel]);
+
   const protocolo = protocolos.find((item) => item.id === selecionado);
+  const modeloParaExcluir = protocolo?.rascunho?.documentos.find((item) => item.id === modeloExclusao);
   const formulario = protocolo?.rascunho?.formularios.find(
     (item) => item.id === formularioAberto,
   );
@@ -170,6 +221,15 @@ export default function Protocolos({ usuarioId }) {
     });
   }
 
+  async function publicarProtocolo() {
+    if (!protocolo) return;
+    await executarEdicao('PUBLICAR_PROTOCOLO', { idProtocolo: protocolo.id }, () => {
+      setPublicacao(false);
+      setSelecionado(null);
+      setArea('visao');
+    });
+  }
+
   async function escolherPasta(pasta) {
     await executarEdicao('ASSOCIAR_PASTA_PROTOCOLO', { idProtocolo: protocolo.id, idPasta: pasta.idPasta }, () => {
       setSeletorPastaAberto(false);
@@ -215,9 +275,24 @@ export default function Protocolos({ usuarioId }) {
     }
   }
 
-  async function excluirModeloPdf() {
+  async function salvarModeloHtml(dados) {
+    setSalvando(true);
+    try {
+      await executar('SALVAR_MODELO_HTML', { idProtocolo: protocolo.id, idModelo: dados.id || null,
+        codigo: dados.codigo.trim(), titulo: dados.titulo.trim(), observacoes: dados.observacoes || '',
+        css: dados.css || '', partes: dados.partes });
+      await atualizarLista(protocolo.id);
+      setModeloHtml(null);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirModelo() {
     if (!modeloExclusao) return;
-    await executarEdicao('EXCLUIR_MODELO_PDF', { idProtocolo: protocolo.id, idModelo: modeloExclusao },
+    const modelo = protocolo.rascunho.documentos.find((item) => item.id === modeloExclusao);
+    await executarEdicao(modelo?.tipoModelo === 'H' ? 'EXCLUIR_MODELO_HTML' : 'EXCLUIR_MODELO_PDF',
+      { idProtocolo: protocolo.id, idModelo: modeloExclusao },
       () => setModeloExclusao(null));
   }
 
@@ -363,6 +438,8 @@ export default function Protocolos({ usuarioId }) {
       </div>
     );
 
+  if (mostrarVariaveisInstituicao) return <VariaveisInstituicao aoVoltar={() => setMostrarVariaveisInstituicao(false)} />;
+
   return (
     <div className="protocolos-shell">
       <Backdrop open={salvando} sx={{ zIndex: (tema) => tema.zIndex.modal + 1 }}>
@@ -381,6 +458,9 @@ export default function Protocolos({ usuarioId }) {
                 )}
               </p>
             </div>
+            <div className="protocolos-central-acoes">
+            {usuarioPapeis.includes('MODELADOR') && <Button variant="outlined" startIcon={<Variable size={18} />}
+              onClick={() => setMostrarVariaveisInstituicao(true)}>{t('Variáveis da instituição')}</Button>}
             <Button
               variant="contained"
               startIcon={<Plus size={18} />}
@@ -391,6 +471,7 @@ export default function Protocolos({ usuarioId }) {
             >
               {t('Criar Protocolo')}
             </Button>
+            </div>
           </header>
           <div className="protocolos-filtros">
             <TextField
@@ -441,13 +522,13 @@ export default function Protocolos({ usuarioId }) {
                       {dataCurta(item.atualizadoEm, locale)}
                     </small>
                   </div>
-                  <Button
+                  {(item.temRascunho || item.rascunho) && <Button
                     variant="outlined"
                     endIcon={<ArrowRight size={16} />}
                     onClick={() => abrirProtocolo(item.id)}
                   >
-                    {t(item.temRascunho || item.rascunho ? 'Continuar edição' : 'Abrir Protocolo')}
-                  </Button>
+                    {t('Continuar edição')}
+                  </Button>}
                 </article>
               ))}
             </div>
@@ -495,6 +576,8 @@ export default function Protocolos({ usuarioId }) {
               <p>{protocolo.descricao || t('Sem descrição')}</p>
             </div>
             <div className="protocolos-central-acoes">
+              {usuarioPapeis.includes('GESTOR_DE_PROTOCOLOS') && <Button variant="contained"
+                onClick={() => setPublicacao(true)}>{t('Publicar Protocolo')}</Button>}
               <Button
                 variant="outlined"
                 startIcon={<Settings2 size={16} />}
@@ -1014,6 +1097,10 @@ export default function Protocolos({ usuarioId }) {
                       onClick={() => { setErro(''); setModeloPdf({ codigo: '', titulo: '', observacoes: '', arquivo: null }); }}>
                       {t('Novo modelo PDF')}
                     </Button>
+                    <Button variant="outlined" startIcon={<Plus size={16} />}
+                      onClick={() => { setErro(''); setModeloHtml({ codigo: '', titulo: '', observacoes: '', css: '', partes: [] }); }}>
+                      {t('Novo modelo HTML')}
+                    </Button>
                   </div>
                   {!protocolo.rascunho.pasta && <Alert severity="info">{t('Associe uma pasta ao Protocolo antes de enviar modelos PDF.')}</Alert>}
                   {protocolo.rascunho.documentos.length ?
@@ -1023,10 +1110,14 @@ export default function Protocolos({ usuarioId }) {
                           <span className="protocolos-entry-icon"><FileText size={18} /></span>
                           <div>
                             <strong>{documento.titulo}</strong>
-                            <small>{documento.codigo} · PDF · {documento.arquivoNome}</small>
+                            <small>{documento.codigo} · {documento.tipoModelo === 'H' ? 'HTML' : `PDF · ${documento.arquivoNome}`}</small>
                             {documento.observacoes && <p>{documento.observacoes}</p>}
                           </div>
-                          <Button size="small" component="a" target="_blank" rel="noopener noreferrer"
+                          {documento.tipoModelo === 'H' ? <>
+                            <Button size="small" onClick={() => setModeloHtml({ ...documento })}>{t('Editar HTML')}</Button>
+                            <Button size="small" color="error" aria-label={t('Excluir modelo HTML')}
+                              onClick={() => { setErro(''); setModeloExclusao(documento.id); }}><Trash2 size={16} /></Button>
+                          </> : <><Button size="small" component="a" target="_blank" rel="noopener noreferrer"
                             href={`/ArgousForms/arquivo-conteudo?idArquivo=${encodeURIComponent(documento.idArquivo)}&idArquivoVersao=${encodeURIComponent(documento.idArquivoVersao)}&modo=visualizar`}>
                             {t('Visualizar PDF')}
                           </Button>
@@ -1037,7 +1128,7 @@ export default function Protocolos({ usuarioId }) {
                           <Button size="small" color="error" aria-label={t('Excluir modelo PDF')}
                             onClick={() => { setErro(''); setModeloExclusao(documento.id); }}>
                             <Trash2 size={16} />
-                          </Button>
+                          </Button></>}
                         </article>)}
                     </div> :
                     <Vazio titulo={t('Nenhum modelo de documento definido')}
@@ -1056,7 +1147,7 @@ export default function Protocolos({ usuarioId }) {
           <p>{t('O rascunho, seus formulários, variáveis e modelos de documentos serão excluídos. Esta ação não pode ser desfeita.')}</p>
           {protocolos.find((item) => item.id === exclusao)?.rascunho?.pasta &&
             <p>{t('A pasta associada permanecerá no gestor de documentos.')}</p>}
-          {!!protocolos.find((item) => item.id === exclusao)?.rascunho?.documentos?.length &&
+          {protocolos.find((item) => item.id === exclusao)?.rascunho?.documentos?.some((item) => item.tipoModelo !== 'H') &&
             <p>{t('Os PDFs de origem permanecerão na pasta MODELOS.')}</p>}
           {erro && <Alert severity="error">{erro}</Alert>}
         </DialogContent>
@@ -1067,19 +1158,25 @@ export default function Protocolos({ usuarioId }) {
       </Dialog>
       {seletorPastaAberto && <SeletorPasta aberto permitirCriacao pastaAtual={protocolo?.rascunho?.pasta}
         aoFechar={() => setSeletorPastaAberto(false)} aoEscolher={escolherPasta} />}
-      {modeloCampos && <PdfCampos modelo={modeloCampos} variaveis={protocolo?.rascunho?.variaveis || []}
+      {modeloCampos && <PdfCampos modelo={modeloCampos}
+        variaveis={[...(protocolo?.rascunho?.variaveis || []), ...variaveisInstituicaoPdf]}
+        erroCatalogo={erroVariaveisInstituicaoPdf}
         aoFechar={() => setModeloCampos(null)} aoCriarVariavel={() => {
           setModeloCampos(null);
           setArea('variaveis');
         }} aoSalvar={async (campos) => {
           const atualizado = await executar('SALVAR_CAMPOS_MODELO_PDF', {
             idProtocolo: protocolo.id, idModelo: modeloCampos.id,
-            campos: campos.map(({ idVariavel, pagina, x, y, largura, altura, apresentacao }) =>
-              ({ idVariavel, pagina, x, y, largura, altura, apresentacao: apresentacao || {} })),
+            campos: campos.map(({ idVariavel, idAtributo, pagina, x, y, largura, altura, apresentacao }) =>
+              ({ idVariavel: idVariavel || null, idAtributo: idAtributo ?? null,
+                pagina, x, y, largura, altura, apresentacao: apresentacao || {} })),
           });
           setProtocolos((atuais) => atuais.map((item) => item.id === atualizado.id ? atualizado : item));
           setModeloCampos(null);
         }} />}
+
+      {modeloHtml && <ModeloHtmlEditor modelo={modeloHtml} variaveis={protocolo?.rascunho?.variaveis || []}
+        salvando={salvando} aoFechar={() => setModeloHtml(null)} aoSalvar={salvarModeloHtml} />}
 
       <Dialog open={!!modeloPdf} onClose={() => !salvando && setModeloPdf(null)} fullWidth maxWidth="sm">
         <DialogTitle>{t(modeloPdf?.id ? 'Editar modelo PDF' : 'Novo modelo PDF')}</DialogTitle>
@@ -1112,14 +1209,17 @@ export default function Protocolos({ usuarioId }) {
       </Dialog>
 
       <Dialog open={!!modeloExclusao} onClose={() => setModeloExclusao(null)} fullWidth maxWidth="sm">
-        <DialogTitle>{t('Excluir modelo PDF')}</DialogTitle>
+        <DialogTitle>{t(modeloParaExcluir?.tipoModelo === 'H' ? 'Excluir modelo HTML' : 'Excluir modelo PDF')}</DialogTitle>
         <DialogContent>
-          <p>{t('O modelo será retirado do rascunho. O PDF enviado permanecerá na pasta MODELOS.')}</p>
+          <p>{t(modeloParaExcluir?.tipoModelo === 'H' ? 'O modelo HTML será retirado do rascunho.' :
+            'O modelo será retirado do rascunho. O PDF enviado permanecerá na pasta MODELOS.')}</p>
           {erro && <Alert severity="error">{erro}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setModeloExclusao(null)} disabled={salvando}>{t('Cancelar')}</Button>
-          <Button color="error" variant="contained" onClick={excluirModeloPdf} disabled={salvando}>{t('Excluir modelo PDF')}</Button>
+          <Button color="error" variant="contained" onClick={excluirModelo} disabled={salvando}>
+            {t(modeloParaExcluir?.tipoModelo === 'H' ? 'Excluir modelo HTML' : 'Excluir modelo PDF')}
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1222,6 +1322,7 @@ export default function Protocolos({ usuarioId }) {
               setVariavelEdicao({
                 ...variavelEdicao,
                 tipo: evento.target.value,
+                definicao: { ...variavelEdicao.definicao, origem: { tipo: 'MANUAL' } },
               })
             }
           >
@@ -1231,6 +1332,39 @@ export default function Protocolos({ usuarioId }) {
               </MenuItem>
             ))}
           </TextField>
+          <TextField select label={t('Origem do valor')} fullWidth
+            value={variavelEdicao?.definicao?.origem?.tipo || 'MANUAL'}
+            onChange={(evento) => setVariavelEdicao((atual) => ({ ...atual,
+              definicao: { ...atual.definicao, origem: { tipo: evento.target.value } } }))}>
+            <MenuItem value="MANUAL">{t('Preenchimento manual')}</MenuItem>
+            <MenuItem value="SISTEMA">{t('Variável de sistema')}</MenuItem>
+            {variavelEdicao?.tipo === 'S' && <MenuItem value="INSTITUICAO">{t('Variável da instituição')}</MenuItem>}
+            <MenuItem value="INTEGRACAO">{t('Integração')}</MenuItem>
+          </TextField>
+          {variavelEdicao?.definicao?.origem?.tipo === 'SISTEMA' &&
+            <TextField select required label={t('Variável de sistema')} fullWidth
+              value={variavelEdicao.definicao.origem.codigo || ''}
+              onChange={(evento) => setVariavelEdicao((atual) => ({ ...atual,
+                definicao: { ...atual.definicao, origem: { tipo: 'SISTEMA', codigo: evento.target.value } } }))}>
+              <MenuItem value="">{t('Escolha uma variável')}</MenuItem>
+              {variaveisSistema.filter((item) => item.tipoDado === variavelEdicao.tipo).map((item) =>
+                <MenuItem key={item.codigo} value={item.codigo}>{item.codigo} · {item.descricao}</MenuItem>)}
+            </TextField>}
+          {variavelEdicao?.definicao?.origem?.tipo === 'INSTITUICAO' &&
+            <TextField select required label={t('Variável da instituição')} fullWidth
+              value={variavelEdicao.definicao.origem.idAtributo || ''}
+              onChange={(evento) => setVariavelEdicao((atual) => ({ ...atual,
+                definicao: { ...atual.definicao, origem: { tipo: 'INSTITUICAO', idAtributo: Number(evento.target.value) } } }))}>
+              <MenuItem value="">{t('Escolha uma variável')}</MenuItem>
+              {variaveisInstituicaoCadastro.map((item) =>
+                <MenuItem key={item.idAtributo} value={item.idAtributo}>{item.codigo}</MenuItem>)}
+            </TextField>}
+          {variavelEdicao?.definicao?.origem?.tipo === 'INTEGRACAO' &&
+            <TextField required label={t('Código de integração')} fullWidth
+              value={variavelEdicao.definicao.origem.codigo || ''} inputProps={{ maxLength: 100 }}
+              onChange={(evento) => setVariavelEdicao((atual) => ({ ...atual,
+                definicao: { ...atual.definicao, origem: { tipo: 'INTEGRACAO', codigo: evento.target.value } } }))}
+              helperText={t('O webhook interpretará este código quando a integração for executada.')} />}
           <TextField
             label={t('Descrição (opcional)')}
             multiline
@@ -1290,6 +1424,12 @@ export default function Protocolos({ usuarioId }) {
                 definicao: { ...atual.definicao, valorExemplo: exemplo.valor } }));
             }}
             helperText={t('Usado apenas nas pré-visualizações; não preenche valores de Processos.')} />
+          <TextField label={t('Script ao sair do campo (opcional)')} fullWidth multiline minRows={5}
+            value={variavelEdicao?.definicao?.scriptAoSairDoCampo || ''}
+            inputProps={{ maxLength: 20000 }}
+            onChange={(evento) => setVariavelEdicao((atual) => ({ ...atual,
+              definicao: { ...atual.definicao, scriptAoSairDoCampo: evento.target.value } }))}
+            helperText={t('Será executado quando o usuário sair do campo durante o preenchimento do formulário.')} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setVariavelEdicao(null)}>
@@ -1345,6 +1485,17 @@ export default function Protocolos({ usuarioId }) {
           <Button variant="contained" onClick={salvarFormulario}>
             {t('Salvar formulário')}
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={publicacao} onClose={() => setPublicacao(false)} fullWidth maxWidth="sm">
+        <DialogTitle>{t('Publicar Protocolo')}</DialogTitle>
+        <DialogContent>
+          <p>{t('A versão publicada não poderá mais ser alterada. Confirme que revisou o fluxo, os destinatários e os modelos de documentos.')}</p>
+          {erro && <Alert severity="error">{erro}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPublicacao(false)}>{t('Voltar')}</Button>
+          <Button variant="contained" disabled={salvando} onClick={publicarProtocolo}>{t('Confirmar publicação')}</Button>
         </DialogActions>
       </Dialog>
     </div>

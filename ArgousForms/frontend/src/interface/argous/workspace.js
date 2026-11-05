@@ -99,7 +99,6 @@ const nav = [
   ['dashboards', 'Dashboards', ChartNoAxesCombined],
   ['documents', 'Documentos', Files],
   ['protocols', 'Protocolos', GitBranch],
-  ['templates', 'Modelos', LayoutTemplate],
   ['organization', 'Organização e acessos', Users],
 ];
 const initials = (name) =>
@@ -1419,7 +1418,7 @@ export default function Workspace() {
                 {view === 'documents' && canConsultDocuments && (
                   <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} />
                 )}
-                {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} />}
+                {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} usuarioPapeis={usuario?.papeis || []} />}
                 {view === 'templates' && designer && (
                   <>
                     <div className="page-heading">

@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, TextField, Tooltip } from '@mui/material';
+import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListSubheader, MenuItem, TextField, Tooltip } from '@mui/material';
 import { AlignCenter, AlignEndHorizontal, AlignLeft, AlignRight, AlignStartHorizontal, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bold, ChevronLeft, ChevronRight, Eye, Italic, Underline } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { alinharCampos, apresentacaoCampo, moverCamposComSetas } from './pdf-campos-layout.js';
 
 const arredondar = (valor) => Math.round(valor * 100) / 100;
 const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(maximo, valor));
+const referenciaCampo = (campo) => campo.idAtributo != null ? `instituicao:${campo.idAtributo}` : campo.idVariavel;
 
-export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel, aoSalvar }) {
+export default function PdfCampos({ modelo, variaveis, erroCatalogo, aoFechar, aoCriarVariavel, aoSalvar }) {
   const { t } = useI18n();
   const canvas = useRef(null);
   const pdf = useRef(null);
@@ -97,7 +98,8 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
     const x = limitar(posX / limite.width * tamanho.largura, 0, tamanho.largura - largura);
     const y = limitar(posY / limite.height * tamanho.altura, 0, tamanho.altura - altura);
     const id = `novo-${++sequencia.current}`;
-    setCampos((atuais) => [...atuais, { id, idVariavel: variavel,
+    const origem = { idVariavel: variavel };
+    setCampos((atuais) => [...atuais, { id, ...origem,
       pagina, x: arredondar(x), y: arredondar(y), largura: arredondar(largura), altura: arredondar(altura), apresentacao: {} }]);
     setSelecionados([id]);
     setVariavel('');
@@ -222,20 +224,33 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
 
   const campoSelecionado = campos.find((campo) => campo.id === selecionados[0]);
   const estiloSelecionado = campoSelecionado ? apresentacaoCampo(campoSelecionado) : null;
-  const variavelReferencia = variaveis.find((item) => item.id === campoSelecionado?.idVariavel);
+  const variavelReferencia = variaveis.find((item) => item.id === referenciaCampo(campoSelecionado || {}));
+  const variaveisDoProtocolo = variaveis.filter((item) => item.idAtributo == null);
+  const categoriasVariaveis = [
+    ['Preenchimento manual', variaveisDoProtocolo.filter((item) => !item.definicao?.origem?.tipo || item.definicao.origem.tipo === 'MANUAL')],
+    ['Variáveis de sistema', variaveisDoProtocolo.filter((item) => item.definicao?.origem?.tipo === 'SISTEMA')],
+    ['Variáveis da instituição', variaveisDoProtocolo.filter((item) => item.definicao?.origem?.tipo === 'INSTITUICAO')],
+    ['Variáveis de integração', variaveisDoProtocolo.filter((item) => item.definicao?.origem?.tipo === 'INTEGRACAO')],
+  ];
 
   return <><Dialog open onClose={fechar} onKeyDown={aoPressionarTecla} fullWidth maxWidth="lg">
     <DialogTitle>{t('Posicionar campos')} · {modelo.titulo}</DialogTitle>
     <DialogContent>
       {erro && <Alert severity="error" sx={{ mb: 2 }}>{erro}</Alert>}
+      {erroCatalogo && <Alert severity="warning" sx={{ mb: 2 }}>{erroCatalogo}</Alert>}
       <div className="pdf-campos-barra" role="toolbar" aria-label={t('Ferramentas dos campos do PDF')}>
         <div className="pdf-campos-grupo pdf-campos-grupo-variavel">
-          <TextField select size="small" label={t('Variável')} value={variavel} disabled={!variaveis.length || salvando}
+          <TextField select size="small" label={t('Variável')} value={variavel} disabled={!variaveisDoProtocolo.length || salvando}
             onChange={(evento) => setVariavel(evento.target.value)} sx={{ minWidth: 210 }}>
             <MenuItem value="">{t('Selecione uma variável')}</MenuItem>
-            {variaveis.map((item) => <MenuItem key={item.id} value={item.id}>{item.nome} · {'{{'}{item.codigo}{'}}'}</MenuItem>)}
+            {categoriasVariaveis.filter(([, itens]) => itens.length).flatMap(([titulo, itens]) => [
+              <ListSubheader key={titulo}>{t(titulo)}</ListSubheader>,
+              ...itens.map((item) => <MenuItem key={item.id} value={item.id}>
+                {item.nome} · {'{{'}{item.codigo}{'}}'}
+              </MenuItem>),
+            ])}
           </TextField>
-          {!variaveis.length && <Button onClick={aoCriarVariavel}>{t('Cadastrar variável')}</Button>}
+          {!variaveisDoProtocolo.length && <Button onClick={aoCriarVariavel}>{t('Cadastrar variável')}</Button>}
         </div>
         <div className="pdf-campos-grupo" aria-label={t('Alinhar campos')}>
           {[
@@ -295,7 +310,7 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
         </div>
         <div className="pdf-campos-barra-estado" aria-live="polite">
           {t(variavel ? 'Clique no PDF para posicionar a variável.' :
-            variaveis.length ? 'Escolha uma variável para posicionar.' : 'Este Protocolo ainda não possui variáveis.')}
+            variaveisDoProtocolo.length ? 'Escolha uma variável para posicionar.' : 'Este Protocolo ainda não possui variáveis.')}
           {campoSelecionado && ` · ${t('Referência:')} ${variavelReferencia?.nome || t('Campo')} ${campos.indexOf(campoSelecionado) + 1}`}
         </div>
       </div>
@@ -306,7 +321,7 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
           <button type="button" className="pdf-campos-superficie" disabled={!variavel || carregando || salvando}
             aria-label={t('Posicionar variável no PDF')} onClick={posicionar} />
           {tamanho && campos.filter((campo) => campo.pagina === pagina).map((campo) => {
-            const item = variaveis.find((v) => v.id === campo.idVariavel);
+            const item = variaveis.find((v) => v.id === referenciaCampo(campo));
             const posicao = { left: `${campo.x / tamanho.largura * 100}%`, top: `${campo.y / tamanho.altura * 100}%`,
               width: `${campo.largura / tamanho.largura * 100}%`, height: `${campo.altura / tamanho.altura * 100}%` };
             return <div className={`pdf-campos-marcador${selecionados.includes(campo.id) ? ' pdf-campos-marcador-selecionado' : ''}${selecionados[0] === campo.id ? ' pdf-campos-marcador-referencia' : ''}`} key={campo.id}
@@ -326,7 +341,7 @@ export default function PdfCampos({ modelo, variaveis, aoFechar, aoCriarVariavel
         </div>
       </div>
       {campos.length > 0 && <div className="pdf-campos-lista">{campos.map((campo, indice) => {
-        const item = variaveis.find((v) => v.id === campo.idVariavel);
+        const item = variaveis.find((v) => v.id === referenciaCampo(campo));
         return <div key={campo.id}>
           <Checkbox size="small" checked={selecionados.includes(campo.id)} disabled={salvando || campo.pagina !== pagina}
             inputProps={{ 'aria-label': `${t('Selecionar campo')} ${item?.nome || indice + 1}` }}

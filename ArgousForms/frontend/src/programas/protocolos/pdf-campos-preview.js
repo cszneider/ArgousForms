@@ -27,12 +27,12 @@ export async function gerarPreviaPdf(bytes, documentoLido, campos, variaveis) {
   const porId = new Map(variaveis.map((variavel) => [variavel.id, variavel]));
 
   for (const campo of campos) {
-    const variavel = porId.get(campo.idVariavel);
+    const variavel = porId.get(campo.idAtributo != null ? `instituicao:${campo.idAtributo}` : campo.idVariavel);
     if (!variavel) continue;
     if (campo.pagina < 1 || campo.pagina > documento.getPageCount())
       throw new Error('Um campo está associado a uma página inexistente.');
 
-    const exemplo = variavel.definicao?.valorExemplo;
+    const exemplo = variavel.valorInstituicao ?? variavel.definicao?.valorExemplo;
     const valor = exemplo
       ? variavel.tipo === 'S' ? formatarValorExemplo(exemplo, variavel.definicao?.texto?.mascara) : exemplo
       : `{{${variavel.codigo}}}`;

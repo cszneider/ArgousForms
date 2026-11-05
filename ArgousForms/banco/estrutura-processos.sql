@@ -37,6 +37,7 @@ CREATE TABLE Processos.PROTOCOLO_VERSOES
 	DS_DESCRICAO Text NULL ,
 	TX_SCRIPT_INICIALIZACAO Text NULL ,
 	TX_SCRIPT_FINALIZACAO Text NULL ,
+    CONSTRAINT ck_protocolo_versao_publicacao CHECK ((NR_VERSAO = -1 AND TP_SITUACAO = 'R' AND ID_USUARIO_PUBLICOU IS NULL AND DT_PUBLICACAO IS NULL) OR (NR_VERSAO > 0 AND TP_SITUACAO = 'P' AND ID_USUARIO_PUBLICOU IS NOT NULL AND DT_PUBLICACAO IS NOT NULL)),
  primary key (ID_PROTOCOLO_VERSAO)
 );
 
@@ -176,11 +177,27 @@ CREATE TABLE Processos.PROTOCOLO_VERSAO_DOCUMENTOS
 CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_HTML
 (
 	ID_PROTOCOLO_DOCUMENTO_VERSAO UUID   NOT NULL,
-	TX_HTML Text NOT NULL,
 	TX_CSS Text NULL ,
 	DT_INCLUSAO Timestamp NOT NULL,
  primary key (ID_PROTOCOLO_DOCUMENTO_VERSAO)
 );
+
+COMMENT ON TABLE Processos.PROTOCOLO_DOCUMENTO_HTML IS 'Define a versão HTML de um modelo de documento do Protocolo. O CSS comum fica nesta tabela; o conteúdo HTML criado pelo editor ou importado fica em PROTOCOLO_DOCUMENTO_HTML_PARTES. Antes da publicação, o sistema valida o HTML/CSS permitido e as variáveis referenciadas. Uma versão HTML deve ter um registro nesta tabela e nenhum na tabela específica de PDF. O armazenamento de imagens e outros recursos ainda será definido.';
+
+CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES
+(
+	ID_DOCUMENTO_HTML_PARTE UUID NOT NULL,
+	ID_PROTOCOLO_DOCUMENTO_VERSAO UUID NOT NULL,
+	TP_PARTE Char(1) NOT NULL CHECK (TP_PARTE IN ('H', 'A', 'B', 'X', 'F')),
+	NR_ORDEM Smallint NOT NULL CHECK (NR_ORDEM > 0),
+	TX_HTML Text NOT NULL CHECK (BTRIM(TX_HTML) <> ''),
+	primary key (ID_DOCUMENTO_HTML_PARTE)
+);
+
+COMMENT ON COLUMN Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES.TP_PARTE IS 'H: cabeçalho repetido nas páginas do corpo; A: conteúdo de apresentação, exibido uma vez antes do corpo, sem cabeçalho nem rodapé; B: corpo do documento, cujas partes são concatenadas na ordem definida; X: conteúdo de encerramento ou resumo, exibido uma vez após o corpo, sem cabeçalho nem rodapé; F: rodapé repetido nas páginas do corpo. A ordem de montagem é A, B, X. H e F são aplicados somente às páginas produzidas pelo corpo.';
+
+CREATE UNIQUE INDEX uk_html_partes_ordem ON Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES (ID_PROTOCOLO_DOCUMENTO_VERSAO, TP_PARTE, NR_ORDEM);
+CREATE UNIQUE INDEX uk_html_partes_cabecalho_rodape ON Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES (ID_PROTOCOLO_DOCUMENTO_VERSAO, TP_PARTE) WHERE TP_PARTE IN ('H', 'F');
 
 CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_PDF
 (
@@ -194,13 +211,15 @@ CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS
 (
 	ID_PDF_CAMPO UUID NOT NULL,
 	ID_PROTOCOLO_DOCUMENTO_VERSAO UUID   NOT NULL,
-	ID_VARIAVEL UUID   NOT NULL,
+	ID_VARIAVEL UUID   NULL,
+	ID_ATRIBUTO Integer NULL,
 	NR_PAGINA Smallint NOT NULL Check (NR_PAGINA > 0 ),
 	VL_POS_X Numeric(10,2) NOT NULL,
 	VL_POS_Y Numeric(10,2) NOT NULL,
 	VL_LARGURA Numeric(10,2) NOT NULL,
 	VL_ALTURA Numeric(10,2) NOT NULL,
 	JS_APRESENTACAO JSONB NOT NULL,
+	CONSTRAINT ck_pdf_campo_origem CHECK ((ID_VARIAVEL IS NULL) <> (ID_ATRIBUTO IS NULL)),
  primary key (ID_PDF_CAMPO)
 );
 
@@ -515,6 +534,7 @@ ALTER TABLE Processos.PROTOCOLO_VARIAVEL_VERSOES add  foreign key (ID_VARIAVEL) 
 ALTER TABLE Processos.FORMULARIO_VARIAVEIS add  foreign key (ID_VARIAVEL) REFERENCES Processos.PROTOCOLO_VARIAVEIS (ID_VARIAVEL)  on update restrict  on delete restrict ;
 
 ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS add  foreign key (ID_VARIAVEL) REFERENCES Processos.PROTOCOLO_VARIAVEIS (ID_VARIAVEL)  on update restrict  on delete restrict ;
+ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS ADD CONSTRAINT fk_pdf_campo_variavel_instituicao FOREIGN KEY (ID_ATRIBUTO) REFERENCES Cadastro.VARIAVEIS_INSTITUICAO (ID_ATRIBUTO) ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 ALTER TABLE Processos.PROCESSO_VARIAVEL_VALORES add  foreign key (ID_VARIAVEL) REFERENCES Processos.PROTOCOLO_VARIAVEIS (ID_VARIAVEL)  on update restrict  on delete restrict ;
 
@@ -537,6 +557,7 @@ ALTER TABLE Processos.PROTOCOLO_VERSAO_DOCUMENTOS add  foreign key (ID_PROTOCOLO
 ALTER TABLE Processos.PROTOCOLO_VERSAO_DOCUMENTOS add  foreign key (ID_PROTOCOLO_DOCUMENTO_VERSAO) REFERENCES Processos.PROTOCOLO_DOCUMENTO_VERSOES (ID_PROTOCOLO_DOCUMENTO_VERSAO)  on update restrict  on delete restrict ;
 
 ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_HTML add  foreign key (ID_PROTOCOLO_DOCUMENTO_VERSAO) REFERENCES Processos.PROTOCOLO_DOCUMENTO_VERSOES (ID_PROTOCOLO_DOCUMENTO_VERSAO)  on update restrict  on delete restrict ;
+ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES ADD CONSTRAINT fk_html_partes_documento FOREIGN KEY (ID_PROTOCOLO_DOCUMENTO_VERSAO) REFERENCES Processos.PROTOCOLO_DOCUMENTO_HTML (ID_PROTOCOLO_DOCUMENTO_VERSAO) ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_PDF add  foreign key (ID_PROTOCOLO_DOCUMENTO_VERSAO) REFERENCES Processos.PROTOCOLO_DOCUMENTO_VERSOES (ID_PROTOCOLO_DOCUMENTO_VERSAO)  on update restrict  on delete restrict ;
 
