@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -20,15 +21,16 @@ import br.com.argousForms.documentos.DocumentosService;
 import br.com.argousForms.model.negocio.docs.PastaNegocio;
 import br.com.argousForms.model.negocio.processos.FormularioNegocio;
 import br.com.argousForms.model.negocio.processos.FormularioVariavelNegocio;
-import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoNegocio;
+import br.com.argousForms.model.negocio.processos.ProcotoloVariavelVersaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHTMLNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHtmlParteNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPDFNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPdfCampoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoVersaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloRecursoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloVariavelNegocio;
-import br.com.argousForms.model.negocio.processos.ProcotoloVariavelVersaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloVersaoDocumentoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloVersaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloVersaoVariavelNegocio;
@@ -37,6 +39,8 @@ import br.com.argousForms.model.persistencia.processos.Formulario;
 import br.com.argousForms.model.persistencia.processos.FormularioLocalizador;
 import br.com.argousForms.model.persistencia.processos.FormularioVariavel;
 import br.com.argousForms.model.persistencia.processos.FormularioVariavelLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersao;
+import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersaoLocalizador;
 import br.com.argousForms.model.persistencia.processos.Protocolo;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumento;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHTML;
@@ -48,10 +52,10 @@ import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPdfCamp
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoVersao;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoVersaoLocalizador;
 import br.com.argousForms.model.persistencia.processos.ProtocoloLocalizador;
+import br.com.argousForms.model.persistencia.processos.ProtocoloRecurso;
+import br.com.argousForms.model.persistencia.processos.ProtocoloRecursoLocalizador;
 import br.com.argousForms.model.persistencia.processos.ProtocoloVariavel;
 import br.com.argousForms.model.persistencia.processos.ProtocoloVariavelLocalizador;
-import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersao;
-import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersaoLocalizador;
 import br.com.argousForms.model.persistencia.processos.ProtocoloVersao;
 import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoDocumento;
 import br.com.argousForms.model.persistencia.processos.ProtocoloVersaoDocumentoLocalizador;
@@ -138,6 +142,9 @@ public final class ProtocolosService {
 
 	private void validarFluxoPublicavel( Conexao conexao, UUID idVersao ) throws Exception {
 
+		if( !existeSql( conexao, "select 1 from Processos.PROTOCOLO_GESTORES_ELEGIVEIS where ID_PROTOCOLO_VERSAO = ?", idVersao ) ) {
+			throw new ArgousFormsApiException( 409, "GESTOR_ELEGIVEL_OBRIGATORIO", "Defina ao menos uma regra de gestor elegível antes de publicar." );
+		}
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select count(*) filter (where not exists (select 1 from Processos.ENCAMINHAMENTOS caminho where caminho.ID_PROTOCOLO_VERSAO = etapa.ID_PROTOCOLO_VERSAO and caminho.ID_PROXIMA_ETAPA = etapa.ID_PROTOCOLO_ETAPA)), count(*) filter (where etapa.ID_ENCAMINHAMENTO is null) from Processos.PROTOCOLOS_ETAPAS etapa where etapa.ID_PROTOCOLO_VERSAO = ?" ) ) {
 			consulta.setObject( 1, idVersao );
 			try ( ResultSet linha = consulta.executeQuery() ) {
@@ -167,6 +174,10 @@ public final class ProtocolosService {
 				if( !Objects.equals( idPasta, protocolo.getIdPasta() ) && existe( conexao,
 					"select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS where ID_PROTOCOLO_VERSAO = :id", UUID.fromString( idVersao ) ) ) {
 					throw new ArgousFormsApiException( 409, "PASTA_COM_MODELOS", "Remova os modelos PDF antes de trocar a pasta do Protocolo." );
+				}
+				if( !Objects.equals( idPasta, protocolo.getIdPasta() ) && existe( conexao,
+					"select 1 from Processos.PROTOCOLO_RECURSOS where ID_PROTOCOLO = :id", idProtocolo ) ) {
+					throw new ArgousFormsApiException( 409, "PASTA_COM_RECURSOS", "Remova os recursos antes de trocar a pasta do Protocolo." );
 				}
 				protocolo.setIdPasta( idPasta );
 				new ProtocoloNegocio( conexao, protocolo ).altera();
@@ -204,6 +215,7 @@ public final class ProtocolosService {
 				QtData agora = new QtData( Instant.now().toEpochMilli() );
 				ProtocoloVariavel variavel;
 				ProcotoloVariavelVersao definicao;
+				boolean novaDefinicao = idVariavel == null;
 				if( idVariavel == null ) {
 					variavel = new ProtocoloVariavel();
 					variavel.setIdProtocolo( idProtocolo );
@@ -224,24 +236,50 @@ public final class ProtocolosService {
 					}
 					ProtocoloVersaoVariavel associacao = ProtocoloVersaoVariavelLocalizador.buscaPorProtocoloPorVariavel( conexao, UUID.fromString( idVersao ), idVariavel );
 					if( associacao == null ) throw new ArgousFormsApiException( 404, "VARIAVEL_NAO_ENCONTRADA", "Variável não encontrada neste rascunho." );
-					if( variavelPublicada( conexao, idVariavel ) ) {
-						throw new ArgousFormsApiException( 409, "VARIAVEL_PUBLICADA", "Esta variável pertence a uma versão publicada; sua edição requer uma nova versão." );
-					}
-					variavel.setCdVariavel( codigo );
-					variavel.setTpDado( tipoInformado );
-					variavel.setDsDescricao( descricao.isEmpty() ? null : descricao );
-					new ProtocoloVariavelNegocio( conexao, variavel ).altera();
 					definicao = ProcotoloVariavelVersaoLocalizador.buscaPorVariaveisPorVersao( conexao, idVariavel, associacao.getNrVersao() );
+					if( variavelPublicada( conexao, idVariavel ) ) {
+						if( !codigo.equals( variavel.getCdVariavel() ) || !tipoInformado.equals( variavel.getTpDado() ) || !Objects.equals( descricao.isEmpty() ? null : descricao, variavel.getDsDescricao() ) ) {
+							throw new ArgousFormsApiException( 409, "IDENTIDADE_VARIAVEL_IMUTAVEL", "Código, tipo e descrição de uma variável publicada não podem ser alterados." );
+						}
+						if( nome.equals( definicao.getDsNome() ) && mesmaDefinicao( definicao.getJsDefinicao(), definicaoJson == null ? definicao.getJsDefinicao() : definicaoJson ) ) {
+							conexao.commit();
+							return new JSONObject().put( "idVariavel", idVariavel.toString() );
+						}
+						if( definicaoPublicada( conexao, idVariavel, associacao.getNrVersao() ) ) {
+							ProcotoloVariavelVersao anterior = definicao;
+							definicao = new ProcotoloVariavelVersao();
+							definicao.setIdVariavel( idVariavel );
+							definicao.setNrVersao( proximaVersaoVariavel( conexao, idVariavel ) );
+							definicao.setDtInclusao( agora );
+							definicao.setJsDefinicao( anterior.getJsDefinicao() );
+							novaDefinicao = true;
+						}
+					} else {
+						variavel.setCdVariavel( codigo );
+						variavel.setTpDado( tipoInformado );
+						variavel.setDsDescricao( descricao.isEmpty() ? null : descricao );
+						new ProtocoloVariavelNegocio( conexao, variavel ).altera();
+					}
 				}
 				definicao.setDsNome( nome );
 				if( definicaoJson != null ) definicao.setJsDefinicao( definicaoJson );
-				if( idVariavel == null ) {
+				if( novaDefinicao ) {
 					new ProcotoloVariavelVersaoNegocio( conexao, definicao ).insere();
-					ProtocoloVersaoVariavel associacao = new ProtocoloVersaoVariavel();
-					associacao.setIdProtocoloVersao( UUID.fromString( idVersao ) );
-					associacao.setIdVariavel( variavel.getIdVariavel() );
-					associacao.setNrVersao( 1 );
-					new ProtocoloVersaoVariavelNegocio( conexao, associacao ).insere();
+					if( idVariavel == null ) {
+						ProtocoloVersaoVariavel associacao = new ProtocoloVersaoVariavel();
+						associacao.setIdProtocoloVersao( UUID.fromString( idVersao ) );
+						associacao.setIdVariavel( variavel.getIdVariavel() );
+						associacao.setNrVersao( 1 );
+						new ProtocoloVersaoVariavelNegocio( conexao, associacao ).insere();
+					} else {
+						ProtocoloVersaoVariavel associacao = ProtocoloVersaoVariavelLocalizador.buscaPorProtocoloPorVariavel( conexao, UUID.fromString( idVersao ), idVariavel );
+						new ProtocoloVersaoVariavelNegocio( conexao, associacao ).exclui();
+						ProtocoloVersaoVariavel novoVinculo = new ProtocoloVersaoVariavel();
+						novoVinculo.setIdProtocoloVersao( UUID.fromString( idVersao ) );
+						novoVinculo.setIdVariavel( idVariavel );
+						novoVinculo.setNrVersao( definicao.getNrVersao() );
+						new ProtocoloVersaoVariavelNegocio( conexao, novoVinculo ).insere();
+					}
 				} else new ProcotoloVariavelVersaoNegocio( conexao, definicao ).altera();
 
 				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
@@ -264,6 +302,57 @@ public final class ProtocolosService {
 			query.setParameter( "variavel", idVariavel.toString() );
 			query.executeQuery();
 			return !query.isEmpty();
+		}
+	}
+
+	private boolean definicaoPublicada( Conexao conexao, UUID idVariavel, int nrVersao ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select x.ID_VARIAVEL from Processos.PROTOCOLO_VERSAO_VARIAVEIS x join Processos.PROTOCOLO_VERSOES v "
+				+ "on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_VARIAVEL = :variavel and x.NR_VERSAO = :versao and v.NR_VERSAO > 0" );
+			query.setParameter( "variavel", idVariavel.toString() );
+			query.setParameter( "versao", nrVersao );
+			query.executeQuery();
+			return !query.isEmpty();
+		}
+	}
+
+	private boolean mesmaDefinicao( String anterior, String atual ) throws Exception {
+
+		return mesmoValorJson( new JSONObject( anterior ), new JSONObject( atual ) );
+	}
+
+	private boolean mesmoValorJson( Object anterior, Object atual ) throws Exception {
+
+		if( anterior instanceof JSONObject objetoAnterior && atual instanceof JSONObject objetoAtual ) {
+			if( objetoAnterior.length() != objetoAtual.length() ) return false;
+			
+			Iterator itr = objetoAnterior.keys();
+			
+			while( itr.hasNext() ) {
+				String chave = (String) itr.next();
+				if( !objetoAtual.has( chave ) || !mesmoValorJson( objetoAnterior.get( chave ), objetoAtual.get( chave ) ) ) return false;
+			}
+			return true;
+		}
+		if( anterior instanceof JSONArray listaAnterior && atual instanceof JSONArray listaAtual ) {
+			if( listaAnterior.length() != listaAtual.length() ) return false;
+			for( int indice = 0; indice < listaAnterior.length(); indice++ ) {
+				if( !mesmoValorJson( listaAnterior.get( indice ), listaAtual.get( indice ) ) ) return false;
+			}
+			return true;
+		}
+		if( anterior instanceof Number numeroAnterior && atual instanceof Number numeroAtual ) {
+			return new BigDecimal( numeroAnterior.toString() ).compareTo( new BigDecimal( numeroAtual.toString() ) ) == 0;
+		}
+		return Objects.equals( anterior, atual );
+	}
+
+	private int proximaVersaoVariavel( Conexao conexao, UUID idVariavel ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select coalesce(max(NR_VERSAO), 0) + 1 from Processos.PROTOCOLO_VARIAVEL_VERSOES where ID_VARIAVEL = ?" ) ) {
+			consulta.setObject( 1, idVariavel );
+			try ( ResultSet linha = consulta.executeQuery() ) { linha.next(); return linha.getInt( 1 ); }
 		}
 	}
 
@@ -402,6 +491,14 @@ public final class ProtocolosService {
 				for( ProtocoloVersaoVariavel associacao : associacoes ) new ProtocoloVersaoVariavelNegocio( conexao, associacao ).exclui();
 				for( ProcotoloVariavelVersao definicao : definicoes ) new ProcotoloVariavelVersaoNegocio( conexao, definicao ).exclui();
 				for( ProtocoloVariavel variavel : variaveis ) new ProtocoloVariavelNegocio( conexao, variavel ).exclui();
+				List<ProtocoloRecurso> recursos = new ArrayList<>();
+				try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROTOCOLO_RECURSO from Processos.PROTOCOLO_RECURSOS where ID_PROTOCOLO = ?" ) ) {
+					consulta.setObject( 1, idProtocolo );
+					try ( ResultSet linhas = consulta.executeQuery() ) {
+						while( linhas.next() ) recursos.add( ProtocoloRecursoLocalizador.buscaProtocoloRecurso( conexao, linhas.getObject( 1, UUID.class ) ) );
+					}
+				}
+				for( ProtocoloRecurso recurso : recursos ) new ProtocoloRecursoNegocio( conexao, recurso ).exclui();
 				new ProtocoloVersaoNegocio( conexao, ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, idVersao ) ).exclui();
 				new ProtocoloNegocio( conexao, ProtocoloLocalizador.buscaProtocolo( conexao, idProtocolo ) ).exclui();
 				conexao.commit();
@@ -576,21 +673,23 @@ public final class ProtocolosService {
 
 	public JSONObject listar( AutenticacaoLocalService.Usuario usuario ) throws Exception {
 
-		exigirCriador( usuario );
+		if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) ) exigirCriador( usuario );
 		JSONArray protocolos = new JSONArray();
 		try ( Conexao conexao = PoolDeConexoes.getConexao(); Query query = new Query( conexao ) ) {
-			query.setSQL( "select p.ID_PROTOCOLO, p.DS_TITULO, p.DS_DESCRICAO, p.DT_INCLUSAO, p.SN_ATIVO, "
+			query.setSQL( "select p.ID_PROTOCOLO, p.ID_USUARIO_CRIADOR, p.DS_TITULO, p.DS_DESCRICAO, p.DT_INCLUSAO, p.SN_ATIVO, "
 				+ "v.ID_PROTOCOLO_VERSAO, v.DT_ALTERACAO, "
 				+ "(select max(NR_VERSAO) from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = p.ID_PROTOCOLO and NR_VERSAO > 0) as NR_PUBLICADA "
 				+ "from Processos.PROTOCOLOS p left join Processos.PROTOCOLO_VERSOES v "
 				+ "on v.ID_PROTOCOLO = p.ID_PROTOCOLO and v.NR_VERSAO = -1 "
-				+ "where p.ID_USUARIO_CRIADOR = :usuario order by coalesce(v.DT_ALTERACAO, p.DT_INCLUSAO) desc" );
-			query.setParameter( "usuario", usuario.idUsuario().toString() );
+				+ ( usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) ? "where 1 = 1 " : "where p.ID_USUARIO_CRIADOR = :usuario " )
+				+ "order by coalesce(v.DT_ALTERACAO, p.DT_INCLUSAO) desc" );
+			if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) ) query.setParameter( "usuario", usuario.idUsuario().toString() );
 			query.executeQuery();
 			if( !query.isEmpty() ) {
 				do {
 					JSONObject protocolo = new JSONObject();
 					protocolo.put( "id", query.getString( "ID_PROTOCOLO" ) );
+					protocolo.put( "proprio", query.getString( "ID_USUARIO_CRIADOR" ) != null && usuario.idUsuario().toString().equals( query.getString( "ID_USUARIO_CRIADOR" ) ) );
 					protocolo.put( "titulo", query.getString( "DS_TITULO" ) );
 					protocolo.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) );
 					protocolo.put( "criadoEm", query.getString( "DT_INCLUSAO" ) );
@@ -647,8 +746,65 @@ public final class ProtocolosService {
 			carregarVariaveis( conexao, rascunho );
 			carregarFormularios( conexao, rascunho );
 			carregarModelosPdf( conexao, rascunho );
+			carregarGestoresElegiveis( conexao, rascunho );
 		}
 		return protocolo;
+	}
+
+	private void carregarGestoresElegiveis( Conexao conexao, JSONObject rascunho ) throws Exception {
+
+		JSONArray gestores = new JSONArray();
+		String sql = "select ID_USUARIO_SISTEMA, ID_GRUPO, CD_TAG_GRUPO, CD_TAG_USUARIO, CD_TAG_VINCULO from Processos.PROTOCOLO_GESTORES_ELEGIVEIS where ID_PROTOCOLO_VERSAO = ? order by ID_GESTOR_ELEGIVEL";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, UUID.fromString( rascunho.getString( "id" ) ) );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) gestores.put( new JSONObject()
+					.put( "idUsuarioSistema", linhas.getString( "ID_USUARIO_SISTEMA" ) == null ? "" : linhas.getString( "ID_USUARIO_SISTEMA" ) )
+					.put( "idGrupo", linhas.getString( "ID_GRUPO" ) == null ? "" : linhas.getString( "ID_GRUPO" ) )
+					.put( "cdTagGrupo", linhas.getString( "CD_TAG_GRUPO" ) == null ? "" : linhas.getString( "CD_TAG_GRUPO" ) )
+					.put( "cdTagUsuario", linhas.getString( "CD_TAG_USUARIO" ) == null ? "" : linhas.getString( "CD_TAG_USUARIO" ) )
+					.put( "cdTagVinculo", linhas.getString( "CD_TAG_VINCULO" ) == null ? "" : linhas.getString( "CD_TAG_VINCULO" ) ) );
+			}
+		}
+		rascunho.put( "gestoresElegiveis", gestores );
+	}
+
+	public JSONObject consultarPublicado( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, int numeroVersao ) throws Exception {
+
+		if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) ) exigirCriador( usuario );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			JSONObject protocolo = new JSONObject();
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select p.ID_USUARIO_CRIADOR, p.ID_PASTA, v.ID_PROTOCOLO_VERSAO, v.NR_VERSAO, v.DS_TITULO, v.DS_DESCRICAO, v.DT_PUBLICACAO from Processos.PROTOCOLOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO = p.ID_PROTOCOLO where p.ID_PROTOCOLO = ? and v.NR_VERSAO = ? and v.TP_SITUACAO = 'P'" ) ) {
+				consulta.setObject( 1, idProtocolo );
+				consulta.setInt( 2, numeroVersao );
+				try ( ResultSet linha = consulta.executeQuery() ) {
+					if( !linha.next() ) throw new ArgousFormsApiException( 404, "VERSAO_NAO_ENCONTRADA", "Versão publicada não encontrada." );
+					if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) && !usuario.idUsuario().toString().equals( linha.getString( "ID_USUARIO_CRIADOR" ) ) ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode consultar este Protocolo." );
+					protocolo.put( "id", idProtocolo.toString() ).put( "idVersao", linha.getString( "ID_PROTOCOLO_VERSAO" ) ).put( "numero", linha.getInt( "NR_VERSAO" ) )
+						.put( "titulo", linha.getString( "DS_TITULO" ) ).put( "descricao", linha.getString( "DS_DESCRICAO" ) == null ? "" : linha.getString( "DS_DESCRICAO" ) )
+						.put( "publicadoEm", linha.getString( "DT_PUBLICACAO" ) ).put( "pasta", linha.getString( "ID_PASTA" ) == null ? JSONObject.NULL : linha.getString( "ID_PASTA" ) )
+						.put( "variaveis", new JSONArray() ).put( "formularios", new JSONArray() ).put( "documentos", new JSONArray() );
+				}
+			}
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select NR_VERSAO from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = ? and NR_VERSAO > 0 and TP_SITUACAO = 'P' order by NR_VERSAO desc" ) ) {
+				consulta.setObject( 1, idProtocolo );
+				JSONArray versoes = new JSONArray();
+				try ( ResultSet linhas = consulta.executeQuery() ) { while( linhas.next() ) versoes.put( linhas.getInt( 1 ) ); }
+				protocolo.put( "versoes", versoes );
+			}
+			carregarVariaveis( conexao, new JSONObject().put( "id", protocolo.getString( "idVersao" ) ).put( "variaveis", protocolo.getJSONArray( "variaveis" ) ) );
+			carregarFormularios( conexao, new JSONObject().put( "id", protocolo.getString( "idVersao" ) ).put( "formularios", protocolo.getJSONArray( "formularios" ) ) );
+			carregarModelosPdf( conexao, new JSONObject().put( "id", protocolo.getString( "idVersao" ) ).put( "documentos", protocolo.getJSONArray( "documentos" ) ) );
+			JSONArray recursos = new JSONArray();
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select CD_RECURSO, ID_ARQUIVO_VERSAO from Processos.PROTOCOLO_RECURSOS where ID_PROTOCOLO = ? order by CD_RECURSO" ) ) {
+				consulta.setObject( 1, idProtocolo );
+				try ( ResultSet linhas = consulta.executeQuery() ) {
+					while( linhas.next() ) recursos.put( new JSONObject().put( "codigo", linhas.getString( 1 ) ).put( "idArquivoVersao", linhas.getString( 2 ) ) );
+				}
+			}
+			protocolo.put( "recursosAtuais", recursos );
+			return protocolo;
+		}
 	}
 
 	private void carregarModelosPdf( Conexao conexao, JSONObject rascunho ) throws Exception {
@@ -913,9 +1069,15 @@ public final class ProtocolosService {
 					}
 					documento = ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo );
 					if( !codigo.equals( documento.getCdDocumento() ) ) throw new ArgousFormsApiException( 400, "CODIGO_IMUTAVEL", "O código técnico do modelo não pode ser alterado." );
-					documento.setDsTitulo( titulo );
-					documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
-					new ProtocoloDocumentoNegocio( conexao, documento ).altera();
+					if( documentoPublicado( conexao, idModelo ) ) {
+						if( !titulo.equals( documento.getDsTitulo() ) || !Objects.equals( observacoes.isEmpty() ? null : observacoes, documento.getDsObservacoes() ) ) {
+							throw new ArgousFormsApiException( 409, "IDENTIDADE_MODELO_IMUTAVEL", "Título e observações do modelo publicado não podem ser alterados." );
+						}
+					} else {
+						documento.setDsTitulo( titulo );
+						documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
+						new ProtocoloDocumentoNegocio( conexao, documento ).altera();
+					}
 					ProtocoloDocumentoHTML html = new ProtocoloDocumentoHTML();
 					html.setIdProtocoloDocumentoVersao( idVersaoModelo );
 					html.setTxCss( css.isBlank() ? null : css );
@@ -1147,9 +1309,15 @@ public final class ProtocolosService {
 					throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo PDF não encontrado neste rascunho." );
 				}
 				ProtocoloDocumento documento = ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo );
-				documento.setDsTitulo( titulo );
-				documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
-				new ProtocoloDocumentoNegocio( conexao, documento ).altera();
+					if( documentoPublicado( conexao, idModelo ) ) {
+						if( !titulo.equals( documento.getDsTitulo() ) || !Objects.equals( observacoes.isEmpty() ? null : observacoes, documento.getDsObservacoes() ) ) {
+							throw new ArgousFormsApiException( 409, "IDENTIDADE_MODELO_IMUTAVEL", "Título e observações do modelo publicado não podem ser alterados." );
+						}
+					} else {
+						documento.setDsTitulo( titulo );
+						documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
+						new ProtocoloDocumentoNegocio( conexao, documento ).altera();
+					}
 				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, idVersao );
 				versao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
 				new ProtocoloVersaoNegocio( conexao, versao ).altera();
@@ -1166,26 +1334,24 @@ public final class ProtocolosService {
 
 		ProtocoloVersaoDocumento vinculo = ProtocoloVersaoDocumentoLocalizador.buscaProtocoloVersaoDocumento( conexao, idVersaoProtocolo, idModelo );
 		if( vinculo == null ) throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo PDF não encontrado neste rascunho." );
-		if( existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo ) ) {
-			throw new ArgousFormsApiException( 409, "MODELO_PUBLICADO", "Um modelo já utilizado por versão publicada não pode ser excluído." );
-		}
+		boolean publicado = existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo );
 		UUID idVersaoModelo = vinculo.getIdProtocoloDocumentoVersao();
+		if( modeloUsadoEmEtapa( conexao, idVersaoProtocolo, idVersaoModelo ) ) throw new ArgousFormsApiException( 409, "MODELO_EM_USO", "Retire o modelo das etapas antes de removê-lo do rascunho." );
 		excluirCamposPdf( conexao, idVersaoModelo );
 		ProtocoloDocumentoPDF pdf = ProtocoloDocumentoPDFLocalizador.buscaProtocoloDocumentoPDF( conexao, idVersaoModelo );
 		if( pdf != null ) new ProtocoloDocumentoPDFNegocio( conexao, pdf ).exclui();
 		new ProtocoloVersaoDocumentoNegocio( conexao, vinculo ).exclui();
 		new ProtocoloDocumentoVersaoNegocio( conexao, ProtocoloDocumentoVersaoLocalizador.buscaProtocoloDocumentoVersao( conexao, idVersaoModelo ) ).exclui();
-		new ProtocoloDocumentoNegocio( conexao, ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo ) ).exclui();
+		if( !publicado ) new ProtocoloDocumentoNegocio( conexao, ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo ) ).exclui();
 	}
 
 	private void excluirModeloHtml( Conexao conexao, UUID idVersaoProtocolo, UUID idModelo ) throws Exception {
 
 		ProtocoloVersaoDocumento vinculo = ProtocoloVersaoDocumentoLocalizador.buscaProtocoloVersaoDocumento( conexao, idVersaoProtocolo, idModelo );
 		if( vinculo == null ) throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo HTML não encontrado neste rascunho." );
-		if( existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo ) ) {
-			throw new ArgousFormsApiException( 409, "MODELO_PUBLICADO", "Um modelo publicado não pode ser excluído." );
-		}
+		boolean publicado = existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo );
 		UUID idVersaoModelo = vinculo.getIdProtocoloDocumentoVersao();
+		if( modeloUsadoEmEtapa( conexao, idVersaoProtocolo, idVersaoModelo ) ) throw new ArgousFormsApiException( 409, "MODELO_EM_USO", "Retire o modelo das etapas antes de removê-lo do rascunho." );
 		ProtocoloDocumentoVersao versaoModelo = ProtocoloDocumentoVersaoLocalizador.buscaProtocoloDocumentoVersao( conexao, idVersaoModelo );
 		if( versaoModelo == null || !"H".equals( versaoModelo.getTpModelo() ) ) {
 			throw new ArgousFormsApiException( 404, "MODELO_NAO_ENCONTRADO", "Modelo HTML não encontrado neste rascunho." );
@@ -1208,7 +1374,21 @@ public final class ProtocolosService {
 		new ProtocoloDocumentoHTMLNegocio( conexao, html ).exclui();
 		new ProtocoloVersaoDocumentoNegocio( conexao, vinculo ).exclui();
 		new ProtocoloDocumentoVersaoNegocio( conexao, versaoModelo ).exclui();
-		new ProtocoloDocumentoNegocio( conexao, ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo ) ).exclui();
+		if( !publicado ) new ProtocoloDocumentoNegocio( conexao, ProtocoloDocumentoLocalizador.buscaProtocoloDocumento( conexao, idModelo ) ).exclui();
+	}
+
+	private boolean modeloUsadoEmEtapa( Conexao conexao, UUID idVersaoProtocolo, UUID idVersaoModelo ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select 1 from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = ? and jsonb_exists(JS_GERACAO_DOCUMENTOS -> 'aoFinalizar', ?) limit 1" ) ) {
+			consulta.setObject( 1, idVersaoProtocolo );
+			consulta.setString( 2, idVersaoModelo.toString() );
+			try ( ResultSet linhas = consulta.executeQuery() ) { return linhas.next(); }
+		}
+	}
+
+	private boolean documentoPublicado( Conexao conexao, UUID idModelo ) throws Exception {
+
+		return existe( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = x.ID_PROTOCOLO_VERSAO where x.ID_PROTOCOLO_DOCUMENTO = :id and v.NR_VERSAO > 0", idModelo );
 	}
 
 	public UUID prepararPastaModelos( Conexao conexao, AutenticacaoLocalService.Usuario usuario, UUID idProtocolo ) throws Exception {
@@ -1271,7 +1451,8 @@ public final class ProtocolosService {
 	private void carregarVariaveis( Conexao conexao, JSONObject rascunho ) throws Exception {
 
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, x.DS_DESCRICAO, vv.DS_NOME, vv.JS_DEFINICAO "
+			query.setSQL( "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, x.DS_DESCRICAO, vv.DS_NOME, vv.JS_DEFINICAO, "
+				+ "exists (select 1 from Processos.PROTOCOLO_VERSAO_VARIAVEIS pub join Processos.PROTOCOLO_VERSOES vp on vp.ID_PROTOCOLO_VERSAO = pub.ID_PROTOCOLO_VERSAO where pub.ID_VARIAVEL = x.ID_VARIAVEL and vp.NR_VERSAO > 0) as PUBLICADA "
 				+ "from Processos.PROTOCOLO_VERSAO_VARIAVEIS a "
 				+ "join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = a.ID_VARIAVEL "
 				+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = a.ID_VARIAVEL and vv.NR_VERSAO = a.NR_VERSAO "
@@ -1282,6 +1463,7 @@ public final class ProtocolosService {
 				do {
 					rascunho.getJSONArray( "variaveis" ).put( new JSONObject().put( "id", query.getString( "ID_VARIAVEL" ) )
 						.put( "codigo", query.getString( "CD_VARIAVEL" ) ).put( "tipo", query.getString( "TP_DADO" ) )
+						.put( "publicada", query.getBoolean( "PUBLICADA" ) )
 						.put( "nome", query.getString( "DS_NOME" ) )
 							.put( "definicao", new JSONObject( query.getString( "JS_DEFINICAO" ) ) )
 						.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) ) );

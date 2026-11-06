@@ -22,6 +22,7 @@ import br.com.argousForms.model.negocio.docs.ArquivoVersaoNegocio;
 import br.com.argousForms.model.persistencia.docs.Arquivo;
 import br.com.argousForms.model.persistencia.docs.ArquivoVersao;
 import br.com.argousForms.protocolos.ProtocolosService;
+import br.com.argousForms.recursos.RecursosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
@@ -47,9 +48,11 @@ public final class UploadArquivoService {
 	public JSONObject enviar( AutenticacaoLocalService.Usuario usuario, ServletContext contexto, UUID idPasta, Path temporario,
 		String nomeInformado, String tituloInformado, String descricaoInformada, String contentTypeInformado,
 		String classificacao, Integer diasValidade, boolean novaVersao, int tamanho, String hash, UUID idProtocoloModelo,
-		String codigoModelo, String observacoesModelo ) throws Exception {
+		String codigoModelo, String observacoesModelo, UUID idProtocoloRecurso, boolean recursoInstituicao, String codigoRecurso ) throws Exception {
 
-		if( idPasta == null && idProtocoloModelo == null ) throw new ArgousFormsApiException( 400, "PASTA_OBRIGATORIA", "Escolha a pasta de destino." );
+		int modos = ( idProtocoloModelo != null ? 1 : 0 ) + ( idProtocoloRecurso != null ? 1 : 0 ) + ( recursoInstituicao ? 1 : 0 );
+		if( modos > 1 ) throw new ArgousFormsApiException( 400, "MODO_INVALIDO", "Escolha apenas uma finalidade para o envio." );
+		if( idPasta == null && modos == 0 ) throw new ArgousFormsApiException( 400, "PASTA_OBRIGATORIA", "Escolha a pasta de destino." );
 		String nome = nomeInformado == null ? "" : nomeInformado.strip();
 		String titulo = tituloInformado == null || tituloInformado.isBlank() ? nome : tituloInformado.strip();
 		String descricao = descricaoInformada == null || descricaoInformada.isBlank() ? null : descricaoInformada.strip();
@@ -72,8 +75,10 @@ public final class UploadArquivoService {
 			boolean commitTentado = false;
 			try {
 				if( idProtocoloModelo != null ) idPasta = new ProtocolosService().prepararPastaModelos( conexao, usuario, idProtocoloModelo );
-				if( idProtocoloModelo == null ) documentos.exigirInclusao( conexao, usuario, idPasta );
-				else new ProtocolosService().exigirPastaModelos( conexao, usuario, idProtocoloModelo, idPasta );
+				if( idProtocoloRecurso != null ) idPasta = new RecursosService().pastaProtocoloParaUpload( conexao, usuario, idProtocoloRecurso );
+				if( recursoInstituicao ) idPasta = new RecursosService().pastaInstituicaoParaUpload( conexao, usuario );
+				if( modos == 0 ) documentos.exigirInclusao( conexao, usuario, idPasta );
+				if( idProtocoloModelo != null ) new ProtocolosService().exigirPastaModelos( conexao, usuario, idProtocoloModelo, idPasta );
 				bloquearPasta( conexao, idPasta );
 				Arquivo existente = localizarArquivo( conexao, idPasta, nome );
 				Arquivo arquivo;
@@ -115,6 +120,8 @@ public final class UploadArquivoService {
 					new ProtocolosService().registrarModeloPdf( conexao, usuario, idProtocoloModelo, idVersao,
 						codigoModelo, titulo, observacoesModelo );
 				}
+				if( idProtocoloRecurso != null ) new RecursosService().registrarProtocolo( conexao, usuario, idProtocoloRecurso, idVersao, codigoRecurso );
+				if( recursoInstituicao ) new RecursosService().registrarInstituicao( conexao, usuario, idVersao, codigoRecurso );
 
 				try ( InputStream conteudo = Files.newInputStream( temporario ) ) {
 					mongo.enviar( arquivo.getIdArquivo(), idVersao, nome, arquivo.getDsTitulo(), arquivo.getCdContentType(), conteudo );

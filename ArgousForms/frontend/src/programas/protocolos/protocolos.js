@@ -24,6 +24,8 @@ import {
   FileText,
   GitBranch,
   LayoutTemplate,
+  Users,
+  Image,
   Plus,
   Settings2,
   Trash2,
@@ -41,14 +43,19 @@ import SeletorPasta from './seletor-pasta.js';
 import PdfCampos from './pdf-campos.js';
 import ModeloHtmlEditor from './modelo-html-editor.js';
 import VariaveisInstituicao from './variaveis-instituicao.js';
+import Recursos from './recursos.js';
+import GestoresElegiveis from './gestores-elegiveis.js';
 import FluxoEditorCarregador from './fluxo-editor-carregador.js';
+import ProtocoloPublicado from './protocolo-publicado.js';
 import { REGEX_PRONTAS, normalizarValorExemplo, validarDefinicaoTexto } from './variavel-texto.js';
 
 const areas = [
   { id: 'variaveis', titulo: 'Variáveis', Icon: Variable },
   { id: 'formularios', titulo: 'Formulários', Icon: LayoutTemplate },
   { id: 'fluxo', titulo: 'Fluxo', Icon: GitBranch },
+  { id: 'gestores', titulo: 'Gestores elegíveis', Icon: Users },
   { id: 'documentos', titulo: 'Modelos de documentos', Icon: FileText },
+  { id: 'recursos', titulo: 'Recursos', Icon: Image },
 ];
 
 function dataCurta(valor, locale) {
@@ -86,9 +93,10 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
   const [salvando, setSalvando] = useState(false);
   const [protocolos, setProtocolos] = useState([]);
   const [selecionado, setSelecionado] = useState(null);
+  const [publicadoSelecionado, setPublicadoSelecionado] = useState(null);
   const [area, setArea] = useState('visao');
   const [busca, setBusca] = useState('');
-  const [filtro, setFiltro] = useState('rascunhos');
+  const [filtro, setFiltro] = useState(usuarioPapeis.includes('GESTOR_DE_PROTOCOLOS') ? 'todos' : 'rascunhos');
   const [cadastro, setCadastro] = useState(null);
   const [exclusao, setExclusao] = useState(null);
   const [publicacao, setPublicacao] = useState(false);
@@ -440,6 +448,9 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
 
   if (mostrarVariaveisInstituicao) return <VariaveisInstituicao aoVoltar={() => setMostrarVariaveisInstituicao(false)} />;
 
+  if (publicadoSelecionado) return <ProtocoloPublicado idProtocolo={publicadoSelecionado.id} numeroInicial={publicadoSelecionado.numero}
+    aoVoltar={() => setPublicadoSelecionado(null)} />;
+
   return (
     <div className="protocolos-shell">
       <Backdrop open={salvando} sx={{ zIndex: (tema) => tema.zIndex.modal + 1 }}>
@@ -461,7 +472,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
             <div className="protocolos-central-acoes">
             {usuarioPapeis.includes('MODELADOR') && <Button variant="outlined" startIcon={<Variable size={18} />}
               onClick={() => setMostrarVariaveisInstituicao(true)}>{t('Variáveis da instituição')}</Button>}
-            <Button
+            {(usuarioPapeis.includes('CRIADOR_DE_PROTOCOLOS') || usuarioPapeis.includes('MODELADOR')) && <Button
               variant="contained"
               startIcon={<Plus size={18} />}
               onClick={() => {
@@ -470,7 +481,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
               }}
             >
               {t('Criar Protocolo')}
-            </Button>
+            </Button>}
             </div>
           </header>
           <div className="protocolos-filtros">
@@ -522,13 +533,23 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                       {dataCurta(item.atualizadoEm, locale)}
                     </small>
                   </div>
-                  {(item.temRascunho || item.rascunho) && <Button
+                  {(item.temRascunho || item.rascunho) && item.proprio !== false && <Button
                     variant="outlined"
                     endIcon={<ArrowRight size={16} />}
                     onClick={() => abrirProtocolo(item.id)}
                   >
                     {t('Continuar edição')}
                   </Button>}
+                  {item.versaoPublicada > 0 && <Button variant="outlined" endIcon={<ArrowRight size={16} />}
+                    onClick={() => setPublicadoSelecionado({ id: item.id, numero: item.versaoPublicada })}>
+                    {t('Consultar versão publicada')}
+                  </Button>}
+                  {item.versaoPublicada > 0 && !item.temRascunho && !item.rascunho && item.proprio !== false &&
+                    (usuarioPapeis.includes('CRIADOR_DE_PROTOCOLOS') || usuarioPapeis.includes('MODELADOR')) &&
+                    <Button variant="contained" disabled={salvando} onClick={() => executarEdicao('CRIAR_NOVA_VERSAO_PROTOCOLO',
+                      { idProtocolo: item.id }, () => { setSelecionado(item.id); setArea('visao'); })}>
+                      {t('Nova versão')}
+                    </Button>}
                 </article>
               ))}
             </div>
@@ -544,7 +565,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                   ? 'Altere a busca ou escolha outro filtro.'
                   : 'Dê um título à atividade. Depois você poderá montar formulários, fluxo e documentos no seu ritmo.',
               )}
-              acao={!protocolos.length ? t('Criar Protocolo') : null}
+              acao={!protocolos.length && (usuarioPapeis.includes('CRIADOR_DE_PROTOCOLOS') || usuarioPapeis.includes('MODELADOR')) ? t('Criar Protocolo') : null}
               aoClicar={() => {
                 setErro('');
                 setCadastro({ modo: 'novo', titulo: '', descricao: '' });
@@ -576,8 +597,12 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
               <p>{protocolo.descricao || t('Sem descrição')}</p>
             </div>
             <div className="protocolos-central-acoes">
-              {usuarioPapeis.includes('GESTOR_DE_PROTOCOLOS') && <Button variant="contained"
-                onClick={() => setPublicacao(true)}>{t('Publicar Protocolo')}</Button>}
+              <span className="protocolos-publicar">
+                <Button variant="contained" disabled={!usuarioPapeis.includes('GESTOR_DE_PROTOCOLOS')}
+                  onClick={() => setPublicacao(true)}>{t('Publicar Protocolo')}</Button>
+                {!usuarioPapeis.includes('GESTOR_DE_PROTOCOLOS') &&
+                  <small>{t('Para publicar, atribua à sua conta o perfil Gestor de Protocolos.')}</small>}
+              </span>
               <Button
                 variant="outlined"
                 startIcon={<Settings2 size={16} />}
@@ -661,22 +686,28 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                           <ArrowRight size={18} />
                         </span>
                         <small>
+                          {id === 'recursos' ? t('Imagens do Protocolo') : <>
                           {
-                            protocolo.rascunho[
+                            (protocolo.rascunho[
                               id === 'fluxo'
                                 ? 'etapas'
+                                : id === 'gestores'
+                                  ? 'gestoresElegiveis'
                                 : id === 'documentos'
                                   ? 'documentos'
                                   : id
-                            ].length
+                            ] || []).length
                           }{' '}
                           {t(
                             id === 'fluxo'
                               ? 'etapas'
+                              : id === 'gestores'
+                                ? 'regras'
                               : id === 'documentos'
                                 ? 'modelos de documentos'
                                 : titulo,
                           )}
+                          </>}
                         </small>
                         <span>
                           {t(
@@ -686,7 +717,11 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                                 ? 'Monte as telas que as pessoas preencherão.'
                                 : id === 'fluxo'
                                   ? 'Organize o percurso e as responsabilidades.'
-                                  : 'Defina a apresentação dos documentos que o processo poderá produzir.',
+                                  : id === 'gestores'
+                                    ? 'Defina quem poderá gerir os Processos iniciados por este Protocolo.'
+                                  : id === 'recursos'
+                                    ? 'Organize imagens compartilhadas pelos modelos deste Protocolo.'
+                                    : 'Defina a apresentação dos documentos que o processo poderá produzir.',
                           )}
                         </span>
                       </button>
@@ -1081,6 +1116,9 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                     variaveis={protocolo.rascunho.variaveis} documentos={protocolo.rascunho.documentos} />
                 </>
               )}
+              {area === 'gestores' && <GestoresElegiveis key={protocolo.rascunho.id}
+                regrasIniciais={protocolo.rascunho.gestoresElegiveis || []} salvando={salvando}
+                aoSalvar={(regras) => executarEdicao('SALVAR_GESTORES_ELEGIVEIS_PROTOCOLO', { idProtocolo: protocolo.id, regras })} />}
               {area === 'documentos' && (
                 <>
                   <div className="protocolos-section-title">
@@ -1122,9 +1160,9 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                             {t('Visualizar PDF')}
                           </Button>
                           <Button size="small" onClick={() => setModeloCampos(documento)}>{t('Posicionar campos')}</Button>
-                          <Button size="small" onClick={() => { setErro(''); setModeloPdf({ ...documento }); }}>
+                          {documento.versao === 1 && <Button size="small" onClick={() => { setErro(''); setModeloPdf({ ...documento }); }}>
                             {t('Editar')}
-                          </Button>
+                          </Button>}
                           <Button size="small" color="error" aria-label={t('Excluir modelo PDF')}
                             onClick={() => { setErro(''); setModeloExclusao(documento.id); }}>
                             <Trash2 size={16} />
@@ -1133,6 +1171,13 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                     </div> :
                     <Vazio titulo={t('Nenhum modelo de documento definido')}
                       descricao={t('Envie um PDF de origem para começar a definir os documentos deste Protocolo.')} />}
+                </>
+              )}
+              {area === 'recursos' && (
+                <>
+                  <div className="protocolos-section-title"><div><h2>{t('Recursos')}</h2>
+                    <p>{t('Imagens usadas pelos modelos de documentos deste Protocolo.')}</p></div></div>
+                  <Recursos idProtocolo={protocolo.id} />
                 </>
               )}
             </div>
@@ -1149,6 +1194,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
             <p>{t('A pasta associada permanecerá no gestor de documentos.')}</p>}
           {protocolos.find((item) => item.id === exclusao)?.rascunho?.documentos?.some((item) => item.tipoModelo !== 'H') &&
             <p>{t('Os PDFs de origem permanecerão na pasta MODELOS.')}</p>}
+          <p>{t('As imagens enviadas permanecerão na pasta RECURSOS.')}</p>
           {erro && <Alert severity="error">{erro}</Alert>}
         </DialogContent>
         <DialogActions>
@@ -1370,6 +1416,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
             multiline
             minRows={2}
             fullWidth
+            disabled={!!variavelEdicao?.publicada}
             value={variavelEdicao?.descricao || ''}
             onChange={(evento) =>
               setVariavelEdicao({

@@ -6,15 +6,19 @@ Este diretório reunirá os scripts SQL do ArgousForms, incluindo a criação da
 
 Os exports datados acima são anteriores a ajustes já feitos nos scripts executáveis. **Não rode novamente o pré-processador com esses exports antigos**, pois ele desfaria os ajustes. As diferenças a preservar e os complementos de futuros exports estão em [DDL.md](DDL.md). Quando houver um novo export do modelador, os comandos abaixo voltarão a gerar os scripts executáveis:
 
+O DDL completo recebido em 05/11/2026 acrescentou `Cadastro.RECURSOS_INSTITUICAO`, `Processos.PROTOCOLO_RECURSOS` e `Cadastro.INSTITUICAO.ID_PASTA`. Os scripts de estrutura foram atualizados sem os marcadores `AUTO` do CASE. Na base existente, o gestor já aplicou `adequar-recursos-2026-11-05.sql`. Depois da correção dos nomes da chave e do índice no CASE, aplicar `renomear-chave-recurso-protocolo-2026-11-05.sql` para alinhar a base ao modelo novo, preservando os registros.
+
+Para habilitar a manutenção dos recursos da instituição na base existente, aplicar `ajuste-administrador-instituicao-2026-11-05.sql` como proprietário do esquema Cadastro. O papel passa a integrar o perfil `ADMINISTRADOR`. A aplicação não executa esses scripts automaticamente.
+
 ```sh
 python3 banco/preprocessar_ddl.py banco/estrutura-exportada-docs-2026-10-15.sql banco/estrutura-docs.sql --sources-jar ~/.m2/repository/br/com/quatro/argous-forms/0.0.1/argous-forms-0.0.1-sources.jar
 python3 banco/preprocessar_ddl.py banco/estrutura-exportada-2026-10-13.sql banco/estrutura-inicial.sql --sources-jar ~/.m2/repository/br/com/quatro/argous-forms/0.0.1/argous-forms-0.0.1-sources.jar --drop-before banco/estrutura-docs.sql
 ```
 
-Para recriar manualmente o ambiente de desenvolvimento, executar nesta ordem:
+Para criar um banco vazio manualmente, executar nesta ordem. Os scripts de estrutura não são migrações e não devem ser usados para atualizar a instalação existente, especialmente depois que `Processos` passa a referenciar `Cadastro` e `Docs`:
 
 1. `estrutura-inicial.sql`: remove primeiro as tabelas de `docs` que dependem de `Cadastro` e recria as 25 tabelas de `Cadastro`; apaga os dados anteriores. Ao final, concede a `carlos` acesso ao esquema, leitura e escrita nas tabelas e uso das sequências.
-2. `estrutura-docs.sql`: recria as 11 tabelas de `docs` e suas chaves estrangeiras para `Cadastro`; concede a `carlos` os mesmos privilégios de dados no novo esquema. Pode ser executado isoladamente no banco de desenvolvimento que já possui `Cadastro`, sem recriar seus usuários, mas apaga dados anteriores de `docs`.
+2. `estrutura-docs.sql`: recria as 11 tabelas de `docs` e suas chaves estrangeiras para `Cadastro`; concede a `carlos` os mesmos privilégios de dados no novo esquema. Com `INSTITUICAO.ID_PASTA` e os recursos referenciando `Docs`, não deve ser reaplicado isoladamente à base existente; use os scripts de adequação.
 3. `validar-pais-identificacao.sql`: instala as triggers que impedem divergência entre o país da identificação e o país do tipo escolhido, inclusive em alterações posteriores do tipo.
 4. `validar-aplicacoes-tags.sql`: exige que uma tag seja aplicável a grupo, usuário ou vínculo, permitindo qualquer combinação dessas opções. Em um banco já criado, executar o script manualmente; tags existentes com as três opções falsas precisam ser corrigidas antes.
 5. `validar-alteracao-tags.sql`: impede a alteração do código da tag e a remoção de uma aplicação enquanto existirem vínculos ativos correspondentes. Também exige que vínculos de grupo criados ou reativados usem uma tag ativa e habilitada para grupos. Pode ser aplicado manualmente ao banco de desenvolvimento já criado; o script pode ser repetido para atualizar as funções e triggers.
