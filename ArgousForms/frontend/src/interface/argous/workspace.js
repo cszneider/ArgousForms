@@ -4,6 +4,8 @@ import { lerMenuCompacto, salvarMenuCompacto } from '../../utils/sidebar-prefere
 import UserSettings from '../configuracoes/index.js';
 import CadastroPessoaForm from './cadastro-pessoa-form.js';
 import GestorDocumentos from '../../programas/gestor-documentos/gestor-documentos.js';
+import Processos from '../../programas/processos/processos.js';
+import Tarefas from '../../programas/processos/tarefas.js';
 import ForcaSenha from '../../components/acesso/forca-senha.js';
 import { avaliarSenha } from '../../programas/login/politica-senha.js';
 import {
@@ -56,6 +58,7 @@ import {
   ChartNoAxesCombined,
   Inbox,
   Files,
+  Columns3,
   LayoutTemplate,
   Users,
   Plus,
@@ -78,6 +81,7 @@ import { Dashboards } from '../../programas/dashboard/dashboards.js';
 import { defaultDashboardFilters } from '../../programas/dashboard/dashboard.js';
 import { TemplateEditor } from '../../programas/modelos/template-editor.js';
 import Protocolos from '../../programas/protocolos/protocolos.js';
+import Instituicao from '../../programas/protocolos/instituicao.js';
 import {
   DocumentView,
   Status,
@@ -98,6 +102,8 @@ const nav = [
   ['home', 'Visão geral', LayoutDashboard],
   ['dashboards', 'Dashboards', ChartNoAxesCombined],
   ['documents', 'Documentos', Files],
+  ['processes', 'Processos', GitBranch],
+  ['tasks', 'Tarefas', Columns3],
   ['protocols', 'Protocolos', GitBranch],
   ['organization', 'Organização e acessos', Users],
 ];
@@ -784,22 +790,26 @@ export default function Workspace() {
   const admin = hasRole('ADMINISTRADOR_USUARIOS');
   const groupManager = Boolean(usuario) && hasRole('GESTOR_GRUPOS_TAGS');
   const accessManager = hasRole('GESTOR_ACESSOS');
+  const institutionManager = hasRole('ADMINISTRADOR_INSTITUICAO');
   const designer = hasRole('MODELADOR');
-  const protocolCreator = hasRole('CRIADOR_DE_PROTOCOLOS') || designer;
+  const protocolCreator = hasRole('CRIADOR_DE_PROTOCOLOS') || hasRole('GESTOR_DE_PROTOCOLOS') || designer;
   const canConsultDocuments = hasRole('CONSULTA_DOCUMENTOS');
   const canEditDocuments = hasRole('EDITOR_DE_DOCUMENTOS');
   const canManageOwnData = hasRole('AUTOGESTAO');
   const canView = (destination) => destination === 'home' ||
     (destination === 'settings' && canManageOwnData) ||
     (destination === 'documents' && canConsultDocuments) ||
+    (destination === 'processes' && canConsultDocuments) ||
+    (destination === 'tasks' && canConsultDocuments) ||
     (destination === 'dashboards' && hasRole('ANALISTA_INDICADORES')) ||
     (destination === 'protocols' && protocolCreator) ||
     (destination === 'templates' && designer) ||
-    (destination === 'organization' && (admin || groupManager || accessManager));
+    (destination === 'organization' && (admin || groupManager || accessManager || institutionManager));
   const managementAreas = [
     ['groups', 'Grupos e tags', groupManager],
     ['access', 'Papéis e perfis', accessManager],
     ['users', 'Usuários e pessoas', admin],
+    ['institution', 'Instituição e recursos', institutionManager],
   ].filter(([, , allowed]) => allowed);
   const activeManagementSection = managementAreas.some(([key]) => key === managementSection)
     ? managementSection
@@ -1416,8 +1426,10 @@ export default function Workspace() {
                   </>
                 )}
                 {view === 'documents' && canConsultDocuments && (
-                  <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} />
+                  <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} aoProcessoCriado={() => navigate('processes')} />
                 )}
+                {view === 'processes' && canConsultDocuments && <Processos />}
+                {view === 'tasks' && canConsultDocuments && <Tarefas />}
                 {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} usuarioPapeis={usuario?.papeis || []} />}
                 {view === 'templates' && designer && (
                   <>
@@ -1567,6 +1579,7 @@ export default function Workspace() {
                         <Tab key={key} value={key} label={tr(label)} />
                       ))}
                     </Tabs>
+                    {activeManagementSection === 'institution' && <Instituicao />}
                     {activeManagementSection === 'groups' && (
                       <>
                         {organizacaoLoading && <LinearProgress sx={{ mb: 2 }} />}

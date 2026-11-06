@@ -202,6 +202,10 @@ Alter table Docs.ARQUIVOS_ATRIBUTOS add  foreign key (ID_ATRIBUTO) references Do
 Alter table Docs.ARQUIVOS_ATRIBUTOS add  foreign key (ID_ATRIBUTO_VALOR) references Docs.ATRIBUTO_VALORES (ID_ATRIBUTO_VALOR)  on update restrict  on delete restrict ;
 Alter table Docs.ARQUIVO_TAGS add  foreign key (CD_TAG) references Docs.TAGS_ARQUIVO (CD_TAG)  on update restrict  on delete restrict ;
 
+-- Referências de Cadastro que dependem de tabelas criadas neste script.
+Alter table Cadastro.INSTITUICAO add foreign key (ID_PASTA) references Docs.PASTAS (ID_PASTA) on update restrict on delete restrict;
+Alter table Cadastro.RECURSOS_INSTITUICAO add foreign key (ID_ARQUIVO_VERSAO) references Docs.ARQUIVO_VERSOES (ID_ARQUIVO_VERSAO) on update restrict on delete restrict;
+
 -- Executar a estrutura com um proprietário distinto do usuário da aplicação.
 REVOKE CREATE ON SCHEMA Docs FROM PUBLIC;
 REVOKE CREATE ON SCHEMA Docs FROM carlos;

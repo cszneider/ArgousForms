@@ -19,7 +19,7 @@ import { Folder, Plus } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { executar } from '../login/autenticacao.js';
 
-export default function SeletorPasta({ aberto, pastaAtual, permitirCriacao = false, aoFechar, aoEscolher }) {
+export default function SeletorPasta({ aberto, pastaAtual, permitirCriacao = false, titulo, aoFechar, aoEscolher }) {
   const { t, system } = useI18n();
   const [idPasta, setIdPasta] = useState(pastaAtual || null);
   const [dados, setDados] = useState(null);
@@ -81,7 +81,7 @@ export default function SeletorPasta({ aberto, pastaAtual, permitirCriacao = fal
 
   return (
     <Dialog open={aberto} onClose={aoFechar} fullWidth maxWidth="sm">
-      <DialogTitle>{t('Escolher pasta do Protocolo')}</DialogTitle>
+      <DialogTitle>{titulo || t('Escolher pasta do Protocolo')}</DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 2, pt: '12px !important' }}>
         <Typography variant="body2">
           {t('Escolha uma pasta onde você possa ler e incluir arquivos.')}

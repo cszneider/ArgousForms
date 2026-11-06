@@ -43,7 +43,9 @@ public final class UploadArquivoServlet extends HttpServlet {
 			request.setCharacterEncoding( "UTF-8" );
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			UUID idProtocoloModelo = request.getParameter( "idProtocoloModelo" ) == null ? null : uuid( request.getParameter( "idProtocoloModelo" ) );
-			if( idProtocoloModelo == null && !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
+			UUID idProtocoloRecurso = request.getParameter( "idProtocoloRecurso" ) == null ? null : uuid( request.getParameter( "idProtocoloRecurso" ) );
+			boolean recursoInstituicao = "true".equals( request.getParameter( "recursoInstituicao" ) );
+			if( idProtocoloModelo == null && idProtocoloRecurso == null && !recursoInstituicao && !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" ) ) {
 				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Seu usuário não pode enviar arquivos." );
 			}
 			int limite = upload.limiteBytes();
@@ -54,12 +56,14 @@ public final class UploadArquivoServlet extends HttpServlet {
 			if( parte.getSize() > limite ) throw limiteExcedido( limite );
 
 			String nome = nomeSeguro( parte.getSubmittedFileName() );
-			UUID idPasta = idProtocoloModelo == null ? uuid( request.getParameter( "idPasta" ) ) : null;
-			String classificacao = idProtocoloModelo == null ? request.getParameter( "classificacao" ) : "L";
-			String titulo = idProtocoloModelo == null ? request.getParameter( "titulo" ) : nome;
-			String descricao = idProtocoloModelo == null ? request.getParameter( "descricao" ) : null;
-			Integer dias = idProtocoloModelo == null ? dias( request.getParameter( "diasValidade" ) ) : null;
-			boolean novaVersao = idProtocoloModelo == null && "NOVA_VERSAO".equals( request.getParameter( "modoConflito" ) );
+			boolean recurso = idProtocoloRecurso != null || recursoInstituicao;
+			boolean envioEspecial = idProtocoloModelo != null || recurso;
+			UUID idPasta = envioEspecial ? null : uuid( request.getParameter( "idPasta" ) );
+			String classificacao = envioEspecial ? "L" : request.getParameter( "classificacao" );
+			String titulo = envioEspecial ? nome : request.getParameter( "titulo" );
+			String descricao = envioEspecial ? null : request.getParameter( "descricao" );
+			Integer dias = envioEspecial ? null : dias( request.getParameter( "diasValidade" ) );
+			boolean novaVersao = !envioEspecial && "NOVA_VERSAO".equals( request.getParameter( "modoConflito" ) );
 
 			temporario = Files.createTempFile( "agforms-upload-", ".bin" );
 			MessageDigest digest = MessageDigest.getInstance( "SHA-256" );
@@ -67,11 +71,15 @@ public final class UploadArquivoServlet extends HttpServlet {
 			if( idProtocoloModelo != null && !pdfValido( temporario ) ) {
 				throw new ArgousFormsApiException( 400, "PDF_INVALIDO", "Escolha um arquivo PDF válido para o modelo." );
 			}
+			if( recurso && !imagemValida( temporario, parte.getContentType() ) ) {
+				throw new ArgousFormsApiException( 400, "IMAGEM_INVALIDA", "Escolha uma imagem PNG, JPEG ou WebP válida." );
+			}
 			String hash = HexFormat.of().formatHex( digest.digest() );
 			ArgousFormsJson.enviarSucesso( response, 201, upload.enviar( usuario, getServletContext(), idPasta, temporario,
 				nome, titulo, descricao, idProtocoloModelo == null ? parte.getContentType() : "application/pdf",
 				classificacao, dias, novaVersao, tamanho, hash, idProtocoloModelo,
-				request.getParameter( "codigoModelo" ), request.getParameter( "observacoesModelo" ) ) );
+				request.getParameter( "codigoModelo" ), request.getParameter( "observacoesModelo" ), idProtocoloRecurso,
+				recursoInstituicao, request.getParameter( "codigoRecurso" ) ) );
 		} catch ( ArgousFormsApiException e ) {
 			ArgousFormsJson.enviarErro( response, e.getStatusHttp(), e.getCodigoErro(), e.getMessage() );
 		} catch ( MongoException e ) {
@@ -98,6 +106,18 @@ public final class UploadArquivoServlet extends HttpServlet {
 		try ( InputStream entrada = Files.newInputStream( arquivo ) ) {
 			return entrada.read() == '%' && entrada.read() == 'P' && entrada.read() == 'D' && entrada.read() == 'F' && entrada.read() == '-';
 		}
+	}
+
+	private boolean imagemValida( Path arquivo, String tipo ) throws IOException {
+
+		byte[] bytes = new byte[ 12 ];
+		try ( InputStream entrada = Files.newInputStream( arquivo ) ) {
+			if( entrada.read( bytes ) < 12 ) return false;
+		}
+		if( "image/png".equals( tipo ) ) return ( bytes[ 0 ] & 0xff ) == 0x89 && bytes[ 1 ] == 'P' && bytes[ 2 ] == 'N' && bytes[ 3 ] == 'G';
+		if( "image/jpeg".equals( tipo ) ) return ( bytes[ 0 ] & 0xff ) == 0xff && ( bytes[ 1 ] & 0xff ) == 0xd8 && ( bytes[ 2 ] & 0xff ) == 0xff;
+		if( "image/webp".equals( tipo ) ) return bytes[ 0 ] == 'R' && bytes[ 1 ] == 'I' && bytes[ 2 ] == 'F' && bytes[ 3 ] == 'F' && bytes[ 8 ] == 'W' && bytes[ 9 ] == 'E' && bytes[ 10 ] == 'B' && bytes[ 11 ] == 'P';
+		return false;
 	}
 
 	private int copiarLimitado( Part parte, Path destino, MessageDigest digest, int limite ) throws Exception {

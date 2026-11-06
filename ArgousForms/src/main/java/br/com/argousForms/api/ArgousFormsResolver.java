@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import br.com.argousForms.cadastro.CadastroService;
+import br.com.argousForms.cadastro.InstituicaoService;
 import br.com.argousForms.cadastro.LimiteCadastro;
 import br.com.argousForms.auth.AutenticacaoLocalService;
 import br.com.argousForms.acessos.AcessosService;
@@ -37,9 +38,13 @@ import br.com.argousForms.documentos.UploadArquivoService;
 import br.com.argousForms.pessoas.PessoasUsuariosService;
 import br.com.argousForms.pessoas.ManutencaoUsuarioService;
 import br.com.argousForms.protocolos.ProtocolosService;
+import br.com.argousForms.protocolos.NovaVersaoProtocoloService;
+import br.com.argousForms.protocolos.GestoresProtocoloService;
+import br.com.argousForms.processos.ProcessosService;
 import br.com.argousForms.protocolos.FluxoProtocolosService;
 import br.com.argousForms.protocolos.VariaveisSistema;
 import br.com.argousForms.protocolos.VariaveisInstituicaoService;
+import br.com.argousForms.recursos.RecursosService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -61,8 +66,13 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final PessoasUsuariosService pessoasUsuarios = new PessoasUsuariosService();
 	private final ManutencaoUsuarioService manutencaoUsuarios = new ManutencaoUsuarioService();
 	private final ProtocolosService protocolos = new ProtocolosService();
+	private final NovaVersaoProtocoloService novaVersaoProtocolo = new NovaVersaoProtocoloService();
+	private final GestoresProtocoloService gestoresProtocolo = new GestoresProtocoloService();
+	private final ProcessosService processos = new ProcessosService();
 	private final FluxoProtocolosService fluxoProtocolos = new FluxoProtocolosService();
 	private final VariaveisInstituicaoService variaveisInstituicao = new VariaveisInstituicaoService();
+	private final RecursosService recursos = new RecursosService();
+	private final InstituicaoService instituicao = new InstituicaoService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -139,9 +149,62 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "CRIAR_NOVA_VERSAO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 201, novaVersaoProtocolo.criar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "LISTAR_PROTOCOLOS_INICIAVEIS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.disponiveisParaIniciar( usuario ) );
+			return;
+		}
+
+		if( "LISTAR_GESTORES_ELEGIVEIS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.gestoresElegiveis( usuario, uuidObrigatorio( dados, "idVersao" ) ) );
+			return;
+		}
+
+		if( "INICIAR_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			UUID idGestor = dados.isNull( "idGestor" ) || !dados.has( "idGestor" ) ? null : uuidObrigatorio( dados, "idGestor" );
+			ArgousFormsJson.enviarSucesso( response, 201, processos.iniciar( usuario, uuidObrigatorio( dados, "idVersao" ), idGestor ) );
+			return;
+		}
+
+		if( "LISTAR_MEUS_PROCESSOS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.meusProcessos( usuario ) );
+			return;
+		}
+
+		if( "CONSULTAR_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.consultar( usuario, uuidObrigatorio( dados, "idProcesso" ) ) );
+			return;
+		}
+
+		if( "LISTAR_MINHAS_TAREFAS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.minhasTarefas( usuario ) );
+			return;
+		}
+
 		if( "CONSULTAR_PROTOCOLO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.consultar( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "CONSULTAR_PROTOCOLO_PUBLICADO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			int numeroVersao = dados.getInt( "numeroVersao" );
+			UUID idProtocolo = uuidObrigatorio( dados, "idProtocolo" );
+			JSONObject publicado = protocolos.consultarPublicado( usuario, idProtocolo, numeroVersao );
+			publicado.put( "fluxo", fluxoProtocolos.consultarPublicado( usuario, idProtocolo, numeroVersao ) );
+			ArgousFormsJson.enviarSucesso( response, 200, publicado );
 			return;
 		}
 
@@ -186,9 +249,72 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "SALVAR_GESTORES_ELEGIVEIS_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			if( !( dados.opt( "regras" ) instanceof JSONArray regras ) ) throw new ArgousFormsApiException( 400, "REGRAS_INVALIDAS", "Informe a lista de gestores elegíveis." );
+			ArgousFormsJson.enviarSucesso( response, 200, gestoresProtocolo.salvar( usuario, uuidObrigatorio( dados, "idProtocolo" ), regras ) );
+			return;
+		}
+
 		if( "CATALOGO_VARIAVEIS_SISTEMA".equals( operacao ) ) {
 			autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "variaveis", VariaveisSistema.catalogo() ) );
+			return;
+		}
+
+		if( "LISTAR_RECURSOS_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.listarInstituicao( usuario ) );
+			return;
+		}
+
+		if( "CONSULTAR_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, instituicao.consultar( usuario ) );
+			return;
+		}
+
+		if( "SALVAR_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, instituicao.salvar( usuario, dados ) );
+			return;
+		}
+
+		if( "ASSOCIAR_PASTA_RECURSOS_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.associarPastaInstituicao( usuario, uuidObrigatorio( dados, "idPasta" ) ) );
+			return;
+		}
+
+		if( "REMOVER_RECURSO_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.removerInstituicao( usuario, uuidObrigatorio( dados, "idArquivoVersao" ) ) );
+			return;
+		}
+
+		if( "ALTERAR_CODIGO_RECURSO_INSTITUICAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.alterarCodigoInstituicao( usuario,
+				uuidObrigatorio( dados, "idArquivoVersao" ), dados.optString( "codigo", "" ) ) );
+			return;
+		}
+
+		if( "LISTAR_RECURSOS_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.listarProtocolo( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "REMOVER_RECURSO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.removerProtocolo( usuario, uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idProtocoloRecurso" ) ) );
+			return;
+		}
+
+		if( "ALTERAR_CODIGO_RECURSO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, recursos.alterarCodigoProtocolo( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idProtocoloRecurso" ), dados.optString( "codigo", "" ) ) );
 			return;
 		}
 

@@ -1,0 +1,21 @@
+.processos-pagina { padding: 16px 18px 48px; }
+.processos-lista { display: grid; gap: 11px; }
+.processos-cartao { display: flex; align-items: center; gap: 16px; padding: 18px; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 14px; background: var(--theme-surface, #fff); }
+.processos-icone { display: grid; place-items: center; flex: 0 0 42px; height: 42px; border-radius: 11px; color: var(--theme-accent, #12665b); background: var(--theme-canvas, #edf5f2); }
+.processos-cartao-corpo { flex: 1; min-width: 0; }
+.processos-cartao h2 { margin: 0 0 4px; font-size: 17px; }
+.processos-cartao p { margin: 0; color: var(--theme-text-secondary, #697a89); font-size: 13px; }
+.processos-vazio { display: grid; justify-items: center; gap: 8px; padding: 65px 20px; border: 1px dashed var(--theme-border, #e1e7ed); border-radius: 14px; text-align: center; color: var(--theme-text-secondary, #697a89); }
+.processos-vazio h2 { margin: 3px 0; color: var(--theme-text-strong, #172b41); }
+.processos-vazio p { margin: 0; }
+.tarefas-quadro { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; padding-bottom: 12px; }
+.tarefas-coluna { min-height: 300px; padding: 12px; border-radius: 14px; background: var(--theme-canvas, #f1f5f4); }
+.tarefas-coluna > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 3px 13px; }
+.tarefas-coluna h2 { margin: 0; font-size: 14px; }
+.tarefas-coluna > header span { padding: 2px 8px; border-radius: 99px; background: var(--theme-surface, #fff); font-size: 12px; }
+.tarefas-cartao { padding: 15px; margin-bottom: 10px; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 11px; background: var(--theme-surface, #fff); }
+.tarefas-cartao h3 { margin: 7px 0; font-size: 15px; }
+.tarefas-cartao p { margin: 0 0 6px; color: var(--theme-text-secondary, #697a89); font-size: 12px; }
+.tarefas-cartao-icone { color: var(--theme-accent, #12665b); }
+.tarefas-vazio { margin: 25px 6px; color: var(--theme-text-secondary, #697a89); font-size: 12px; }
+@media (max-width: 700px) { .processos-cartao { flex-wrap: wrap; } }

@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, LinearProgress, Link, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
-import { Download, FileText, Folder, Plus, Upload } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, LinearProgress, Link, Menu, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
+import { Download, FileText, Folder, GitBranch, Plus, Upload } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { pageReducer } from '../../utils/page-state.js';
 import { useI18n } from '../../components/i18n/i18n.js';
@@ -11,9 +11,59 @@ import { enviarArquivo } from './upload-arquivo.js';
 export const GestorDocumentosContext = createContext(null);
 
 function Conteudo() {
-  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar } = useContext(GestorDocumentosContext);
+  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado } = useContext(GestorDocumentosContext);
   const { t, system } = useI18n();
+  const [menuNovo, setMenuNovo] = useState(null);
+  const [iniciarAberto, setIniciarAberto] = useState(false);
+  const [protocolosIniciaveis, setProtocolosIniciaveis] = useState([]);
+  const [protocoloEscolhido, setProtocoloEscolhido] = useState(null);
+  const [buscandoProtocolos, setBuscandoProtocolos] = useState(false);
+  const [gestores, setGestores] = useState([]);
+  const [idGestor, setIdGestor] = useState('');
+  const [buscandoGestores, setBuscandoGestores] = useState(false);
+  const [iniciando, setIniciando] = useState(false);
+  const [erroInicio, setErroInicio] = useState('');
   const pastasDestino = [value.dados?.pasta, ...(value.dados?.pastas || [])].filter((pasta) => pasta?.podeIncluir);
+
+  useEffect(() => {
+    if (!iniciarAberto) return;
+    let cancelado = false;
+    executar('LISTAR_PROTOCOLOS_INICIAVEIS').then((dados) => {
+      if (!cancelado) { setProtocolosIniciaveis(dados.protocolos || []); setErroInicio(''); }
+    }).catch((falha) => { if (!cancelado) setErroInicio(falha.message); })
+      .finally(() => { if (!cancelado) setBuscandoProtocolos(false); });
+    return () => { cancelado = true; };
+  }, [iniciarAberto]);
+
+  useEffect(() => {
+    if (!protocoloEscolhido) return;
+    let cancelado = false;
+    executar('LISTAR_GESTORES_ELEGIVEIS', { idVersao: protocoloEscolhido.idVersao }).then((dados) => {
+      if (!cancelado) {
+        const elegiveis = dados.gestores || [];
+        setGestores(elegiveis);
+        setIdGestor(elegiveis.find((gestor) => gestor.id === usuario?.idUsuario)?.id || '');
+        setErroInicio('');
+      }
+    }).catch((falha) => { if (!cancelado) setErroInicio(falha.message); })
+      .finally(() => { if (!cancelado) setBuscandoGestores(false); });
+    return () => { cancelado = true; };
+  }, [protocoloEscolhido, usuario?.idUsuario]);
+
+  async function confirmarInicio() {
+    if (!protocoloEscolhido || !idGestor || iniciando) return;
+    setIniciando(true);
+    setErroInicio('');
+    try {
+      const processo = await executar('INICIAR_PROCESSO', { idVersao: protocoloEscolhido.idVersao, idGestor });
+      setIniciarAberto(false);
+      aoProcessoCriado?.(processo.idProcesso);
+    } catch (falha) {
+      setErroInicio(falha.message);
+    } finally {
+      setIniciando(false);
+    }
+  }
 
   if (!usuario) return <Alert severity="info">{t('Entre com sua conta para consultar os arquivos da instituição.')}</Alert>;
 
@@ -25,12 +75,20 @@ function Conteudo() {
         <p>{t('Navegue pelas pastas e consulte os arquivos autorizados.')}</p>
       </div>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        {value.dados?.pasta?.gestor && <Button variant="outlined" startIcon={<Plus size={18} />}
-          onClick={() => dispatch({ field: 'novaPastaAberta', value: true })}>{t('Nova pasta')}</Button>}
-        {podeEnviar && <Button variant="contained" startIcon={<Upload size={18} />} disabled={!value.mongo?.disponivel || !pastasDestino.length}
-          onClick={() => { dispatch({ field: 'pastaDestino', value: pastasDestino[0].idPasta }); dispatch({ field: 'envioAberto', value: true }); }}>
-          {t('Enviar arquivo')}
-        </Button>}
+        {(value.dados?.pasta?.gestor || podeEnviar) && <>
+          <Button variant="outlined" startIcon={<Plus size={18} />} onClick={(evento) => setMenuNovo(evento.currentTarget)}>{t('Novo')}</Button>
+          <Menu anchorEl={menuNovo} open={Boolean(menuNovo)} onClose={() => setMenuNovo(null)}>
+            {value.dados?.pasta?.gestor && <MenuItem onClick={() => { setMenuNovo(null); dispatch({ field: 'novaPastaAberta', value: true }); }}>
+              <Folder size={18} style={{ marginRight: 10 }} />{t('Nova pasta')}
+            </MenuItem>}
+            {podeEnviar && <MenuItem disabled={!value.mongo?.disponivel || !pastasDestino.length}
+              onClick={() => { setMenuNovo(null); dispatch({ field: 'pastaDestino', value: pastasDestino[0].idPasta }); dispatch({ field: 'envioAberto', value: true }); }}>
+              <Upload size={18} style={{ marginRight: 10 }} />{t('Enviar arquivo')}
+            </MenuItem>}
+          </Menu>
+        </>}
+        {podeEnviar && <Button variant="contained" startIcon={<GitBranch size={18} />}
+          onClick={() => { setProtocoloEscolhido(null); setGestores([]); setIdGestor(''); setBuscandoProtocolos(true); setIniciarAberto(true); }}>{t('Iniciar processo')}</Button>}
       </Box>
     </div>
 
@@ -74,6 +132,38 @@ function Conteudo() {
         </Table>
       </TableContainer>
     </>}
+    <Dialog open={iniciarAberto} onClose={() => !iniciando && setIniciarAberto(false)} fullWidth maxWidth="md">
+      <DialogTitle>{protocoloEscolhido ? protocoloEscolhido.titulo : t('Iniciar processo')}</DialogTitle>
+      <DialogContent>
+        {erroInicio && <Alert severity="error" sx={{ mb: 2 }}>{erroInicio}</Alert>}
+        {buscandoProtocolos && <LinearProgress sx={{ mb: 2 }} />}
+        {!buscandoProtocolos && !protocoloEscolhido && <>
+          <Typography sx={{ mb: 2 }}>{t('Escolha um Protocolo publicado para iniciar.')}</Typography>
+          {protocolosIniciaveis.map((item) => <Button key={item.idVersao} fullWidth variant="outlined" sx={{ mb: 1, justifyContent: 'space-between', textTransform: 'none' }}
+            onClick={() => { setGestores([]); setIdGestor(''); setBuscandoGestores(true); setProtocoloEscolhido(item); }}>{item.titulo} · {t('Versão')} {item.numeroVersao}</Button>)}
+          {!protocolosIniciaveis.length && !erroInicio && <Alert severity="info">{t('Nenhum Protocolo disponível para iniciar.')}</Alert>}
+        </>}
+        {protocoloEscolhido && <>
+          <Button size="small" onClick={() => setProtocoloEscolhido(null)} sx={{ mb: 2 }}>{t('Escolher outro Protocolo')}</Button>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{protocoloEscolhido.descricao}</Typography>
+          <Typography variant="h6" sx={{ mb: 2 }}>{protocoloEscolhido.formularioTitulo}</Typography>
+          {buscandoGestores && <LinearProgress sx={{ mb: 2 }} />}
+          {!buscandoGestores && <TextField select fullWidth label={t('Gestor inicial')} value={idGestor} sx={{ mb: 2 }}
+            disabled={gestores.some((gestor) => gestor.id === usuario?.idUsuario)}
+            onChange={(evento) => setIdGestor(evento.target.value)}>
+            {gestores.map((gestor) => <MenuItem key={gestor.id} value={gestor.id}>{gestor.nome}</MenuItem>)}
+          </TextField>}
+          {!buscandoGestores && !gestores.length && !erroInicio && <Alert severity="warning" sx={{ mb: 2 }}>{t('Este Protocolo não possui gestor elegível cadastrado.')}</Alert>}
+          {(protocoloEscolhido.campos || []).map((campo) => <TextField key={campo.id} fullWidth sx={{ mb: 2 }}
+            label={campo.nome} required={campo.obrigatorio} disabled helperText={campo.acesso === 'L' ? t('Somente leitura') : ''} />)}
+          <Alert severity="info">{t('O Processo será criado somente após sua confirmação. Os campos serão preenchidos ao assumir a primeira etapa.')}</Alert>
+        </>}
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={iniciando} onClick={() => setIniciarAberto(false)}>{t('Cancelar')}</Button>
+        {protocoloEscolhido && <Button variant="contained" disabled={iniciando || buscandoGestores || !idGestor} onClick={confirmarInicio}>{t('Confirmar início')}</Button>}
+      </DialogActions>
+    </Dialog>
     <Dialog open={value.novaPastaAberta} onClose={() => !value.salvandoPasta && dispatch({ field: 'novaPastaAberta', value: false })} fullWidth maxWidth="sm">
       <DialogTitle>{t('Nova pasta')}</DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 2, pt: '12px !important' }}>
@@ -214,7 +304,7 @@ function urlConteudo(idArquivo, modo) {
   return `/ArgousForms/arquivo-conteudo?idArquivo=${encodeURIComponent(idArquivo)}&modo=${modo}`;
 }
 
-export default function GestorDocumentos({ usuario, podeEnviar }) {
+export default function GestorDocumentos({ usuario, podeEnviar, aoProcessoCriado }) {
   const initialState = useMemo(() => ({ idPasta: null, dados: null, loading: false, error: '',
     novaPastaAberta: false, nomeNovaPasta: '', descricaoNovaPasta: '', salvandoPasta: false, erroNovaPasta: '',
     mongo: null, envioAberto: false, arquivo: null, pastaDestino: '', tituloArquivo: '', descricaoArquivo: '',
@@ -381,7 +471,7 @@ export default function GestorDocumentos({ usuario, podeEnviar }) {
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { verificarMongo(); }, [verificarMongo]);
   const contextValues = useMemo(() => ({ telaAtual: 'GestorDocumentos', loading: value.loading,
-    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar }),
-    [value, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar]);
+    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado }),
+    [value, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado]);
   return <GestorDocumentosContext.Provider value={contextValues}><Conteudo /></GestorDocumentosContext.Provider>;
 }

@@ -271,9 +271,9 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
       <div className="modelo-html-dados">
         <TextField label={t('Código técnico')} required value={dados.codigo || ''} disabled={!!dados.id || salvando}
           onChange={(evento) => setDados({ ...dados, codigo: evento.target.value })} inputProps={{ maxLength: 30 }} />
-        <TextField label={t('Título')} required value={dados.titulo || ''} disabled={salvando}
+        <TextField label={t('Título')} required value={dados.titulo || ''} disabled={salvando || modelo.versao > 1}
           onChange={(evento) => setDados({ ...dados, titulo: evento.target.value })} inputProps={{ maxLength: 70 }} />
-        <TextField label={t('Observações (opcional)')} value={dados.observacoes || ''} disabled={salvando}
+        <TextField label={t('Observações (opcional)')} value={dados.observacoes || ''} disabled={salvando || modelo.versao > 1}
           onChange={(evento) => setDados({ ...dados, observacoes: evento.target.value })} />
       </div>
       <div className="modelo-html-partes">

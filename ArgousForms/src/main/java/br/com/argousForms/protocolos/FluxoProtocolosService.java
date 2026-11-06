@@ -118,6 +118,26 @@ public final class FluxoProtocolosService {
 		exigirCriador( usuario );
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			UUID idVersao = exigirRascunho( conexao, usuario, idProtocolo );
+			return consultarVersao( conexao, idVersao );
+		}
+	}
+
+	public JSONObject consultarPublicado( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, int numeroVersao ) throws Exception {
+
+		if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) && !usuario.papeis().contains( "CRIADOR_DE_PROTOCOLOS" ) && !usuario.papeis().contains( "MODELADOR" ) ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode consultar este Protocolo." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao(); PreparedStatement consulta = conexao.getConnection().prepareStatement( "select v.ID_PROTOCOLO_VERSAO, p.ID_USUARIO_CRIADOR from Processos.PROTOCOLO_VERSOES v join Processos.PROTOCOLOS p on p.ID_PROTOCOLO = v.ID_PROTOCOLO where v.ID_PROTOCOLO = ? and v.NR_VERSAO = ? and v.TP_SITUACAO = 'P'" ) ) {
+			consulta.setObject( 1, idProtocolo );
+			consulta.setInt( 2, numeroVersao );
+			try ( ResultSet linha = consulta.executeQuery() ) {
+				if( !linha.next() ) throw new ArgousFormsApiException( 404, "VERSAO_NAO_ENCONTRADA", "Versão publicada não encontrada." );
+				if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) && !usuario.idUsuario().toString().equals( linha.getString( 2 ) ) ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode consultar este Protocolo." );
+				return consultarVersao( conexao, linha.getObject( 1, UUID.class ) );
+			}
+		}
+	}
+
+	private JSONObject consultarVersao( Conexao conexao, UUID idVersao ) throws Exception {
+
 			JSONArray etapas = new JSONArray();
 			JSONArray ligacoes = new JSONArray();
 			String inicio = null;
@@ -160,13 +180,14 @@ public final class FluxoProtocolosService {
 				UUID atual = encaminhamentos.get( id );
 				Set<UUID> visitados = new HashSet<>();
 				while( atual != null && visitados.add( atual ) ) {
-					try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROXIMA_ETAPA, ID_PROXIMO_ENCAMINHAMENTO from Processos.ENCAMINHAMENTOS where ID_ENCAMINHAMENTO = ? and ID_PROTOCOLO_VERSAO = ?" ) ) {
+					try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROXIMA_ETAPA, ID_PROXIMO_ENCAMINHAMENTO, TP_ENCAMINHAMENTO, TX_TESTE from Processos.ENCAMINHAMENTOS where ID_ENCAMINHAMENTO = ? and ID_PROTOCOLO_VERSAO = ?" ) ) {
 						consulta.setObject( 1, atual );
 						consulta.setObject( 2, idVersao );
 						try ( ResultSet linhas = consulta.executeQuery() ) {
 							if( !linhas.next() ) throw invalido( "O fluxo contém um encaminhamento inexistente." );
 							String destino = linhas.getString( 1 );
-							ligacoes.put( new JSONObject().put( "origem", id.toString() ).put( "destino", destino ) );
+							ligacoes.put( new JSONObject().put( "origem", id.toString() ).put( "destino", destino )
+								.put( "tipo", linhas.getString( 3 ) ).put( "teste", linhas.getString( 4 ) == null ? "" : linhas.getString( 4 ) ) );
 							destinos.add( destino );
 							atual = (UUID) linhas.getObject( 2 );
 						}
@@ -178,7 +199,6 @@ public final class FluxoProtocolosService {
 				if( !destinos.contains( id ) ) { inicio = id; break; }
 			}
 			return new JSONObject().put( "etapas", etapas ).put( "ligacoes", ligacoes ).put( "inicio", inicio == null ? JSONObject.NULL : inicio );
-		}
 	}
 
 	private void validarPercurso( Set<String> etapas, Map<String, List<String>> saidas, String inicio ) throws ArgousFormsApiException {

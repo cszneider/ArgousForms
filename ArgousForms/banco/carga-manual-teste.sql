@@ -71,6 +71,7 @@ INSERT INTO Cadastro.PAPEIS
 VALUES
     (gen_random_uuid(), 'INSTALADOR', 'Instalador', 'Executa atividades iniciais da instalação', true, true, now()),
     (gen_random_uuid(), 'ADMINISTRADOR_USUARIOS', 'Administrador de usuários', 'Administra usuários e seus acessos', true, true, now()),
+    (gen_random_uuid(), 'ADMINISTRADOR_INSTITUICAO', 'Administrador da instituição', 'Mantém os dados e recursos compartilhados da instituição', true, true, now()),
     (gen_random_uuid(), 'GESTOR_ACESSOS', 'Gestor de acessos', 'Administra papéis, perfis e permissões', true, true, now()),
     (gen_random_uuid(), 'GESTOR_GRUPOS_TAGS', 'Gestor de grupos e tags', 'Administra grupos, vínculos e tags', true, true, now()),
     (gen_random_uuid(), 'GESTAO_DOCUMENTOS', 'Gestão de documentos', 'Gerencia as pastas para as quais foi nomeado gestor', true, true, now()),
@@ -84,7 +85,7 @@ VALUES
 INSERT INTO Cadastro.PERFIS
     (ID_PERFIL, CD_PERFIL, DS_NOME, DS_DESCRICAO, SN_SISTEMA, SN_ATIVO, DT_INCLUSAO)
 VALUES
-    (gen_random_uuid(), 'ADMINISTRADOR', 'Administrador', 'Administra usuários, grupos, tags, acessos e pastas sob sua gestão', true, true, now()),
+    (gen_random_uuid(), 'ADMINISTRADOR', 'Administrador', 'Administra usuários, instituição, grupos, acessos e pastas sob sua gestão', true, true, now()),
     (gen_random_uuid(), 'ESSENCIAL', 'Essencial', 'Acesso pessoal comum a todos os usuários', true, true, now()),
     (gen_random_uuid(), 'PARTICIPANTE', 'Participante', 'Inicia documentos elegíveis e edita etapas atribuídas', true, true, now()),
     (gen_random_uuid(), 'MODELADOR', 'Modelador', 'Cria e altera modelos', true, true, now()),
@@ -96,6 +97,7 @@ INSERT INTO Cadastro.PERFIL_PAPEIS
 SELECT gen_random_uuid(), perfil.ID_PERFIL, papel.ID_PAPEL, now()
   FROM (VALUES
       ('ADMINISTRADOR', 'ADMINISTRADOR_USUARIOS'),
+      ('ADMINISTRADOR', 'ADMINISTRADOR_INSTITUICAO'),
       ('ADMINISTRADOR', 'GESTOR_ACESSOS'),
       ('ADMINISTRADOR', 'GESTOR_GRUPOS_TAGS'),
       ('ADMINISTRADOR', 'GESTAO_DOCUMENTOS'),

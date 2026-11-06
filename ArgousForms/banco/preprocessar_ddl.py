@@ -82,6 +82,7 @@ def processar(ddl, mapa, drops_anteriores=""):
     primeira_exclusao = DROP.search(ddl)
     cabecalho = ddl[:primeira_exclusao.start()]
     corpo = DROP.sub("", ddl[primeira_exclusao.start():])
+    corpo = re.sub(r"(?i)\b(UUID|VARCHAR\(\d+\))\s+AUTO\b", r"\1", corpo)
     corpo = INDICE.sub(lambda trecho: trecho.group(0) if trecho.group(1).upper() in creates else "", corpo)
     corpo = ALTERACAO.sub(lambda trecho: trecho.group(0) if trecho.group(1).upper() in creates else "", corpo)
     exclusoes = "\n".join(f"DROP TABLE IF EXISTS {mapa[nome]}.{nome};" for nome in ordem_exclusao(drops, dependencias))
