@@ -80,11 +80,11 @@ function aceita(tipo, caractere) {
   return !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(caractere);
 }
 
-export function normalizarValorExemplo(valor, definicao = {}, tipo = 'S') {
-  if (typeof valor !== 'string') return { erro: 'O valor exemplo deve ser um texto.' };
+function normalizarTexto(valor, definicao = {}, tipo = 'S', limite = 500) {
+  if (typeof valor !== 'string') return { erro: 'O valor deve ser um texto.' };
   const original = valor.normalize('NFC');
-  if (original.length > 500 || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(original))
-    return { erro: 'O valor exemplo deve ter até 500 caracteres e não pode conter quebras de linha ou caracteres de controle.' };
+  if ([...original].length > limite || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(original))
+    return { erro: `O valor deve ter até ${limite} caracteres e não pode conter quebras de linha ou caracteres de controle.` };
   if (!original || tipo !== 'S') return { valor: original };
   const texto = definicao.texto || {};
   const mascara = texto.mascara || '';
@@ -96,7 +96,7 @@ export function normalizarValorExemplo(valor, definicao = {}, tipo = 'S') {
     const digitos = [...original].filter((caractere) => !literais.has(caractere)).join('');
     const capacidade = partes.filter((parte) => parte.tipo).length;
     if (!/^[0-9]+$/.test(digitos) || digitos.length > capacidade)
-      return { erro: 'O valor exemplo não corresponde à máscara.' };
+      return { erro: 'O valor não corresponde à máscara.' };
     resultado = digitos.padStart(capacidade, '0');
   } else if (mascara) {
     const entrada = [...original];
@@ -108,19 +108,27 @@ export function normalizarValorExemplo(valor, definicao = {}, tipo = 'S') {
       } else if (entrada[indice] && aceita(parte.tipo, entrada[indice])) {
         dados.push(entrada[indice++]);
       } else if (EXIGIDAS.includes(parte.tipo)) {
-        return { erro: 'O valor exemplo não corresponde à máscara.' };
+        return { erro: 'O valor não corresponde à máscara.' };
       }
     }
-    if (indice !== entrada.length) return { erro: 'O valor exemplo não corresponde à máscara.' };
+    if (indice !== entrada.length) return { erro: 'O valor não corresponde à máscara.' };
     resultado = dados.join('');
   }
 
   const tamanho = [...resultado].length;
   if (texto.tamanhoMinimo && tamanho < texto.tamanhoMinimo || texto.tamanhoMaximo && tamanho > texto.tamanhoMaximo)
-    return { erro: 'O valor exemplo não atende aos limites de tamanho da variável.' };
+    return { erro: 'O valor não atende aos limites de tamanho da variável.' };
   if (texto.regex && !new RegExp(`^(?:${texto.regex})$`, 'u').test(resultado))
-    return { erro: 'O valor exemplo não corresponde à expressão regular da variável.' };
+    return { erro: 'O valor não corresponde à expressão regular da variável.' };
   return { valor: resultado };
+}
+
+export function normalizarValorExemplo(valor, definicao = {}, tipo = 'S') {
+  return normalizarTexto(valor, definicao, tipo, 500);
+}
+
+export function normalizarValorTexto(valor, definicao = {}) {
+  return normalizarTexto(valor, definicao, 'S', 10000);
 }
 
 export function formatarValorExemplo(valor, mascara = '') {

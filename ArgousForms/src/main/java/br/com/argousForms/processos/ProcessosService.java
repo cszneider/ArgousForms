@@ -18,11 +18,50 @@ import br.com.argousForms.model.negocio.processos.ProcessoNegocio;
 import br.com.argousForms.model.persistencia.processos.Processo;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapa;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapaEncaminhamento;
+import br.com.argousForms.model.persistencia.processos.ProcessoLocalizador;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
 
 public final class ProcessosService {
+
+	public JSONObject concluir( AutenticacaoLocalService.Usuario usuario, UUID idProcesso ) throws Exception {
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+					"select ID_USUARIO_GESTOR, TP_SITUACAO from Processos.PROCESSOS where ID_PROCESSO = ? for update" ) ) {
+					consulta.setObject( 1, idProcesso );
+					try ( ResultSet linha = consulta.executeQuery() ) {
+						if( !linha.next() ) throw new ArgousFormsApiException( 404, "PROCESSO_NAO_ENCONTRADO", "Processo não encontrado." );
+						if( !usuario.idUsuario().equals( linha.getObject( "ID_USUARIO_GESTOR", UUID.class ) ) ) {
+							throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Somente o gestor atual pode concluir o Processo." );
+						}
+						if( !"A".equals( linha.getString( "TP_SITUACAO" ) ) ) {
+							throw new ArgousFormsApiException( 409, "PROCESSO_NAO_AGUARDA_CONCLUSAO", "O Processo não está aguardando conclusão." );
+						}
+					}
+				}
+				try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+					"select 1 from Processos.PROCESSO_ETAPAS where ID_PROCESSO = ? and TP_SITUACAO <> 'F'" ) ) {
+					consulta.setObject( 1, idProcesso );
+					try ( ResultSet linha = consulta.executeQuery() ) {
+						if( linha.next() ) throw new ArgousFormsApiException( 409, "ETAPAS_PENDENTES", "Há etapas pendentes neste Processo." );
+					}
+				}
+				Processo processo = ProcessoLocalizador.buscaProcesso( conexao, idProcesso );
+				processo.setTpSituacao( "F" );
+				processo.setDtEncerramento( new QtData( Instant.now().toEpochMilli() ) );
+				new ProcessoNegocio( conexao, processo ).altera();
+				conexao.commit();
+				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", "F" );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
 
 	public JSONObject iniciar( AutenticacaoLocalService.Usuario usuario, UUID idVersao, UUID idGestorInformado ) throws Exception {
 
@@ -184,8 +223,8 @@ public final class ProcessosService {
 				while( linhas.next() ) processos.put( new JSONObject().put( "id", linhas.getString( "ID_PROCESSO" ) )
 					.put( "titulo", linhas.getString( "DS_TITULO" ) ).put( "versao", linhas.getInt( "NR_VERSAO" ) )
 					.put( "situacao", linhas.getString( "TP_SITUACAO" ) ).put( "gestorAtual", usuario.idUsuario().toString().equals( linhas.getString( "ID_USUARIO_GESTOR" ) ) )
-					.put( "inicio", linhas.getString( "DT_INICIO" ) )
-					.put( "encerramento", linhas.getString( "DT_ENCERRAMENTO" ) == null ? JSONObject.NULL : linhas.getString( "DT_ENCERRAMENTO" ) ) );
+					.put( "inicio", linhas.getTimestamp( "DT_INICIO" ).toInstant().toString() )
+					.put( "encerramento", linhas.getTimestamp( "DT_ENCERRAMENTO" ) == null ? JSONObject.NULL : linhas.getTimestamp( "DT_ENCERRAMENTO" ).toInstant().toString() ) );
 			}
 		}
 		return new JSONObject().put( "processos", processos );
@@ -201,31 +240,60 @@ public final class ProcessosService {
 		if( !participante ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não participa deste Processo." );
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			JSONObject processo;
-			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, v.DS_TITULO, v.NR_VERSAO from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO where p.ID_PROCESSO = ?" ) ) {
+			String sqlProcesso = "select p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
+				+ "v.DS_TITULO, v.NR_VERSAO, iniciador.DS_NOME as NOME_INICIADOR, gestor.DS_NOME as NOME_GESTOR "
+				+ "from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
+				+ "left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU "
+				+ "left join Cadastro.USUARIOS_SISTEMA gestor on gestor.ID_USUARIO_SISTEMA = p.ID_USUARIO_GESTOR where p.ID_PROCESSO = ?";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlProcesso ) ) {
 				consulta.setObject( 1, idProcesso );
 				try ( ResultSet linha = consulta.executeQuery() ) {
 					if( !linha.next() ) throw new ArgousFormsApiException( 404, "PROCESSO_NAO_ENCONTRADO", "Processo não encontrado." );
 					processo = new JSONObject().put( "id", idProcesso.toString() ).put( "titulo", linha.getString( "DS_TITULO" ) )
 						.put( "versao", linha.getInt( "NR_VERSAO" ) ).put( "situacao", linha.getString( "TP_SITUACAO" ) )
-						.put( "inicio", linha.getString( "DT_INICIO" ) ).put( "iniciador", linha.getString( "ID_USUARIO_INICIOU" ) )
+						.put( "podeConcluir", "A".equals( linha.getString( "TP_SITUACAO" ) ) && usuario.idUsuario().equals( linha.getObject( "ID_USUARIO_GESTOR", UUID.class ) ) )
+						.put( "inicio", linha.getTimestamp( "DT_INICIO" ).toInstant().toString() ).put( "iniciador", linha.getString( "ID_USUARIO_INICIOU" ) )
+						.put( "nomeIniciador", linha.getString( "NOME_INICIADOR" ) == null ? JSONObject.NULL : linha.getString( "NOME_INICIADOR" ) )
 						.put( "gestor", linha.getString( "ID_USUARIO_GESTOR" ) == null ? JSONObject.NULL : linha.getString( "ID_USUARIO_GESTOR" ) )
-						.put( "encerramento", linha.getString( "DT_ENCERRAMENTO" ) == null ? JSONObject.NULL : linha.getString( "DT_ENCERRAMENTO" ) );
+						.put( "nomeGestor", linha.getString( "NOME_GESTOR" ) == null ? JSONObject.NULL : linha.getString( "NOME_GESTOR" ) )
+						.put( "encerramento", linha.getTimestamp( "DT_ENCERRAMENTO" ) == null ? JSONObject.NULL : linha.getTimestamp( "DT_ENCERRAMENTO" ).toInstant().toString() );
 				}
 			}
 			JSONArray etapas = new JSONArray();
-			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select e.ID_PROCESSO_ETAPA, pe.DS_TITULO, e.NR_PASSAGEM, e.TP_SITUACAO, e.ID_USUARIO_RESPONSAVEL, e.DT_DISPONIBILIZACAO, e.DT_ASSUMIU, e.DT_FINALIZACAO from Processos.PROCESSO_ETAPAS e join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA where e.ID_PROCESSO = ? order by e.DT_DISPONIBILIZACAO, e.NR_PASSAGEM" ) ) {
+			String sqlEtapas = "select e.ID_PROCESSO_ETAPA, e.ID_PROTOCOLO_ETAPA, pe.DS_TITULO, e.NR_PASSAGEM, e.TP_SITUACAO, "
+				+ "e.ID_USUARIO_RESPONSAVEL, responsavel.DS_NOME as NOME_RESPONSAVEL, e.DT_DISPONIBILIZACAO, e.DT_ASSUMIU, e.DT_FINALIZACAO "
+				+ "from Processos.PROCESSO_ETAPAS e join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA "
+				+ "left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL "
+				+ "where e.ID_PROCESSO = ? order by e.DT_DISPONIBILIZACAO, e.NR_PASSAGEM";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlEtapas ) ) {
 				consulta.setObject( 1, idProcesso );
 				try ( ResultSet linhas = consulta.executeQuery() ) {
 					while( linhas.next() ) etapas.put( new JSONObject().put( "id", linhas.getString( "ID_PROCESSO_ETAPA" ) )
 						.put( "titulo", linhas.getString( "DS_TITULO" ) ).put( "passagem", linhas.getInt( "NR_PASSAGEM" ) )
 						.put( "situacao", linhas.getString( "TP_SITUACAO" ) )
+						.put( "podeAbrirFormulario", usuario.idUsuario().toString().equals( linhas.getString( "ID_USUARIO_RESPONSAVEL" ) )
+							|| ( "D".equals( linhas.getString( "TP_SITUACAO" ) ) && elegivel( conexao, linhas.getObject( "ID_PROTOCOLO_ETAPA", UUID.class ), usuario.idUsuario() ) ) )
 						.put( "responsavel", linhas.getString( "ID_USUARIO_RESPONSAVEL" ) == null ? JSONObject.NULL : linhas.getString( "ID_USUARIO_RESPONSAVEL" ) )
+						.put( "nomeResponsavel", linhas.getString( "NOME_RESPONSAVEL" ) == null ? JSONObject.NULL : linhas.getString( "NOME_RESPONSAVEL" ) )
 						.put( "disponibilizacao", linhas.getString( "DT_DISPONIBILIZACAO" ) )
 						.put( "assumiu", linhas.getString( "DT_ASSUMIU" ) == null ? JSONObject.NULL : linhas.getString( "DT_ASSUMIU" ) )
 						.put( "finalizacao", linhas.getString( "DT_FINALIZACAO" ) == null ? JSONObject.NULL : linhas.getString( "DT_FINALIZACAO" ) ) );
 				}
 			}
-			return processo.put( "etapas", etapas );
+			JSONArray documentos = new JSONArray();
+			String sqlDocumentos = "select d.ID_ARQUIVO_VERSAO, a.ID_ARQUIVO, a.DS_TITULO, a.DS_NOME_ARQUIVO "
+				+ "from Processos.PROCESSO_DOCUMENTO d join Docs.ARQUIVO_VERSOES av on av.ID_ARQUIVO_VERSAO = d.ID_ARQUIVO_VERSAO "
+				+ "join Docs.ARQUIVOS a on a.ID_ARQUIVO = av.ID_ARQUIVO "
+				+ "where d.ID_PROCESSO = ? and d.TP_SITUACAO = 'P' order by d.DT_GERACAO, d.NR_GERACAO";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlDocumentos ) ) {
+				consulta.setObject( 1, idProcesso );
+				try ( ResultSet linhas = consulta.executeQuery() ) {
+					while( linhas.next() ) documentos.put( new JSONObject().put( "idArquivoVersao", linhas.getString( "ID_ARQUIVO_VERSAO" ) )
+						.put( "idArquivo", linhas.getString( "ID_ARQUIVO" ) ).put( "titulo", linhas.getString( "DS_TITULO" ) )
+						.put( "nome", linhas.getString( "DS_NOME_ARQUIVO" ) ) );
+				}
+			}
+			return processo.put( "etapas", etapas ).put( "documentos", documentos );
 		}
 	}
 
@@ -253,7 +321,7 @@ public final class ProcessosService {
 				UUID idEtapa = linhas.getObject( "ID_PROCESSO_ETAPA", UUID.class );
 				String situacao = linhas.getString( "PROCESSO_SITUACAO" );
 				String responsavel = linhas.getString( "ID_USUARIO_RESPONSAVEL" );
-				boolean minha = usuario.idUsuario().toString().equals( responsavel );
+				boolean minha = usuario.idUsuario().toString().equals( responsavel ) && !"F".equals( linhas.getString( "ETAPA_SITUACAO" ) );
 				boolean historico = participouDaEtapa( conexao, idEtapa, usuario.idUsuario() );
 				boolean disponivel = "D".equals( linhas.getString( "ETAPA_SITUACAO" ) ) && responsavel == null
 					&& elegivel( conexao, linhas.getObject( "ID_PROTOCOLO_ETAPA", UUID.class ), usuario.idUsuario() );
@@ -281,6 +349,11 @@ public final class ProcessosService {
 			consulta.setObject( 2, idUsuario );
 			try ( ResultSet linhas = consulta.executeQuery() ) { return linhas.next(); }
 		}
+	}
+
+	boolean elegivelEtapa( Conexao conexao, UUID idEtapa, UUID idUsuario ) throws Exception {
+
+		return elegivel( conexao, idEtapa, idUsuario );
 	}
 
 	private boolean elegivel( Conexao conexao, UUID idEtapa, UUID idUsuario ) throws Exception {

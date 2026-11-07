@@ -41,6 +41,7 @@ import br.com.argousForms.protocolos.ProtocolosService;
 import br.com.argousForms.protocolos.NovaVersaoProtocoloService;
 import br.com.argousForms.protocolos.GestoresProtocoloService;
 import br.com.argousForms.processos.ProcessosService;
+import br.com.argousForms.processos.PreenchimentoEtapaService;
 import br.com.argousForms.protocolos.FluxoProtocolosService;
 import br.com.argousForms.protocolos.VariaveisSistema;
 import br.com.argousForms.protocolos.VariaveisInstituicaoService;
@@ -186,9 +187,45 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "CONCLUIR_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.concluir( usuario, uuidObrigatorio( dados, "idProcesso" ) ) );
+			return;
+		}
+
 		if( "LISTAR_MINHAS_TAREFAS".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
 			ArgousFormsJson.enviarSucesso( response, 200, processos.minhasTarefas( usuario ) );
+			return;
+		}
+
+		if( "CONSULTAR_ETAPA_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().consultar( usuario, uuidObrigatorio( dados, "idEtapa" ) ) );
+			return;
+		}
+
+		if( "ASSUMIR_ETAPA_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().assumir( usuario, uuidObrigatorio( dados, "idEtapa" ) ) );
+			return;
+		}
+
+		if( "SALVAR_ETAPA_PARCIAL".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().salvarParcial( usuario, uuidObrigatorio( dados, "idEtapa" ), dados.optJSONObject( "valores" ) ) );
+			return;
+		}
+
+		if( "SALVAR_ETAPA_COMPLETA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().salvarCompleto( usuario, uuidObrigatorio( dados, "idEtapa" ), dados.optJSONObject( "valores" ) ) );
+			return;
+		}
+
+		if( "FINALIZAR_ETAPA_PROCESSO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = autenticacao.consultar( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().finalizar( usuario, getServletContext(), uuidObrigatorio( dados, "idEtapa" ) ) );
 			return;
 		}
 
