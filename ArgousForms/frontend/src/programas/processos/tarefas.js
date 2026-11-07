@@ -5,6 +5,7 @@ import { Alert, Button, CircularProgress } from '@mui/material';
 import { ArrowRight, Columns3, RefreshCw } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
+import Processos from './processos.js';
 import './processos.css';
 
 const colunas = [
@@ -14,12 +15,13 @@ const colunas = [
   ['encerrados', 'Encerrados'],
 ];
 
-export default function Tarefas({ aoAbrir }) {
+export default function Tarefas() {
   const { t } = useI18n();
   const [tarefas, setTarefas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [recarregar, setRecarregar] = useState(0);
+  const [idProcessoAberto, setIdProcessoAberto] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -29,6 +31,8 @@ export default function Tarefas({ aoAbrir }) {
       .finally(() => { if (!cancelado) setCarregando(false); });
     return () => { cancelado = true; };
   }, [recarregar]);
+
+  if (idProcessoAberto) return <Processos idProcessoInicial={idProcessoAberto} aoVoltar={() => { setIdProcessoAberto(null); setRecarregar((valor) => valor + 1); }} />;
 
   return <div className="processos-pagina">
     <header className="page-heading"><div><span className="eyebrow">{t('QUADRO DE TRABALHO')}</span>
@@ -42,7 +46,7 @@ export default function Tarefas({ aoAbrir }) {
         {tarefas.filter((item) => item.categoria === codigo).map((item) => <article key={item.idProcesso} className="tarefas-cartao">
           <div className="tarefas-cartao-icone"><Columns3 size={17} /></div><h3>{item.titulo}</h3>
           {(item.etapas || []).map((etapa) => <p key={etapa.id}>{etapa.titulo}</p>)}
-          {aoAbrir && <Button size="small" endIcon={<ArrowRight size={14} />} onClick={() => aoAbrir(item.idProcesso)}>{t('Abrir processo')}</Button>}
+          <Button size="small" endIcon={<ArrowRight size={14} />} onClick={() => setIdProcessoAberto(item.idProcesso)}>{t('Abrir processo')}</Button>
         </article>)}
         {!tarefas.some((item) => item.categoria === codigo) && <p className="tarefas-vazio">{t('Nenhum processo nesta coluna.')}</p>}
       </section>)}

@@ -159,6 +159,23 @@ public final class DefinicaoVariavelTexto {
 		return resultado;
 	}
 
+	public static String normalizarValor( String valor, JSONObject definicao ) throws ArgousFormsApiException {
+
+		if( valor == null || valor.isEmpty() ) return valor;
+		String normalizado = Normalizer.normalize( valor, Normalizer.Form.NFC );
+		if( normalizado.codePointCount( 0, normalizado.length() ) > 10000 || normalizado.codePoints().anyMatch( DefinicaoVariavelTexto::caractereInvalido ) ) {
+			throw invalida( "O texto informado contém caracteres inválidos ou excede 10000 caracteres." );
+		}
+		JSONObject texto = definicao == null ? null : definicao.optJSONObject( "texto" );
+		if( texto == null ) return normalizado;
+		try {
+			return normalizarExemplo( normalizado, texto.optString( "mascara", "" ), texto.optBoolean( "preencherZerosEsquerda", false ),
+				texto.optInt( "tamanhoMinimo", 0 ), texto.optInt( "tamanhoMaximo", 0 ), texto.optString( "regex", "" ) );
+		} catch ( ArgousFormsApiException e ) {
+			throw new ArgousFormsApiException( 400, "VALOR_INVALIDO", e.getMessage().replace( "valor exemplo", "valor informado" ) );
+		}
+	}
+
 	private static List<Parte> partesDaMascara( String mascara ) {
 
 		List<Parte> partes = new ArrayList<>();

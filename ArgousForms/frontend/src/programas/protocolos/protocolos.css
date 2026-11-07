@@ -581,6 +581,24 @@
 .protocolo-publicado-codigo { color: var(--theme-text-secondary, #697a89); font-size: 12px; }
 .protocolo-publicado-detalhe { margin-top: 15px; }
 .protocolo-publicado-detalhe h3 { margin: 4px 0 9px; }
+.protocolo-publicado-variavel { border-color: var(--theme-accent, #12665b); }
+.protocolo-publicado-variavel-cabecalho { display: flex; align-items: flex-start; gap: 14px; margin: 16px 0 22px; }
+.protocolo-publicado-variavel-cabecalho h3 { font-size: 21px; margin: 4px 0; }
+.protocolo-publicado-variavel-cabecalho p { margin: 0; color: var(--theme-text-secondary, #697a89); }
+.protocolo-publicado-variavel-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.protocolo-publicado-variavel-grade > div, .protocolo-publicado-variavel-faixa, .protocolo-publicado-variavel-exemplo {
+  display: grid; gap: 6px; padding: 13px 15px; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 10px;
+  background: var(--theme-canvas, #f7faf9); overflow-wrap: anywhere;
+}
+.protocolo-publicado-variavel-grade span, .protocolo-publicado-variavel-faixa span, .protocolo-publicado-variavel-exemplo span {
+  color: var(--theme-text-secondary, #697a89); font-size: 12px;
+}
+.protocolo-publicado-variavel-grade strong, .protocolo-publicado-variavel-exemplo strong { font-size: 14px; font-weight: 600; }
+.protocolo-publicado-variavel h4 { margin: 24px 0 11px; font-size: 15px; }
+.protocolo-publicado-variavel-faixa, .protocolo-publicado-variavel-exemplo { margin-top: 10px; }
+.protocolo-publicado-variavel-faixa code { font-size: 13px; white-space: pre-wrap; }
+.protocolo-publicado-variavel-script { margin-top: 16px; color: var(--theme-text-secondary, #697a89); }
+.protocolo-publicado-variavel-script summary { cursor: pointer; }
 .protocolo-publicado-campo { display: grid; gap: 4px; padding: 13px 15px; margin-top: 9px; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 9px; }
 .protocolo-publicado-campo small { color: var(--theme-text-secondary, #697a89); }
 .protocolo-publicado-fluxo { height: 520px; overflow: hidden; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 14px; background: var(--theme-surface, #fff); }
@@ -591,6 +609,9 @@
 @media (max-width: 900px) {
   .protocolo-publicado-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .protocolo-publicado-hero { flex-direction: column; }
+}
+@media (max-width: 560px) {
+  .protocolo-publicado-variavel-grade { grid-template-columns: 1fr; }
 }
 .protocolos-intro {
   padding: 22px 25px;

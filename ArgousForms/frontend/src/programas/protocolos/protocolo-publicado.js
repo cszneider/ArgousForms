@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, MenuItem, TextField } from '@mui/material';
+import { Alert, Button, Dialog, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import { ArrowLeft, ArrowRight, CalendarDays, Check, FileText, GitBranch, Image, LayoutTemplate, Variable } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import FluxoPublicado from './fluxo-publicado.js';
 import ModeloHtmlPublicado from './modelo-html-publicado.js';
+import { formatarValorExemplo } from './variavel-texto.js';
+
+const tiposVariavel = { S: 'Texto', I: 'Inteiro', R: 'Decimal', M: 'Moeda', V: 'Valor monetário', B: 'Booleano', O: 'Opção', D: 'Data', H: 'Hora', T: 'Data e hora' };
+const origensVariavel = { MANUAL: 'Manual', SISTEMA: 'Sistema', INSTITUICAO: 'Instituição', INTEGRACAO: 'Integração' };
 
 const secoes = [
   { id: 'visao', titulo: 'Visão do Protocolo', Icon: Check },
@@ -25,6 +29,7 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
   const [area, setArea] = useState('visao');
   const [formularioId, setFormularioId] = useState(null);
   const [documentoId, setDocumentoId] = useState(null);
+  const [variavel, setVariavel] = useState(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -65,7 +70,7 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
         </div>
         <TextField select size="small" label={t('Versão publicada')} value={numero}
           className="protocolo-publicado-versao"
-          onChange={(evento) => { setDados(null); setNumero(Number(evento.target.value)); setFormularioId(null); setDocumentoId(null); }}>
+          onChange={(evento) => { setDados(null); setNumero(Number(evento.target.value)); setFormularioId(null); setDocumentoId(null); setVariavel(null); }}>
           {(dados.versoes || []).map((versao) => <MenuItem key={versao} value={versao}>{t('Versão')} {versao}</MenuItem>)}
         </TextField>
       </header>
@@ -105,7 +110,46 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
               <span className="protocolo-publicado-linha-icone"><Variable size={18} /></span>
               <div><h3>{item.nome}</h3><p>{item.descricao || item.codigo}</p></div>
               <span className="protocolo-publicado-codigo">{item.codigo}</span>
+              <Button size="small" onClick={() => setVariavel(item)}>{t('Visualizar')}</Button>
             </article>)}</div> : <div className="protocolo-publicado-vazio">{t('Nenhuma variável nesta versão.')}</div>}
+            <Dialog open={Boolean(variavel)} onClose={() => setVariavel(null)} fullWidth maxWidth="md">
+              <DialogTitle>{t('Detalhes da variável')}</DialogTitle>
+              <DialogContent>
+              {variavel && <div className="protocolo-publicado-detalhe protocolo-publicado-variavel">
+              <div className="protocolo-publicado-variavel-cabecalho">
+                <span className="protocolo-publicado-linha-icone"><Variable size={20} /></span>
+                <div><span className="eyebrow">{t('VARIÁVEL PUBLICADA')}</span><h3>{variavel.nome}</h3><p>{variavel.descricao || t('Sem descrição')}</p></div>
+              </div>
+              <div className="protocolo-publicado-variavel-grade">
+                <div><span>{t('Código técnico')}</span><strong>{variavel.codigo}</strong></div>
+                <div><span>{t('Tipo de dado')}</span><strong>{t(tiposVariavel[variavel.tipo] || variavel.tipo)}</strong></div>
+                <div><span>{t('Versão da variável')}</span><strong>{variavel.numeroVersaoVariavel || '—'}</strong></div>
+                <div><span>{t('Origem do valor')}</span><strong>{t(origensVariavel[variavel.definicao?.origem?.tipo] || 'Manual')}</strong></div>
+              </div>
+              {variavel.definicao?.origem && variavel.definicao.origem.tipo !== 'MANUAL' && <div className="protocolo-publicado-variavel-faixa">
+                <span>{t('Referência da origem')}</span><code>{variavel.definicao.origem.codigo || variavel.definicao.origem.idAtributo || '—'}</code>
+              </div>}
+              {variavel.tipo === 'S' && <>
+                <h4>{t('Formatação e validação')}</h4>
+                <div className="protocolo-publicado-variavel-grade">
+                  <div><span>{t('Máscara')}</span><strong>{variavel.definicao?.texto?.mascara || t('Não definida')}</strong></div>
+                  <div><span>{t('Zeros à esquerda')}</span><strong>{variavel.definicao?.texto?.preencherZerosEsquerda ? t('Sim') : t('Não')}</strong></div>
+                  <div><span>{t('Tamanho mínimo')}</span><strong>{variavel.definicao?.texto?.tamanhoMinimo || t('Não definido')}</strong></div>
+                  <div><span>{t('Tamanho máximo')}</span><strong>{variavel.definicao?.texto?.tamanhoMaximo || t('Não definido')}</strong></div>
+                </div>
+                <div className="protocolo-publicado-variavel-faixa"><span>{t('Expressão regular')}</span><code>{variavel.definicao?.texto?.regex || t('Não definida')}</code></div>
+              </>}
+              {variavel.definicao?.valorExemplo && <div className="protocolo-publicado-variavel-exemplo">
+                <span>{t('Valor exemplo')}</span><strong>{variavel.tipo === 'S' ? formatarValorExemplo(variavel.definicao.valorExemplo, variavel.definicao?.texto?.mascara) : variavel.definicao.valorExemplo}</strong>
+              </div>}
+              {variavel.definicao?.scriptAoSairDoCampo && <details className="protocolo-publicado-variavel-script">
+                <summary>{t('Script ao sair do campo')}</summary><pre>{variavel.definicao.scriptAoSairDoCampo}</pre>
+              </details>}
+              <details className="protocolo-publicado-variavel-script"><summary>{t('Definição completa')}</summary><pre>{JSON.stringify(variavel.definicao || {}, null, 2)}</pre></details>
+              </div>}
+              </DialogContent>
+              <Button onClick={() => setVariavel(null)} sx={{ alignSelf: 'flex-end', m: 2 }}>{t('Fechar detalhes')}</Button>
+            </Dialog>
           </section>}
           {area === 'formularios' && <section>
             <div className="protocolo-publicado-secao-titulo"><h2>{t('Formulários')}</h2><p>{t('Veja os campos na ordem em que foram definidos.')}</p></div>

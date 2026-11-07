@@ -104,7 +104,7 @@ const nav = [
   ['documents', 'Documentos', Files],
   ['processes', 'Processos', GitBranch],
   ['tasks', 'Tarefas', Columns3],
-  ['protocols', 'Protocolos', GitBranch],
+  ['protocols', 'Protocolos', FileStack],
   ['organization', 'Organização e acessos', Users],
 ];
 const initials = (name) =>

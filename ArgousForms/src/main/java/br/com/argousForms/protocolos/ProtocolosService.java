@@ -1451,7 +1451,7 @@ public final class ProtocolosService {
 	private void carregarVariaveis( Conexao conexao, JSONObject rascunho ) throws Exception {
 
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, x.DS_DESCRICAO, vv.DS_NOME, vv.JS_DEFINICAO, "
+			query.setSQL( "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, x.DS_DESCRICAO, vv.NR_VERSAO, vv.DS_NOME, vv.JS_DEFINICAO, "
 				+ "exists (select 1 from Processos.PROTOCOLO_VERSAO_VARIAVEIS pub join Processos.PROTOCOLO_VERSOES vp on vp.ID_PROTOCOLO_VERSAO = pub.ID_PROTOCOLO_VERSAO where pub.ID_VARIAVEL = x.ID_VARIAVEL and vp.NR_VERSAO > 0) as PUBLICADA "
 				+ "from Processos.PROTOCOLO_VERSAO_VARIAVEIS a "
 				+ "join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = a.ID_VARIAVEL "
@@ -1464,7 +1464,7 @@ public final class ProtocolosService {
 					rascunho.getJSONArray( "variaveis" ).put( new JSONObject().put( "id", query.getString( "ID_VARIAVEL" ) )
 						.put( "codigo", query.getString( "CD_VARIAVEL" ) ).put( "tipo", query.getString( "TP_DADO" ) )
 						.put( "publicada", query.getBoolean( "PUBLICADA" ) )
-						.put( "nome", query.getString( "DS_NOME" ) )
+						.put( "nome", query.getString( "DS_NOME" ) ).put( "numeroVersaoVariavel", query.getInt( "NR_VERSAO" ) )
 							.put( "definicao", new JSONObject( query.getString( "JS_DEFINICAO" ) ) )
 						.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) ) );
 				} while ( query.next() );
