@@ -7,19 +7,22 @@
              http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
 
-    <servlet>
-        <servlet-name>StartupServlet</servlet-name>
-        <servlet-class>quatro.util.StartupServlet</servlet-class>
-
-        <init-param>
-            <param-name>arquivoDeParametros</param-name>
-            <param-value>/Users/carlos/projetos/ArgousForms/ArgousForms/src/main/webapp/WEB-INF/parametros-agforms.xml</param-value>
-        </init-param>
-
-        <load-on-startup>1</load-on-startup>
-    </servlet>
+    <listener>
+        <listener-class>br.com.argousForms.infraestrutura.ArgousFormsInicializacaoListener</listener-class>
+    </listener>
 
     <display-name>ArgousForms</display-name>
+
+    <servlet>
+        <servlet-name>EntradaArgousForms</servlet-name>
+        <servlet-class>br.com.argousForms.infraestrutura.EntradaArgousFormsServlet</servlet-class>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>EntradaArgousForms</servlet-name>
+        <url-pattern></url-pattern>
+        <url-pattern>/index.html</url-pattern>
+    </servlet-mapping>
 
     <session-config>
         <session-timeout>30</session-timeout>

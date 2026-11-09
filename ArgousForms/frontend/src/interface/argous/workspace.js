@@ -1,11 +1,7 @@
 'use client';
 import { pageReducer } from '../../utils/page-state.js';
 import { lerMenuCompacto, salvarMenuCompacto } from '../../utils/sidebar-preference.js';
-import UserSettings from '../configuracoes/index.js';
 import CadastroPessoaForm from './cadastro-pessoa-form.js';
-import GestorDocumentos from '../../programas/gestor-documentos/gestor-documentos.js';
-import Processos from '../../programas/processos/processos.js';
-import Tarefas from '../../programas/processos/tarefas.js';
 import ForcaSenha from '../../components/acesso/forca-senha.js';
 import { avaliarSenha } from '../../programas/login/politica-senha.js';
 import {
@@ -24,6 +20,7 @@ import {
   useReducer,
   useRef,
   useCallback,
+  lazy,
 } from 'react';
 import {
   Button,
@@ -77,11 +74,15 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { ThemeToggle } from '../../components/theme/theme.js';
-import { Dashboards } from '../../programas/dashboard/dashboards.js';
 import { defaultDashboardFilters } from '../../programas/dashboard/dashboard.js';
-import { TemplateEditor } from '../../programas/modelos/template-editor.js';
-import Protocolos from '../../programas/protocolos/protocolos.js';
-import Instituicao from '../../programas/protocolos/instituicao.js';
+const UserSettings = lazy(() => import('../configuracoes/index.js'));
+const GestorDocumentos = lazy(() => import('../../programas/gestor-documentos/gestor-documentos.js'));
+const Processos = lazy(() => import('../../programas/processos/processos.js'));
+const Tarefas = lazy(() => import('../../programas/processos/tarefas.js'));
+const Dashboards = lazy(() => import('../../programas/dashboard/dashboards.js').then((modulo) => ({ default: modulo.Dashboards })));
+const TemplateEditor = lazy(() => import('../../programas/modelos/template-editor.js').then((modulo) => ({ default: modulo.TemplateEditor })));
+const Protocolos = lazy(() => import('../../programas/protocolos/protocolos.js'));
+const Instituicao = lazy(() => import('../../programas/protocolos/instituicao.js'));
 import {
   DocumentView,
   Status,
@@ -468,20 +469,15 @@ export default function Workspace() {
 
   useEffect(() => {
     async function carregar() {
-      if (isLocalSession()) {
+      const marcador = sessionStorage.getItem(SESSION_KEY);
+      if (marcador !== 'demo' && marcador !== 'platform-demo') {
         try {
           const sessao = await sessaoAtual();
-          if (
-            !['user:', 'editor:'].some((prefix) => sessionStorage.getItem(SESSION_KEY) === `${prefix}${sessao.idUsuario}`)
-          ) {
-            sessionStorage.removeItem(SESSION_KEY);
-            window.location.replace('/inicio');
-            return;
-          }
+          sessionStorage.setItem(SESSION_KEY, `user:${sessao.idUsuario}`);
           dispatch({ field: 'usuario', value: sessao });
         } catch {
           sessionStorage.removeItem(SESSION_KEY);
-          window.location.replace('/login');
+          window.location.replace('/ArgousForms/login');
           return;
         }
       }
@@ -489,7 +485,7 @@ export default function Workspace() {
       try {
         if (sessionRole() !== 'company') {
           window.location.replace(
-            sessionRole() === 'platform' ? '/plataforma' : '/login',
+            sessionRole() === 'platform' ? '/ArgousForms/plataforma' : '/ArgousForms/login',
           );
           return;
         }
@@ -539,7 +535,7 @@ export default function Workspace() {
           field: 'state',
           value: (current) => (current ? { ...current } : current),
         });
-        if (sessionRole() !== 'company') window.location.replace('/login');
+        if (sessionRole() !== 'company') window.location.replace('/ArgousForms/login');
         else if (!isEnabled(actorId)) {
           dispatch({ field: 'actorId', value: 'admin' });
           sessionStorage.removeItem('argousdocs:actor');
@@ -840,7 +836,7 @@ export default function Workspace() {
     try {
       if (isLocalSession()) await sair();
       sessionStorage.removeItem(SESSION_KEY);
-      window.location.href = '/login';
+      window.location.href = '/ArgousForms/login';
     } catch (falha) {
       dispatch({ field: 'toast', value: { text: falha.message, error: true } });
     }
@@ -901,7 +897,7 @@ export default function Workspace() {
       const resultado = await executar('ENCERRAR_CONEXAO', { idLogin: conexaoParaEncerrar.idLogin });
       if (resultado.atual) {
         sessionStorage.removeItem(SESSION_KEY);
-        window.location.href = '/login';
+        window.location.href = '/ArgousForms/login';
         return;
       }
       dispatch({ field: 'conexaoParaEncerrar', value: null });

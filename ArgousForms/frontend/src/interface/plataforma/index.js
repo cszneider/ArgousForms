@@ -80,7 +80,7 @@ export default function Platform() {
   const refresh = useCallback(() => {
     try {
       if (sessionRole() !== 'platform') {
-        window.location.replace('/login');
+        window.location.replace('/ArgousForms/login');
         return;
       }
       dispatch({ field: 'data', value: readPlatform() });
@@ -112,7 +112,7 @@ export default function Platform() {
           : t('Administração da plataforma');
   const signOut = useCallback(() => {
     logout();
-    window.location.href = '/login';
+    window.location.href = '/ArgousForms/login';
   }, []);
   const contextValues = useMemo(() => {
     const { telaAtual: _telaAtual, loading: _loading, ...value } = pageState;

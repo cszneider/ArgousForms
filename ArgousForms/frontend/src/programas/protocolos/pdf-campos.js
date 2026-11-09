@@ -5,6 +5,7 @@ import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTi
 import { AlignCenter, AlignEndHorizontal, AlignLeft, AlignRight, AlignStartHorizontal, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bold, ChevronLeft, ChevronRight, Eye, Italic, Underline } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { alinharCampos, apresentacaoCampo, moverCamposComSetas } from './pdf-campos-layout.js';
+import { openPdf } from '../editor/import-model.js';
 
 const arredondar = (valor) => Math.round(valor * 100) / 100;
 const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(maximo, valor));
@@ -47,7 +48,6 @@ export default function PdfCampos({ modelo, variaveis, erroCatalogo, aoFechar, a
     fetch(url, { credentials: 'same-origin' })
       .then(async (resposta) => {
         if (!resposta.ok) throw new Error(t('Não foi possível abrir o PDF do modelo.'));
-        const { openPdf } = await import('../editor/import-model.js');
         const dados = await resposta.arrayBuffer();
         pdfBytes.current = dados;
         return openPdf(dados.slice(0));

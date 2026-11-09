@@ -8,6 +8,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TableKit } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
+import DOMPurify from 'dompurify';
 import { useI18n } from '../../components/i18n/i18n.js';
 
 const TIPOS = { A: 'Apresentação', H: 'Cabeçalho', B: 'Corpo', F: 'Rodapé', X: 'Encerramento' };
@@ -231,9 +232,7 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
 
   useEffect(() => {
     if (!previa) return;
-    let cancelado = false;
-    import('dompurify').then(({ default: DOMPurify }) => {
-      if (cancelado) return;
+    try {
       const limpar = (html) => DOMPurify.sanitize(html, {
         FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'link', 'meta', 'base', 'style'],
         FORBID_ATTR: ['src', 'onerror', 'onclick'],
@@ -247,8 +246,9 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
       const documento = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';"><style>body{font:16px sans-serif;padding:24px;line-height:1.5}table{border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:6px}${css}</style></head><body>` +
         `<section>${secao('A')}</section><header>${secao('H')}</header><main>${corpo}</main><footer>${secao('F')}</footer><section>${secao('X')}</section></body></html>`;
       setHtmlPrevia(documento);
-    }).catch(() => setErro(t('Não foi possível gerar a prévia do HTML.')));
-    return () => { cancelado = true; };
+    } catch {
+      setErro(t('Não foi possível gerar a prévia do HTML.'));
+    }
   }, [previa, dados, t, variaveis]);
 
   async function salvar() {

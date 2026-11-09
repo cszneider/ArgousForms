@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
+import { Alert, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
 import { ArrowLeft, ArrowRight, FileText, GitBranch, MessageCircle, RefreshCw, UserRound } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import FormularioEtapa from './formulario-etapa.js';
+import { formatarValorExemplo } from '../protocolos/variavel-texto.js';
 import './processos.css';
 
 const situacoes = { I: 'Iniciado', E: 'Em execução', A: 'Aguardando conclusão', F: 'Finalizado', C: 'Cancelado' };
@@ -21,7 +22,14 @@ function identificador(valor) {
   return valor ? `${String(valor).slice(0, 8)}…` : '—';
 }
 
-function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoConcluir }) {
+function valorHistorico(campo, locale) {
+  if (campo.valor == null || campo.valor === '') return '—';
+  if (campo.tipo === 'S') return formatarValorExemplo(String(campo.valor), campo.definicao?.texto?.mascara);
+  if (campo.tipo === 'T') return dataInicio(campo.valor, locale, true);
+  return String(campo.valor);
+}
+
+function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoConcluir, comentario, aoMudarComentario, aoComentar, comentando }) {
   const etapas = detalhe.etapas || [];
   const atual = etapas.find((etapa) => ['D', 'I', 'P', 'S'].includes(etapa.situacao));
   const finalizadas = etapas.filter((etapa) => etapa.situacao === 'F');
@@ -58,7 +66,14 @@ function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoCo
         </section>
         <section className="processo-central-painel">
           <div className="processo-central-painel-titulo"><MessageCircle size={19} /><div><h2>{t('Fórum')}</h2><p>{t('Discussões e histórico do processo')}</p></div></div>
-          <p className="processo-central-vazio">{t('Fórum em preparação')}</p>
+          {detalhe.forum?.length ? <div className="processo-central-forum">{detalhe.forum.map((registro) => <article className={`processo-central-mensagem ${registro.tipo === '1' ? 'comentario' : 'evento'}`} key={registro.id}>
+            <div className="processo-central-mensagem-cabecalho"><strong>{registro.autor}</strong><span>{dataInicio(registro.data, locale, true)}</span></div>
+            <p>{registro.conteudo}</p>
+          </article>)}</div> : <p className="processo-central-vazio">{t('Ainda não há registros no fórum.')}</p>}
+          {detalhe.podeComentar && <div className="processo-central-compositor">
+            <TextField multiline minRows={2} maxRows={6} fullWidth label={t('Escreva um comentário')} value={comentario} onChange={(evento) => aoMudarComentario(evento.target.value)} inputProps={{ maxLength: 10000 }} />
+            <Button variant="contained" disabled={comentando || !comentario.trim()} onClick={aoComentar}>{t('Publicar comentário')}</Button>
+          </div>}
         </section>
       </div>
       <aside className="processo-central-lateral">
@@ -69,10 +84,13 @@ function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoCo
         </section>
         <section className="processo-central-painel">
           <div className="processo-central-painel-titulo"><FileText size={19} /><div><h2>{t('Formulários e valores')}</h2><p>{t('Consulte as etapas já percorridas')}</p></div></div>
-          {finalizadas.length ? <div className="processo-central-registros">{finalizadas.map((etapa) => <div key={etapa.id}>
-            <strong>{etapa.titulo}</strong><span>{t('Finalizada em')} {dataInicio(etapa.finalizacao, locale)}</span>
-            <small>{t('Visualização dos valores em preparação')}</small>
-          </div>)}</div> : <p className="processo-central-vazio">{t('Nenhum formulário finalizado até agora.')}</p>}
+          {finalizadas.length ? <div className="processo-central-registros">{finalizadas.map((etapa) => <details className="processo-central-formulario" key={etapa.id}>
+            <summary><strong>{etapa.titulo}</strong><span>{t('Passagem')} {etapa.passagem} · {t('Finalizada em')} {dataInicio(etapa.finalizacao, locale, true)}</span></summary>
+            {etapa.podeVerValores ? <div className="processo-central-valores">{etapa.valores?.length ? etapa.valores.map((campo) =>
+              <div key={campo.codigo}><span>{campo.nome}</span><strong>{valorHistorico(campo, locale)}</strong></div>)
+              : <p className="processo-central-vazio">{t('Nenhum campo neste formulário.')}</p>}</div>
+              : <p className="processo-central-vazio">{t('Os valores desta etapa estão disponíveis apenas ao gestor e aos seus responsáveis.')}</p>}
+          </details>)}</div> : <p className="processo-central-vazio">{t('Nenhum formulário finalizado até agora.')}</p>}
         </section>
         <section className="processo-central-painel">
           <div className="processo-central-painel-titulo"><FileText size={19} /><div><h2>{t('Documentos gerados')}</h2><p>{t('Arquivos produzidos pelo processo')}</p></div></div>
@@ -98,6 +116,8 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
   const [idEtapaAberta, setIdEtapaAberta] = useState(null);
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
   const [concluindo, setConcluindo] = useState(false);
+  const [comentario, setComentario] = useState('');
+  const [comentando, setComentando] = useState(false);
 
   async function abrir(idProcesso) {
     setErroDetalhe('');
@@ -129,6 +149,17 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
     finally { setConcluindo(false); }
   }
 
+  async function comentar() {
+    setComentando(true);
+    setErroDetalhe('');
+    try {
+      await executar('COMENTAR_PROCESSO', { idProcesso: detalhe.id, conteudo: comentario.trim() });
+      setComentario('');
+      await abrir(detalhe.id);
+    } catch (falha) { setErroDetalhe(falha.message); }
+    finally { setComentando(false); }
+  }
+
   useEffect(() => {
     let cancelado = false;
     executar('LISTAR_MEUS_PROCESSOS').then((dados) => {
@@ -139,7 +170,8 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
   }, [recarregar]);
 
   return <div className="processos-pagina">
-    {detalhe ? <CentralProcesso detalhe={detalhe} locale={locale} t={t} aoVoltar={() => aoVoltar ? aoVoltar() : setDetalhe(null)} aoAbrirFormulario={setIdEtapaAberta} aoConcluir={() => setConfirmarConclusao(true)} /> : <>
+    {detalhe ? <CentralProcesso detalhe={detalhe} locale={locale} t={t} aoVoltar={() => aoVoltar ? aoVoltar() : setDetalhe(null)} aoAbrirFormulario={setIdEtapaAberta} aoConcluir={() => setConfirmarConclusao(true)}
+      comentario={comentario} aoMudarComentario={setComentario} aoComentar={comentar} comentando={comentando} /> : <>
     {idProcessoInicial && <Button onClick={aoVoltar} startIcon={<ArrowLeft size={16} />}>{t('Voltar às tarefas')}</Button>}
     <header className="page-heading"><div><span className="eyebrow">{t('SEU HISTÓRICO')}</span>
       <h1>{t('Processos')}</h1><p>{t('Processos nos quais você já teve participação.')}</p></div>

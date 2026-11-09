@@ -4,6 +4,9 @@ Este arquivo concentra as diferenças a preservar nos DDLs do CASE e as pendênc
 
 ## Cadastro e Docs: preservar nos próximos exports
 
+- `Cadastro.INSTITUICAO` passa a ter `NR_DIAS_SESSAO_MOVEL INTEGER NOT NULL DEFAULT 7 CHECK (> 0)` e `NR_DIAS_SESSAO_ABSOLUTA INTEGER NOT NULL DEFAULT 60 CHECK (> 0)`. Preservar os campos no próximo export do CASE; `adequar-validade-sessoes-2026-11-09.sql` prepara a instalação existente.
+- `Cadastro.HISTORICO_LOGINS.DT_VALIDADE` não deve manter o default fixo de sete dias. A aplicação calcula a validade pelos parâmetros da instituição; o script de adequação remove o default da instalação existente.
+
 - Em `Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS`, o CASE não gera a restrição entre colunas. Após cada export, preservar `CONSTRAINT ck_pdf_campo_origem CHECK ((ID_VARIAVEL IS NULL) <> (ID_ATRIBUTO IS NULL))` na definição da tabela. `ID_VARIAVEL` e `ID_ATRIBUTO` permanecem individualmente opcionais; exatamente um deles deve ser preenchido. A restrição já consta de `estrutura-processos.sql` e do script de adequação da base existente.
 
 - O índice único de identificação pessoal por país já foi aplicado pelo gestor ao banco; conferir sua presença no próximo export de `Cadastro` para não perdê-lo ao recriar a estrutura.

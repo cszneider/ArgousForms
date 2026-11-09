@@ -13,7 +13,7 @@ export default function AccessLayout({
   return (
     <main className="login-page">
       <section className="login-story">
-        <Box component="a" href="/" className="brand">
+        <Box component="a" href="/ArgousForms/" className="brand">
           <span className="brand-icon">
             <FileStack size={24} />
           </span>

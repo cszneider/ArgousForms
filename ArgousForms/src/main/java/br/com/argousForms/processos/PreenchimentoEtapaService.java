@@ -84,6 +84,8 @@ public final class PreenchimentoEtapaService {
 				historico.setIdUsuarioSistema( usuario.idUsuario() );
 				historico.setDtInicio( agora );
 				new ProcessoEtapaResponsavelNegocio( conexao, historico ).insere();
+				ForumProcessoService.registrar( conexao, UUID.fromString( dados.getString( "idProcesso" ) ), usuario.idUsuario(), "A",
+					"Etapa assumida: " + dados.getString( "titulo" ) + ".", new JSONObject().put( "idEtapa", idEtapa.toString() ) );
 				conexao.commit();
 				return new JSONObject().put( "idEtapa", idEtapa.toString() );
 			} catch ( Exception e ) {
@@ -162,6 +164,8 @@ public final class PreenchimentoEtapaService {
 					processo.setTpSituacao( "E" );
 				}
 				new ProcessoNegocio( conexao, processo ).altera();
+				ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "T", "Etapa finalizada: " + dados.getString( "titulo" ) + ".",
+					new JSONObject().put( "idEtapa", idEtapa.toString() ).put( "idEtapaDestino", idDestino == null ? JSONObject.NULL : idDestino.toString() ) );
 				commitTentado = true;
 				conexao.commit();
 				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", idDestino == null ? "A" : "E" );

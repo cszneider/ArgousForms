@@ -18,7 +18,7 @@ Este documento reúne as definições e questões relacionadas ao backend. Recom
 - Haverá autenticação local, Argous, Google e Microsoft.
 - Senhas locais usarão PBKDF2-HMAC-SHA-256.
 - Somente o hash SHA-256 do bearer de sessão será armazenado.
-- O login local exige senha válida e vínculo de origem com e-mail confirmado. A sessão inicial vale sete dias, usa cookie `HttpOnly` e persiste apenas o hash SHA-256 do segredo em `Cadastro.HISTORICO_LOGINS`. A consulta da sessão e o encerramento estão disponíveis pelo resolver; os demais métodos de login e a autorização dos módulos ainda não foram integrados.
+- O login local exige senha válida e vínculo de origem com e-mail confirmado. A sessão usa cookie `HttpOnly` e persiste apenas o hash SHA-256 do segredo em `Cadastro.HISTORICO_LOGINS`. A instituição configura dias de validade móvel e absoluta (padrões 7 e 60). O primeiro acesso de cada novo dia no fuso institucional renova `DT_VALIDADE` até o limite absoluto desde `DT_LOGIN`; alterações dos parâmetros atingem sessões abertas na próxima consulta, sem reativar as expiradas. A consulta da sessão e o encerramento estão disponíveis pelo resolver; os demais métodos de login e a autorização dos módulos ainda não foram integrados.
 - As respostas de login local e consulta da sessão informam os papéis efetivos por vínculos vigentes com perfis e papéis ativos. O frontend usa `EDITOR_DE_DOCUMENTOS` para encaminhar à interface documental provisória; essa informação não substitui a autorização por operação, documento e etapa no backend.
 
 ## Responsabilidades principais
@@ -55,6 +55,8 @@ As consultas `LISTAR_PROTOCOLOS_INICIAVEIS`, `LISTAR_GESTORES_ELEGIVEIS`, `LISTA
 `SALVAR_ETAPA_COMPLETA` valida os campos obrigatórios e normaliza os valores textuais pelas regras da variável, sem encaminhar a etapa. `FINALIZAR_ETAPA_PROCESSO` exige a etapa salva e o responsável vigente. Nesta primeira fase, aceita apenas percurso direto único sem scripts ou junções; pode gerar os PDFs configurados e registra a finalização e o encaminhamento na mesma transação. Ao finalizar, encerra o histórico de responsabilidade e limpa o responsável atual da etapa. Uma etapa sem saída deixa o Processo aguardando conclusão pelo gestor. Casos que dependam dos executores ainda ausentes retornam `FLUXO_AINDA_NAO_EXECUTAVEL`, sem finalizar a etapa.
 
 `CONCLUIR_PROCESSO` exige o gestor atual, a situação `A` e todas as etapas finalizadas. A operação bloqueia o Processo, altera sua situação para `F` e grava a data de encerramento numa transação. Nesta fase, não executa assinaturas.
+
+`CONSULTAR_PROCESSO` devolve o fórum em ordem cronológica e os campos gravados em cada passagem finalizada do formulário. Os valores de uma passagem são entregues somente ao gestor atual e aos usuários que constam no histórico de responsáveis daquela etapa; para os demais participantes, a etapa é exibida sem seus valores. `COMENTAR_PROCESSO` aceita comentários do iniciador, gestor atual, responsáveis atuais ou anteriores e convidados internos com convite aceito. O início do Processo, a assunção e finalização de etapas e a conclusão passam a gerar registros no fórum na mesma transação da ação. Registros anteriores a esta implementação não são reconstruídos.
 
 Na publicação de novas versões do Protocolo, consultar `INSTITUICAO.SN_PERMITIR_DESTINATARIOS_UNICOS` (valor inicial `TRUE`). Se estiver `FALSE`, cada etapa deverá possuir ao menos uma regra de destinatários não limitada exclusivamente a um usuário nominal. A validação não altera versões já publicadas nem Processos em andamento.
 

@@ -11,7 +11,9 @@ npm install
 npm run dev
 ```
 
-Tanto `npm run dev` quanto `npm start` usam a porta fixa **3002**. Acesse http://localhost:3002. Se a porta estiver ocupada, a execução falhará em vez de escolher outra porta automaticamente. A landing page fica em `/`, o login em `/login` e a ferramenta em `/app`.
+Tanto `npm run dev` quanto `npm start` usam a porta fixa **3002**. Acesse `http://localhost:3002/ArgousForms/`. O login fica em `/ArgousForms/login` e a ferramenta em `/ArgousForms/app`. As chamadas da API são encaminhadas pelo Vite ao Tomcat durante o desenvolvimento. Se o backend usar outro endereço, configure `ARGOUSFORMS_BACKEND_URL`.
+
+Para gerar o WAR com frontend e backend, execute `clean package` no projeto Maven. O Maven executa `npm ci` e `npm run build` nesta pasta, depois inclui as páginas de `dist/war` na raiz do WAR. A máquina de build precisa ter Node.js >= 22.13 e npm disponíveis. O contexto do WAR deve ser `ArgousForms`, como seu nome final.
 
 - E-mail: `teste@argous.com.br`
 - Senha: `123`

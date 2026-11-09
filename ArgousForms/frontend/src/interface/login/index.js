@@ -2,7 +2,7 @@
 import { pageReducer } from '../../utils/page-state.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { createContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { entrarLocal } from '../../programas/login/autenticacao.js';
+import { entrarLocal, sessaoAtual } from '../../programas/login/autenticacao.js';
 import { SESSION_KEY } from '../../programas/plataforma/access.js';
 import {
   consultarDiagnostico,
@@ -43,6 +43,17 @@ export default function Login() {
   }, [pageState]);
 
   const { t: tr, system } = useI18n();
+
+  useEffect(() => {
+    let ativo = true;
+    sessaoAtual().then((sessao) => {
+      if (ativo) {
+        sessionStorage.setItem(SESSION_KEY, `user:${sessao.idUsuario}`);
+        window.location.replace('/ArgousForms/app');
+      }
+    }, () => {});
+    return () => { ativo = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,7 +121,7 @@ export default function Login() {
             try {
               const sessao = await entrarLocal(email, password);
               sessionStorage.setItem(SESSION_KEY, `user:${sessao.idUsuario}`);
-              window.location.href = '/app';
+              window.location.href = '/ArgousForms/app';
             } catch (error) {
               dispatch({ field: 'error', value: error.message });
               dispatch({ field: 'loading', value: false });
@@ -167,10 +178,10 @@ export default function Login() {
         </form>
         <div className="access-links">
           <p>{tr('Ainda não tem uma conta?')}</p>
-          <Button component="a" href="/cadastro" variant="outlined" fullWidth>
+          <Button component="a" href="/ArgousForms/cadastro" variant="outlined" fullWidth>
             {tr('Criar cadastro')}
           </Button>
-          <Button component="a" href="/convite" variant="text" fullWidth>
+          <Button component="a" href="/ArgousForms/convite" variant="text" fullWidth>
             {tr('Aceitar convite recebido por e-mail')}
           </Button>
         </div>
