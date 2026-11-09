@@ -15,7 +15,7 @@ export default function Inicio() {
   }, []);
 
   return (
-    <AccessLayout backHref="/login" backLabel="Voltar ao login">
+    <AccessLayout backHref="/ArgousForms/login" backLabel="Voltar ao login">
       <span className="eyebrow">ARGOUSFORMS</span>
       <h2>{usuario ? `Olá, ${usuario.nome}` : 'Verificando sessão…'}</h2>
       {usuario && <p>Você entrou com {usuario.email}.</p>}
@@ -25,7 +25,7 @@ export default function Inicio() {
           variant="contained"
           onClick={() => {
             sessionStorage.setItem(SESSION_KEY, `user:${usuario.idUsuario}`);
-            window.location.href = '/app';
+            window.location.href = '/ArgousForms/app';
           }}
         >
           Abrir espaço de trabalho
@@ -38,7 +38,7 @@ export default function Inicio() {
           try {
             await sair();
             sessionStorage.removeItem(SESSION_KEY);
-            window.location.href = '/login';
+            window.location.href = '/ArgousForms/login';
           } catch (falha) {
             setErro(falha.message);
           }

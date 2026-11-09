@@ -18,6 +18,8 @@ export default function Instituicao() {
     executar('CONSULTAR_INSTITUICAO')
       .then((resultado) => { if (ativo) setDados({ ...resultado,
         diasLixeira: String(resultado.diasLixeira),
+        diasSessaoMovel: String(resultado.diasSessaoMovel),
+        diasSessaoAbsoluta: String(resultado.diasSessaoAbsoluta),
         tamanhoMaximoArquivoBytes: String(resultado.tamanhoMaximoArquivoBytes),
       }); })
       .catch((falha) => { if (ativo) setErro(falha.message); });
@@ -37,6 +39,8 @@ export default function Instituicao() {
     try {
       const resultado = await executar('SALVAR_INSTITUICAO', dados);
       setDados({ ...resultado, diasLixeira: String(resultado.diasLixeira),
+        diasSessaoMovel: String(resultado.diasSessaoMovel),
+        diasSessaoAbsoluta: String(resultado.diasSessaoAbsoluta),
         tamanhoMaximoArquivoBytes: String(resultado.tamanhoMaximoArquivoBytes) });
       setMensagem(t('Parâmetros da instituição salvos.'));
     } catch (falha) {
@@ -62,6 +66,14 @@ export default function Instituicao() {
           <TextField label={t('Tamanho máximo de arquivo (bytes)')} type="number" value={dados.tamanhoMaximoArquivoBytes}
             inputProps={{ min: 1, max: 2147483647, step: 1 }}
             helperText={t('104857600 bytes correspondem a 100 MiB.')} onChange={(evento) => alterar('tamanhoMaximoArquivoBytes', evento.target.value)} required />
+        </Box>
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+          <TextField label={t('Dias de validade móvel da sessão')} type="number" value={dados.diasSessaoMovel}
+            inputProps={{ min: 1, step: 1 }} onChange={(evento) => alterar('diasSessaoMovel', evento.target.value)} required
+            helperText={t('Renovada no primeiro acesso de cada novo dia, no fuso da instituição.')} />
+          <TextField label={t('Dias de validade máxima da sessão')} type="number" value={dados.diasSessaoAbsoluta}
+            inputProps={{ min: 1, step: 1 }} onChange={(evento) => alterar('diasSessaoAbsoluta', evento.target.value)} required
+            helperText={t('Contados desde o login, mesmo que a sessão continue em uso.')} />
         </Box>
         <FormControlLabel control={<Switch checked={Boolean(dados.permitirDestinatariosUnicos)}
           onChange={(evento) => alterar('permitirDestinatariosUnicos', evento.target.checked)} />}

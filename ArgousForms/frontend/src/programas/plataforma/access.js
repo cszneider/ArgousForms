@@ -62,7 +62,7 @@ export function loginDemo(email, password) {
     SESSION_KEY,
     role === 'company' ? 'demo' : 'platform-demo',
   );
-  return role === 'platform' ? '/plataforma' : '/app';
+  return role === 'platform' ? '/ArgousForms/plataforma' : '/ArgousForms/app';
 }
 export function setUserEnabled(id, enabled, people) {
   if (sessionRole() !== 'platform')

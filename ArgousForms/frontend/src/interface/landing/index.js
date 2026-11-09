@@ -17,7 +17,7 @@ export default function Home() {
     <main className="landing">
       <header className="landing-header">
         <div className="landing-nav">
-          <a className="brand" href="/">
+          <a className="brand" href="/ArgousForms/">
             <span className="brand-icon">
               <FileStack size={24} />
             </span>
@@ -26,7 +26,7 @@ export default function Home() {
           <div className="landing-actions">
             <LanguageSelect />
             <ThemeToggle />
-            <a className="primary" href="/login">
+            <a className="primary" href="/ArgousForms/login">
               <span className="landing-login-full">
                 {tr('Entrar na plataforma')}
               </span>
@@ -53,7 +53,7 @@ export default function Home() {
               'Conecte modelos, equipes e aprovações em um só lugar. Cada etapa com um responsável. Cada documento com uma história.',
             )}
           </p>
-          <a className="primary" href="/login">
+          <a className="primary" href="/ArgousForms/login">
             {tr('Conhecer a plataforma')}
             <ArrowRight size={18} />
           </a>
@@ -147,7 +147,7 @@ export default function Home() {
       <Plans />
       <Testimonials />
       <footer>
-        <a className="brand" href="/">
+        <a className="brand" href="/ArgousForms/">
           Argous<span>Docs</span>
         </a>
         <span>{tr('Organização em cada documento.')}</span>

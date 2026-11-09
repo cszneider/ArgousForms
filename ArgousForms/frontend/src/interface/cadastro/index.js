@@ -219,7 +219,7 @@ export default function Cadastro() {
   };
   return (
     <CadastroContext.Provider value={contextValues}>
-      <AccessLayout backHref="/login" backLabel="Voltar ao login">
+      <AccessLayout backHref="/ArgousForms/login" backLabel="Voltar ao login">
         <span className="eyebrow">{tr('SUA CONTA ARGOUSDOCS')}</span>
         <h2 ref={titulo} tabIndex={-1}>
           {tr(titulos[telaAtual])}
@@ -251,7 +251,7 @@ export default function Cadastro() {
                 'Seu e-mail foi confirmado e seu cadastro está concluído.',
               )}
             </Alert>
-            <Button component="a" href="/login" variant="contained" fullWidth>
+            <Button component="a" href="/ArgousForms/login" variant="contained" fullWidth>
               {tr('Voltar ao login')}
             </Button>
           </div>

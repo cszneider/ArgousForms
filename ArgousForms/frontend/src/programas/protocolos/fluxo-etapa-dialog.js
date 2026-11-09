@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Tab, Tabs, TextField } from '@mui/material';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { createId } from '../../utils/uid.js';
+import { openPdf } from '../editor/import-model.js';
 
 function MiniaturaPdf({ documento }) {
   const { t } = useI18n();
@@ -18,7 +19,6 @@ function MiniaturaPdf({ documento }) {
     const url = `/ArgousForms/arquivo-conteudo?idArquivo=${encodeURIComponent(documento.idArquivo)}&idArquivoVersao=${encodeURIComponent(documento.idArquivoVersao)}&modo=visualizar`;
     fetch(url, { credentials: 'same-origin' }).then(async (resposta) => {
       if (!resposta.ok) throw new Error(t('Não foi possível abrir o PDF do modelo.'));
-      const { openPdf } = await import('../editor/import-model.js');
       return openPdf(await resposta.arrayBuffer());
     }).then(async (arquivo) => {
       pdf = arquivo;

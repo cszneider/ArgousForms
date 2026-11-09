@@ -45,6 +45,19 @@
 .processo-central-registros > a:hover { text-decoration: underline; }
 .processo-central-registros span, .processo-central-registros small, .processo-central-vazio { color: var(--theme-text-secondary, #697a89); font-size: 12px; }
 .processo-central-vazio { margin: 0; padding: 14px; border: 1px dashed var(--theme-border, #e1e7ed); border-radius: 9px; }
+.processo-central-forum { display: grid; gap: 10px; max-height: 470px; overflow-y: auto; }
+.processo-central-mensagem { padding: 13px 15px; border: 1px solid var(--theme-border, #e1e7ed); border-radius: 11px; background: var(--theme-surface, #fff); }
+.processo-central-mensagem.evento { background: var(--theme-canvas, #f1f5f4); }
+.processo-central-mensagem-cabecalho { display: flex; justify-content: space-between; gap: 10px; color: var(--theme-text-strong, #172b41); font-size: 13px; }
+.processo-central-mensagem-cabecalho span { color: var(--theme-text-secondary, #697a89); font-size: 12px; }
+.processo-central-mensagem p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.processo-central-compositor { display: grid; justify-items: end; gap: 10px; margin-top: 16px; }
+.processo-central-formulario { border-radius: 9px; background: var(--theme-canvas, #f1f5f4); }
+.processo-central-formulario summary { display: grid; gap: 4px; padding: 13px 15px; cursor: pointer; }
+.processo-central-formulario summary span { margin-left: 14px; }
+.processo-central-valores { display: grid; gap: 1px; padding: 0 15px 14px; }
+.processo-central-valores > div { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 1.2fr); gap: 10px; padding: 9px 0; border-top: 1px solid var(--theme-border, #e1e7ed); }
+.processo-central-valores strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
 .tarefas-quadro { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; padding-bottom: 12px; }
 .tarefas-coluna { min-height: 300px; padding: 12px; border-radius: 14px; background: var(--theme-canvas, #f1f5f4); }
 .tarefas-coluna > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 3px 13px; }

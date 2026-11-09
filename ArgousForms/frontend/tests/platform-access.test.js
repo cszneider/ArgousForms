@@ -24,10 +24,10 @@ function reset() {
 test('company and platform sessions remain distinct; switching clears simulated actor', () => {
   reset();
   sessionStorage.setItem('argousdocs:actor', 'someone');
-  assert.equal(loginDemo(' TESTE@argous.com.br ', '123'), '/app');
+  assert.equal(loginDemo(' TESTE@argous.com.br ', '123'), '/ArgousForms/app');
   assert.equal(sessionRole(), 'company');
   assert.equal(sessionStorage.getItem('argousdocs:actor'), null);
-  assert.equal(loginDemo('adm@argous.com.br', '123'), '/plataforma');
+  assert.equal(loginDemo('adm@argous.com.br', '123'), '/ArgousForms/plataforma');
   assert.equal(sessionRole(), 'platform');
   assert.equal(readPlatform().accesses.length, 2);
   logout();
@@ -45,7 +45,7 @@ test('company cannot manage accounts; disabled company login and existing sessio
   assert.equal(sessionRole(), null);
   loginDemo('adm@argous.com.br', '123');
   setUserEnabled('admin', true, [{ id: 'admin' }]);
-  assert.equal(loginDemo('teste@argous.com.br', '123'), '/app');
+  assert.equal(loginDemo('teste@argous.com.br', '123'), '/ArgousForms/app');
 });
 test('participant blocking preserves workspace and rejects unknown users', () => {
   reset();

@@ -60,7 +60,7 @@ export default function Plans() {
             <p className="plan-terms">
               {t('Condições e limites em definição.')}
             </p>
-            <a className="plan-link" href="/login">
+            <a className="plan-link" href="/ArgousForms/login">
               {t('Conhecer a plataforma')}
               <ArrowRight size={17} aria-hidden="true" />
             </a>
@@ -82,7 +82,7 @@ export default function Plans() {
             )}
           </p>
         </div>
-        <a className="primary" href="/login">
+        <a className="primary" href="/ArgousForms/login">
           {t('Explorar a demonstração')}
           <ArrowRight size={17} />
         </a>

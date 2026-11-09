@@ -54,6 +54,7 @@ public final class ProcessosService {
 				processo.setTpSituacao( "F" );
 				processo.setDtEncerramento( new QtData( Instant.now().toEpochMilli() ) );
 				new ProcessoNegocio( conexao, processo ).altera();
+				ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído pelo gestor.", null );
 				conexao.commit();
 				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", "F" );
 			} catch ( Exception e ) {
@@ -104,6 +105,8 @@ public final class ProcessosService {
 				entrada.setTpMovimento( "E" );
 				entrada.setDtInclusao( agora );
 				new ProcessoEtapaEncaminhamentoNegocio( conexao, entrada ).insere();
+				ForumProcessoService.registrar( conexao, processo.getIdProcesso(), usuario.idUsuario(), "A", "Processo iniciado.",
+					new JSONObject().put( "idEtapa", etapa.getIdProcessoEtapa().toString() ) );
 
 				conexao.commit();
 				return new JSONObject().put( "idProcesso", processo.getIdProcesso().toString() ).put( "idEtapa", etapa.getIdProcessoEtapa().toString() );
@@ -240,7 +243,8 @@ public final class ProcessosService {
 		if( !participante ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não participa deste Processo." );
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			JSONObject processo;
-			String sqlProcesso = "select p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
+			UUID idVersaoProtocolo;
+			String sqlProcesso = "select p.ID_PROTOCOLO_VERSAO, p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
 				+ "v.DS_TITULO, v.NR_VERSAO, iniciador.DS_NOME as NOME_INICIADOR, gestor.DS_NOME as NOME_GESTOR "
 				+ "from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
 				+ "left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU "
@@ -249,6 +253,7 @@ public final class ProcessosService {
 				consulta.setObject( 1, idProcesso );
 				try ( ResultSet linha = consulta.executeQuery() ) {
 					if( !linha.next() ) throw new ArgousFormsApiException( 404, "PROCESSO_NAO_ENCONTRADO", "Processo não encontrado." );
+					idVersaoProtocolo = linha.getObject( "ID_PROTOCOLO_VERSAO", UUID.class );
 					processo = new JSONObject().put( "id", idProcesso.toString() ).put( "titulo", linha.getString( "DS_TITULO" ) )
 						.put( "versao", linha.getInt( "NR_VERSAO" ) ).put( "situacao", linha.getString( "TP_SITUACAO" ) )
 						.put( "podeConcluir", "A".equals( linha.getString( "TP_SITUACAO" ) ) && usuario.idUsuario().equals( linha.getObject( "ID_USUARIO_GESTOR", UUID.class ) ) )
@@ -260,7 +265,7 @@ public final class ProcessosService {
 				}
 			}
 			JSONArray etapas = new JSONArray();
-			String sqlEtapas = "select e.ID_PROCESSO_ETAPA, e.ID_PROTOCOLO_ETAPA, pe.DS_TITULO, e.NR_PASSAGEM, e.TP_SITUACAO, "
+			String sqlEtapas = "select e.ID_PROCESSO_ETAPA, e.ID_PROTOCOLO_ETAPA, pe.ID_FORMULARIO, pe.DS_TITULO, e.NR_PASSAGEM, e.TP_SITUACAO, "
 				+ "e.ID_USUARIO_RESPONSAVEL, responsavel.DS_NOME as NOME_RESPONSAVEL, e.DT_DISPONIBILIZACAO, e.DT_ASSUMIU, e.DT_FINALIZACAO "
 				+ "from Processos.PROCESSO_ETAPAS e join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA "
 				+ "left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL "
@@ -268,16 +273,26 @@ public final class ProcessosService {
 			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlEtapas ) ) {
 				consulta.setObject( 1, idProcesso );
 				try ( ResultSet linhas = consulta.executeQuery() ) {
-					while( linhas.next() ) etapas.put( new JSONObject().put( "id", linhas.getString( "ID_PROCESSO_ETAPA" ) )
+					while( linhas.next() ) {
+						UUID idEtapa = linhas.getObject( "ID_PROCESSO_ETAPA", UUID.class );
+						boolean podeVerValores = usuario.idUsuario().toString().equals( processo.optString( "gestor" ) )
+							|| participouDaEtapa( conexao, idEtapa, usuario.idUsuario() );
+						JSONObject etapa = new JSONObject().put( "id", idEtapa.toString() )
 						.put( "titulo", linhas.getString( "DS_TITULO" ) ).put( "passagem", linhas.getInt( "NR_PASSAGEM" ) )
 						.put( "situacao", linhas.getString( "TP_SITUACAO" ) )
+						.put( "podeVerValores", podeVerValores )
 						.put( "podeAbrirFormulario", usuario.idUsuario().toString().equals( linhas.getString( "ID_USUARIO_RESPONSAVEL" ) )
 							|| ( "D".equals( linhas.getString( "TP_SITUACAO" ) ) && elegivel( conexao, linhas.getObject( "ID_PROTOCOLO_ETAPA", UUID.class ), usuario.idUsuario() ) ) )
 						.put( "responsavel", linhas.getString( "ID_USUARIO_RESPONSAVEL" ) == null ? JSONObject.NULL : linhas.getString( "ID_USUARIO_RESPONSAVEL" ) )
 						.put( "nomeResponsavel", linhas.getString( "NOME_RESPONSAVEL" ) == null ? JSONObject.NULL : linhas.getString( "NOME_RESPONSAVEL" ) )
 						.put( "disponibilizacao", linhas.getString( "DT_DISPONIBILIZACAO" ) )
 						.put( "assumiu", linhas.getString( "DT_ASSUMIU" ) == null ? JSONObject.NULL : linhas.getString( "DT_ASSUMIU" ) )
-						.put( "finalizacao", linhas.getString( "DT_FINALIZACAO" ) == null ? JSONObject.NULL : linhas.getString( "DT_FINALIZACAO" ) ) );
+						.put( "finalizacao", linhas.getString( "DT_FINALIZACAO" ) == null ? JSONObject.NULL : linhas.getString( "DT_FINALIZACAO" ) );
+						if( podeVerValores && "F".equals( linhas.getString( "TP_SITUACAO" ) ) ) {
+							etapa.put( "valores", valoresFinalizados( conexao, idEtapa, linhas.getObject( "ID_FORMULARIO", UUID.class ), idVersaoProtocolo ) );
+						}
+						etapas.put( etapa );
+					}
 				}
 			}
 			JSONArray documentos = new JSONArray();
@@ -293,8 +308,49 @@ public final class ProcessosService {
 						.put( "nome", linhas.getString( "DS_NOME_ARQUIVO" ) ) );
 				}
 			}
-			return processo.put( "etapas", etapas ).put( "documentos", documentos );
+			ForumProcessoService forum = new ForumProcessoService();
+			return processo.put( "etapas", etapas ).put( "documentos", documentos ).put( "forum", forum.listar( conexao, idProcesso ) )
+				.put( "podeComentar", forum.podeComentar( conexao, idProcesso, usuario.idUsuario() ) );
 		}
+	}
+
+	private JSONArray valoresFinalizados( Conexao conexao, UUID idEtapa, UUID idFormulario, UUID idVersao ) throws Exception {
+
+		JSONArray campos = new JSONArray();
+		String sql = "select x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
+			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.VL_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
+			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
+			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
+			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = x.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
+			+ "left join Processos.PROCESSO_VARIAVEL_VALORES v on v.ID_PROCESSO_ETAPA = ? and v.ID_VARIAVEL = x.ID_VARIAVEL "
+			+ "where fv.ID_FORMULARIO = ? order by fv.NR_ORDEM";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idVersao );
+			consulta.setObject( 2, idEtapa );
+			consulta.setObject( 3, idFormulario );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) {
+					String tipo = linhas.getString( "TP_DADO" );
+					String valor = switch( tipo ) {
+						case "S" -> linhas.getString( "VL_TEXTO" );
+						case "I" -> linhas.getString( "VL_INTEIRO" );
+						case "R" -> linhas.getString( "VL_DECIMAL" );
+						case "M" -> linhas.getString( "CD_MOEDA" );
+						case "V" -> linhas.getString( "CD_VALOR_MONETARIO" ) == null ? null : linhas.getString( "CD_MOEDA" ) + " " + linhas.getString( "CD_VALOR_MONETARIO" );
+						case "B" -> linhas.getObject( "VL_BOOLEANO" ) == null ? null : linhas.getBoolean( "VL_BOOLEANO" ) ? "Sim" : "Não";
+						case "O" -> linhas.getString( "VL_OPCAO" );
+						case "D" -> linhas.getString( "VL_DATA" );
+						case "H" -> linhas.getString( "VL_HORA" );
+						case "T" -> linhas.getTimestamp( "VL_DATA_HORA" ) == null ? null : linhas.getTimestamp( "VL_DATA_HORA" ).toInstant().toString();
+						default -> null;
+					};
+					campos.put( new JSONObject().put( "codigo", linhas.getString( "CD_VARIAVEL" ) ).put( "nome", linhas.getString( "DS_NOME" ) )
+						.put( "tipo", tipo ).put( "valor", valor == null ? JSONObject.NULL : valor )
+						.put( "definicao", new JSONObject( linhas.getString( "JS_DEFINICAO" ) ) ) );
+				}
+			}
+		}
+		return campos;
 	}
 
 	public JSONObject minhasTarefas( AutenticacaoLocalService.Usuario usuario ) throws Exception {

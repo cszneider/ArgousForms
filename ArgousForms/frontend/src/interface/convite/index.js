@@ -41,11 +41,11 @@ export default function Convite() {
   }
 
   return <ConviteContext.Provider value={contextValues}>
-    <AccessLayout backHref="/login" backLabel="Voltar ao login">
+    <AccessLayout backHref="/ArgousForms/login" backLabel="Voltar ao login">
       <span className="eyebrow">{t('SUA CONTA ARGOUSDOCS')}</span>
       <h2>{t('Aceitar convite')}</h2>
       {concluido ? <><Alert severity="success">{t('Convite aceito. Seu e-mail foi confirmado e sua senha foi definida.')}</Alert>
-        <Button component="a" href="/login" variant="contained" fullWidth sx={{ mt: 2 }}>{t('Entrar')}</Button></> :
+        <Button component="a" href="/ArgousForms/login" variant="contained" fullWidth sx={{ mt: 2 }}>{t('Entrar')}</Button></> :
         <form onSubmit={aceitar} style={{ display: 'grid', gap: 16 }}>
           <p>{t('Informe o e-mail que recebeu o convite, o código de oito dígitos e a nova senha.')}</p>
           <TextField label={t('E-mail')} type="email" required value={email} onChange={(e) => dispatch({ field: 'email', value: e.target.value })} />

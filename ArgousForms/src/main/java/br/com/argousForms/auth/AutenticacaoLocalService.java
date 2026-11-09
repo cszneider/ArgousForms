@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -18,6 +19,8 @@ import br.com.argousForms.model.negocio.cadastro.HistoricoLoginNegocio;
 import br.com.argousForms.model.negocio.cadastro.UsuarioSistemaNegocio;
 import br.com.argousForms.model.persistencia.cadastro.HistoricoLogin;
 import br.com.argousForms.model.persistencia.cadastro.HistoricoLoginLocalizador;
+import br.com.argousForms.model.persistencia.cadastro.Instituicao;
+import br.com.argousForms.model.persistencia.cadastro.InstituicaoLocalizador;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistema;
 import br.com.argousForms.model.persistencia.cadastro.UsuarioSistemaLocalizador;
 import br.com.argousForms.security.PoliticaSenha;
@@ -30,11 +33,10 @@ import quatro.util.QtData;
 public final class AutenticacaoLocalService {
 
 	private static final SecureRandom ALEATORIO = new SecureRandom();
-	private static final long VALIDADE_SEGUNDOS = 7 * 24 * 60 * 60;
-
-	public record Sessao( String token, UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis ) {}
-	public record Usuario( UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis ) {}
+	public record Sessao( String token, UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis, long segundosCookie ) {}
+	public record Usuario( UUID idUsuario, String nome, String email, List<String> papeis, List<String> perfis, long segundosCookie ) {}
 	public record ConexaoAtiva( UUID idLogin, Instant inicio, Instant ultimoAcesso, Instant validade, String enderecoIp, String agente, boolean atual ) {}
+	private record PoliticaSessao( int diasMoveis, int diasAbsolutos, ZoneId fuso ) {}
 
 	public Sessao entrar( String emailInformado, String senha, String ip, String userAgent ) throws Exception {
 
@@ -44,6 +46,8 @@ public final class AutenticacaoLocalService {
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			conexao.beginTransaction();
 			try {
+				PoliticaSessao politica = politicaSessao( conexao );
+
 				// Serializa o login com a troca de senha para não criar sessão com a senha antiga após a revogação.
 				try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA from Cadastro.USUARIOS_SISTEMA where lower(trim(DS_EMAIL)) = ? and DT_EXCLUSAO is null for update" ) ) {
 					bloqueio.setString( 1, email );
@@ -82,17 +86,20 @@ public final class AutenticacaoLocalService {
 				ALEATORIO.nextBytes( segredo );
 				String token = Base64.getUrlEncoder().withoutPadding().encodeToString( segredo );
 				Instant agora = Instant.now();
+				Instant limiteAbsoluto = agora.plusSeconds( politica.diasAbsolutos() * 86400L );
+				Instant validade = menor( agora.plusSeconds( politica.diasMoveis() * 86400L ), limiteAbsoluto );
 				HistoricoLogin historico = new HistoricoLogin();
 				historico.setIdLogin( UUID.randomUUID() );
 				historico.setIdUsuarioOrigemLogin( idVinculo );
 				historico.setCdBearerSha256( hash( token ) );
 				historico.setDtLogin( new QtData( agora.toEpochMilli() ) );
-				historico.setDtValidade( new QtData( agora.plusSeconds( VALIDADE_SEGUNDOS ).toEpochMilli() ) );
+				historico.setDtValidade( new QtData( validade.toEpochMilli() ) );
+				historico.setDtUltimoAcesso( new QtData( agora.toEpochMilli() ) );
 				historico.setDsEnderecoIp( ip == null || ip.isBlank() ? "desconhecido" : ip );
 				historico.setDsUserAgent( userAgent == null || userAgent.isBlank() ? "desconhecido" : userAgent );
 				new HistoricoLoginNegocio( conexao, historico ).insere();
 				conexao.commit();
-				return new Sessao( token, idUsuario, nome, email, papeis, perfis );
+				return new Sessao( token, idUsuario, nome, email, papeis, perfis, segundosRestantes( limiteAbsoluto, agora ) );
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;
@@ -104,28 +111,119 @@ public final class AutenticacaoLocalService {
 
 		if( token == null || token.isBlank() ) throw sessaoInvalida();
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			PoliticaSessao politica = politicaSessao( conexao );
 			UUID idUsuario;
+			UUID idLogin;
 			String nome;
 			String email;
-			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select u.ID_USUARIO_SISTEMA, u.DS_NOME, u.DS_EMAIL from Cadastro.HISTORICO_LOGINS h "
-					+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
-					+ "join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = v.ID_USUARIO_SISTEMA "
-					+ "join Cadastro.ORIGENS_LOGIN o on o.ID_ORIGEM_LOGIN = v.ID_ORIGEM_LOGIN "
-					+ "where h.CD_BEARER_SHA256 = :hash and h.DT_VALIDADE > CURRENT_TIMESTAMP "
-					+ "and h.DT_REVOGACAO is null and v.SN_EMAIL_VERIFICADO = true "
-					+ "and v.DT_REVOGACAO is null and u.DT_EXCLUSAO is null "
-					+ "and o.CD_ORIGEM = 1 and o.SN_ATIVA = true and o.DT_EXCLUSAO is null" );
-				query.setParameter( "hash", hash( token ) );
-				query.executeQuery();
-				if( query.isEmpty() ) throw sessaoInvalida();
-				idUsuario = UUID.fromString( query.getString( "ID_USUARIO_SISTEMA" ) );
-				nome = query.getString( "DS_NOME" );
-				email = query.getString( "DS_EMAIL" );
+			Instant inicio;
+			Instant ultimoAcesso;
+			Instant validade;
+			String sql = "select h.ID_LOGIN, h.DT_LOGIN, h.DT_ULTIMO_ACESSO, h.DT_VALIDADE, "
+				+ "u.ID_USUARIO_SISTEMA, u.DS_NOME, u.DS_EMAIL from Cadastro.HISTORICO_LOGINS h "
+				+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
+				+ "join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = v.ID_USUARIO_SISTEMA "
+				+ "join Cadastro.ORIGENS_LOGIN o on o.ID_ORIGEM_LOGIN = v.ID_ORIGEM_LOGIN "
+				+ "where h.CD_BEARER_SHA256 = ? and h.DT_VALIDADE > CURRENT_TIMESTAMP "
+				+ "and h.DT_REVOGACAO is null and v.SN_EMAIL_VERIFICADO = true "
+				+ "and v.DT_REVOGACAO is null and u.DT_EXCLUSAO is null "
+				+ "and o.CD_ORIGEM = 1 and o.SN_ATIVA = true and o.DT_EXCLUSAO is null";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+				consulta.setString( 1, hash( token ) );
+				try ( ResultSet resultado = consulta.executeQuery() ) {
+					if( !resultado.next() ) throw sessaoInvalida();
+					idLogin = resultado.getObject( "ID_LOGIN", UUID.class );
+					idUsuario = resultado.getObject( "ID_USUARIO_SISTEMA", UUID.class );
+					nome = resultado.getString( "DS_NOME" );
+					email = resultado.getString( "DS_EMAIL" );
+					inicio = instante( resultado, "DT_LOGIN" );
+					ultimoAcesso = instante( resultado, "DT_ULTIMO_ACESSO" );
+					validade = instante( resultado, "DT_VALIDADE" );
+				}
 			}
 
-			return new Usuario( idUsuario, nome, email, papeisAtivos( conexao, idUsuario ), perfisAtivos( conexao, idUsuario ) );
+			Instant agora = Instant.now();
+			Instant limiteAbsoluto = inicio.plusSeconds( politica.diasAbsolutos() * 86400L );
+			Instant referenciaMovel = ultimoAcesso == null ? inicio : ultimoAcesso;
+			if( !agora.isBefore( menor( validade, menor( limiteAbsoluto,
+				referenciaMovel.plusSeconds( politica.diasMoveis() * 86400L ) ) ) ) ) throw sessaoInvalida();
+			if( agora.atZone( politica.fuso() ).toLocalDate().isAfter( referenciaMovel.atZone( politica.fuso() ).toLocalDate() ) ) {
+				validade = renovarSessao( conexao, idLogin, token, politica );
+			}
+
+			return new Usuario( idUsuario, nome, email, papeisAtivos( conexao, idUsuario ), perfisAtivos( conexao, idUsuario ),
+				segundosRestantes( limiteAbsoluto, agora ) );
 		}
+	}
+
+	private PoliticaSessao politicaSessao( Conexao conexao ) throws Exception {
+
+		Instituicao instituicao = InstituicaoLocalizador.buscaInstituicao( conexao, 1 );
+		if( instituicao == null || instituicao.getNrDiasSessaoMovel() == null || instituicao.getNrDiasSessaoAbsoluta() == null ) {
+			throw new ArgousFormsApiException( 503, "INSTITUICAO_NAO_CONFIGURADA", "A política de sessões da instituição não está configurada." );
+		}
+		return new PoliticaSessao( instituicao.getNrDiasSessaoMovel(), instituicao.getNrDiasSessaoAbsoluta(),
+			ZoneId.of( instituicao.getCdFusoHorario() ) );
+	}
+
+	private Instant renovarSessao( Conexao conexao, UUID idLogin, String token, PoliticaSessao politica ) throws Exception {
+
+		conexao.beginTransaction();
+		try {
+			Instant inicio;
+			Instant ultimoAcesso;
+			Instant validade;
+			String sql = "select DT_LOGIN, DT_ULTIMO_ACESSO, DT_VALIDADE from Cadastro.HISTORICO_LOGINS "
+				+ "where ID_LOGIN = ? and CD_BEARER_SHA256 = ? and DT_REVOGACAO is null for update";
+			try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( sql ) ) {
+				bloqueio.setObject( 1, idLogin );
+				bloqueio.setString( 2, hash( token ) );
+				try ( ResultSet resultado = bloqueio.executeQuery() ) {
+					if( !resultado.next() ) throw sessaoInvalida();
+					inicio = instante( resultado, "DT_LOGIN" );
+					ultimoAcesso = instante( resultado, "DT_ULTIMO_ACESSO" );
+					validade = instante( resultado, "DT_VALIDADE" );
+				}
+			}
+
+			Instant agora = Instant.now();
+			Instant referencia = ultimoAcesso == null ? inicio : ultimoAcesso;
+			Instant limiteAbsoluto = inicio.plusSeconds( politica.diasAbsolutos() * 86400L );
+			if( !agora.isBefore( menor( validade, menor( limiteAbsoluto,
+				referencia.plusSeconds( politica.diasMoveis() * 86400L ) ) ) ) ) throw sessaoInvalida();
+			if( !agora.atZone( politica.fuso() ).toLocalDate().isAfter( referencia.atZone( politica.fuso() ).toLocalDate() ) ) {
+				conexao.commit();
+				return validade;
+			}
+
+			HistoricoLogin historico;
+			try ( Query query = new Query( conexao ) ) {
+				query.setSQL( "select * from Cadastro.HISTORICO_LOGINS where ID_LOGIN = :id" );
+				query.setParameter( "id", idLogin.toString() );
+				query.executeQuery();
+				if( query.isEmpty() ) throw sessaoInvalida();
+				historico = new HistoricoLogin();
+				HistoricoLoginLocalizador.buscaCampos( historico, query );
+			}
+
+			validade = menor( agora.plusSeconds( politica.diasMoveis() * 86400L ), limiteAbsoluto );
+			historico.setDtValidade( new QtData( validade.toEpochMilli() ) );
+			historico.setDtUltimoAcesso( new QtData( agora.toEpochMilli() ) );
+			new HistoricoLoginNegocio( conexao, historico ).altera();
+			conexao.commit();
+			return validade;
+		} catch ( Exception e ) {
+			if( conexao.inTransaction() ) conexao.rollback();
+			throw e;
+		}
+	}
+
+	private static Instant menor( Instant primeiro, Instant segundo ) {
+		return primeiro.isBefore( segundo ) ? primeiro : segundo;
+	}
+
+	private static long segundosRestantes( Instant limite, Instant agora ) {
+		return Math.max( 1, limite.getEpochSecond() - agora.getEpochSecond() );
 	}
 
 	public List<ConexaoAtiva> listarConexoes( String token ) throws Exception {
@@ -138,6 +236,8 @@ public final class AutenticacaoLocalService {
 		List<ConexaoAtiva> conexoes = new ArrayList<>();
 		boolean atualEncontrada = false;
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			PoliticaSessao politica = politicaSessao( conexao );
+			Instant agora = Instant.now();
 			String sql = "select h.ID_LOGIN, h.DT_LOGIN, h.DT_ULTIMO_ACESSO, h.DT_VALIDADE, h.DS_ENDERECO_IP, h.DS_USER_AGENT, "
 				+ "(h.CD_BEARER_SHA256 = ?) as ATUAL from Cadastro.HISTORICO_LOGINS h "
 				+ "join Cadastro.USUARIO_ORIGENS_LOGIN v on v.ID_USUARIO_ORIGEM_LOGIN = h.ID_USUARIO_ORIGEM_LOGIN "
@@ -150,10 +250,17 @@ public final class AutenticacaoLocalService {
 				consulta.setObject( 2, usuario.idUsuario() );
 				try ( ResultSet resultado = consulta.executeQuery() ) {
 					while( resultado.next() ) {
+						Instant inicio = instante( resultado, "DT_LOGIN" );
+						Instant ultimoAcesso = instante( resultado, "DT_ULTIMO_ACESSO" );
+						Instant referencia = ultimoAcesso == null ? inicio : ultimoAcesso;
+						Instant validade = menor( instante( resultado, "DT_VALIDADE" ), menor(
+							inicio.plusSeconds( politica.diasAbsolutos() * 86400L ),
+							referencia.plusSeconds( politica.diasMoveis() * 86400L ) ) );
+						if( !agora.isBefore( validade ) ) continue;
 						boolean atual = resultado.getBoolean( "ATUAL" );
 						atualEncontrada |= atual;
-						conexoes.add( new ConexaoAtiva( resultado.getObject( "ID_LOGIN", UUID.class ), instante( resultado, "DT_LOGIN" ),
-							instante( resultado, "DT_ULTIMO_ACESSO" ), instante( resultado, "DT_VALIDADE" ),
+						conexoes.add( new ConexaoAtiva( resultado.getObject( "ID_LOGIN", UUID.class ), inicio,
+							ultimoAcesso, validade,
 							resultado.getString( "DS_ENDERECO_IP" ), resultado.getString( "DS_USER_AGENT" ), atual ) );
 					}
 				}

@@ -34,6 +34,8 @@ public final class InstituicaoService {
 		exigirAdministrador( usuario );
 		String nome = textoObrigatorio( dados, "nome", 200 );
 		int diasLixeira = inteiroPositivo( dados, "diasLixeira" );
+		int diasSessaoMovel = inteiroPositivo( dados, "diasSessaoMovel" );
+		int diasSessaoAbsoluta = inteiroPositivo( dados, "diasSessaoAbsoluta" );
 		long tamanhoMaximo = longoPositivo( dados, "tamanhoMaximoArquivoBytes" );
 		if( tamanhoMaximo > Integer.MAX_VALUE ) {
 			throw new ArgousFormsApiException( 400, "LIMITE_INVALIDO", "O envio de arquivos aceita no máximo 2147483647 bytes." );
@@ -59,6 +61,8 @@ public final class InstituicaoService {
 				if( instituicao == null ) throw new ArgousFormsApiException( 503, "INSTITUICAO_NAO_CONFIGURADA", "A instituição ainda não está configurada." );
 				instituicao.setDsNome( nome );
 				instituicao.setNrDiasPermanenciaLixeira( diasLixeira );
+				instituicao.setNrDiasSessaoMovel( diasSessaoMovel );
+				instituicao.setNrDiasSessaoAbsoluta( diasSessaoAbsoluta );
 				instituicao.setNrTamanhoMaximoArquivoBytes( tamanhoMaximo );
 				instituicao.setSnPermitirDestinatariosUnicos( permitirDestinatarios );
 				instituicao.setCdFusoHorario( fuso );
@@ -79,6 +83,8 @@ public final class InstituicaoService {
 
 		return new JSONObject().put( "nome", instituicao.getDsNome() )
 			.put( "diasLixeira", instituicao.getNrDiasPermanenciaLixeira() )
+			.put( "diasSessaoMovel", instituicao.getNrDiasSessaoMovel() )
+			.put( "diasSessaoAbsoluta", instituicao.getNrDiasSessaoAbsoluta() )
 			.put( "tamanhoMaximoArquivoBytes", instituicao.getNrTamanhoMaximoArquivoBytes() )
 			.put( "permitirDestinatariosUnicos", instituicao.isSnPermitirDestinatariosUnicos() )
 			.put( "fusoHorario", instituicao.getCdFusoHorario() )
