@@ -83,11 +83,12 @@ public final class NovaVersaoProtocoloService {
 				nova.setDtAlteracao( agora );
 				nova.setDsTitulo( titulo );
 				nova.setDsDescricao( descricao );
-				try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select SN_PERMITE_CONVIDADOS, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO_VERSAO = ?" ) ) {
+				try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select SN_PERMITE_CONVIDADOS, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO, SN_GESTOR_FINALIZA from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO_VERSAO = ?" ) ) {
 					consulta.setObject( 1, origem );
 					try ( ResultSet linha = consulta.executeQuery() ) {
 						linha.next();
 						nova.setSnPermiteConvidados( linha.getBoolean( 1 ) );
+						nova.setSnGestorFinaliza( linha.getBoolean( 4 ) );
 						nova.setTxScriptInicializacao( linha.getString( 2 ) );
 						nova.setTxScriptFinalizacao( linha.getString( 3 ) );
 					}
@@ -178,7 +179,7 @@ public final class NovaVersaoProtocoloService {
 	private Map<UUID, UUID> copiarDocumentos( Conexao conexao, UUID origem, UUID destino, QtData agora ) throws Exception {
 
 		Map<UUID, UUID> ids = new HashMap<>();
-		String sql = "select x.ID_PROTOCOLO_DOCUMENTO, v.ID_PROTOCOLO_DOCUMENTO_VERSAO, v.TP_MODELO, v.DS_OBSERVACOES from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO where x.ID_PROTOCOLO_VERSAO = ?";
+		String sql = "select x.ID_PROTOCOLO_DOCUMENTO, v.ID_PROTOCOLO_DOCUMENTO_VERSAO, v.TP_MODELO, v.DS_OBSERVACOES, v.NR_DIAS_VENCIMENTO from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO where x.ID_PROTOCOLO_VERSAO = ?";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			consulta.setObject( 1, origem );
 			try ( ResultSet linhas = consulta.executeQuery() ) {
@@ -191,6 +192,7 @@ public final class NovaVersaoProtocoloService {
 					versao.setNrVersao( proximoNumeroModelo( conexao, idDocumento ) );
 					versao.setTpModelo( linhas.getString( 3 ) );
 					versao.setDsObservacoes( linhas.getString( 4 ) );
+					versao.setNrDiasVencimento( linhas.getObject( 5 ) == null ? null : linhas.getInt( 5 ) );
 					versao.setDtInclusao( agora );
 					new ProtocoloDocumentoVersaoNegocio( conexao, versao ).insere();
 					UUID idNovo = versao.getIdProtocoloDocumentoVersao();

@@ -6,7 +6,7 @@ import java.util.Base64;
 import java.util.Properties;
 import java.util.UUID;
 
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.security.CodigoConfirmacao;

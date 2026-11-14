@@ -33,7 +33,7 @@ public final class DocumentosService {
 	private static final String DESTINATARIO_PASTA = destinatario( "p", "1", "2", "3" );
 	private static final String DESTINATARIO_ARQUIVO = destinatario( "p", "U", "G", "T" );
 
-	private record Pasta( UUID id, UUID pai, String nome, String descricao ) {}
+	private record Pasta( UUID id, UUID pai, String nome, String descricao, Instant inclusao, Instant alteracao, UUID criador ) {}
 	private record Direitos( boolean leitura, boolean inclusao, boolean gestao ) {
 
 		private boolean algum() {
@@ -84,6 +84,8 @@ public final class DocumentosService {
 				Direitos permissaoFilha = direitos.get( filha.id() );
 				subpastas.put( new JSONObject().put( "idPasta", filha.id().toString() ).put( "nome", filha.nome() )
 					.put( "descricao", filha.descricao() == null ? JSONObject.NULL : filha.descricao() )
+					.put( "inclusao", filha.inclusao().toString() ).put( "alteracao", filha.alteracao().toString() )
+					.put( "gestor", permissaoFilha.gestao() )
 					.put( "podeLer", permissaoFilha.leitura() || permissaoFilha.gestao() )
 					.put( "podeIncluir", permissaoFilha.inclusao() || permissaoFilha.gestao() ) );
 			}
@@ -91,6 +93,7 @@ public final class DocumentosService {
 			JSONArray arquivos = carregarArquivos( conexao, idPasta, usuario.idUsuario(), permissaoAtual );
 			JSONObject pastaJson = new JSONObject().put( "idPasta", pasta.id().toString() ).put( "nome", pasta.nome() )
 				.put( "descricao", pasta.descricao() == null ? JSONObject.NULL : pasta.descricao() )
+				.put( "inclusao", pasta.inclusao().toString() ).put( "alteracao", pasta.alteracao().toString() )
 				.put( "podeLer", permissaoAtual.leitura() || permissaoAtual.gestao() )
 				.put( "podeIncluir", permissaoAtual.inclusao() || permissaoAtual.gestao() )
 				.put( "gestor", permissaoAtual.gestao() );
@@ -140,6 +143,134 @@ public final class DocumentosService {
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;
+			}
+		}
+	}
+
+	public JSONObject enviarArquivoLixeira( AutenticacaoLocalService.Usuario usuario, UUID idArquivo ) throws Exception {
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Arquivo arquivo = exigirArquivo( conexao, idArquivo );
+				Direitos direitos = direitosArquivo( conexao, usuario, arquivo );
+				if( !direitos.gestao() && ( !usuario.papeis().contains( "EDITOR_DE_DOCUMENTOS" )
+					|| !podeLerArquivo( conexao, usuario.idUsuario(), arquivo, direitos ) ) ) {
+					throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode enviar este arquivo à lixeira." );
+				}
+				verificarVinculosArquivo( conexao, idArquivo );
+				arquivo.setDtLixeira( new QtData( Instant.now().toEpochMilli() ) );
+				new ArquivoNegocio( conexao, arquivo ).altera();
+				conexao.commit();
+				return new JSONObject().put( "idArquivo", idArquivo.toString() ).put( "enviadoLixeira", true );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public JSONObject enviarPastaLixeira( AutenticacaoLocalService.Usuario usuario, UUID idPasta, int quantidadeConfirmada ) throws Exception {
+
+		if( !usuario.papeis().contains( "GESTAO_DOCUMENTOS" ) ) {
+			throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode administrar pastas." );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				Map<UUID, Pasta> pastas = carregarPastas( conexao );
+				Pasta alvo = pastas.get( idPasta );
+				if( alvo == null ) throw new ArgousFormsApiException( 404, "PASTA_NAO_ENCONTRADA", "Pasta não encontrada." );
+				if( alvo.pai() == null ) throw new ArgousFormsApiException( 400, "PASTA_RAIZ", "A pasta RAIZ não pode ir à lixeira." );
+				Set<UUID> gestores = carregarGestores( conexao, usuario.idUsuario() );
+				Direitos direitos = calcularDireitos( idPasta, pastas, Set.of(), Set.of(), gestores, new HashMap<>(), new HashSet<>() );
+				if( !direitos.gestao() ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não é gestor desta pasta." );
+
+				List<Pasta> arvore = new ArrayList<>();
+				arvore.add( alvo );
+				for( int indice = 0; indice < arvore.size(); indice++ ) {
+					UUID pai = arvore.get( indice ).id();
+					for( Pasta pasta : pastas.values() ) if( pai.equals( pasta.pai() ) ) arvore.add( pasta );
+				}
+				List<UUID> arquivos = new ArrayList<>();
+				for( Pasta pasta : arvore ) {
+					try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+						"select ID_ARQUIVO from Docs.ARQUIVOS where ID_PASTA = ? and DT_LIXEIRA is null and DT_EXCLUSAO is null for update" ) ) {
+						consulta.setObject( 1, pasta.id() );
+						try ( ResultSet resultado = consulta.executeQuery() ) {
+							while( resultado.next() ) arquivos.add( resultado.getObject( 1, UUID.class ) );
+						}
+					}
+				}
+				int quantidade = arvore.size() + arquivos.size();
+				if( quantidadeConfirmada != quantidade ) throw new ArgousFormsApiException( 409, "CONTAGEM_ALTERADA", "O conteúdo da pasta mudou. Confira a quantidade e confirme novamente." );
+				for( UUID idArquivo : arquivos ) verificarVinculosArquivo( conexao, idArquivo );
+				QtData agora = new QtData( Instant.now().toEpochMilli() );
+				for( UUID idArquivo : arquivos ) {
+					Arquivo arquivo = exigirArquivo( conexao, idArquivo );
+					arquivo.setDtLixeira( agora );
+					new ArquivoNegocio( conexao, arquivo ).altera();
+				}
+				for( int indice = arvore.size() - 1; indice >= 0; indice-- ) {
+					Pasta pasta = arvore.get( indice );
+					br.com.argousForms.model.persistencia.docs.Pasta entidade = new br.com.argousForms.model.persistencia.docs.Pasta();
+					entidade.setIdPasta( pasta.id() );
+					entidade.setIdPastaPai( pasta.pai() );
+					entidade.setDsNome( pasta.nome() );
+					entidade.setDsDescricao( pasta.descricao() );
+					entidade.setIdUsuarioCriou( pasta.criador() );
+					entidade.setDtInclusao( new QtData( pasta.inclusao().toEpochMilli() ) );
+					entidade.setDtAlteracao( new QtData( pasta.alteracao().toEpochMilli() ) );
+					entidade.setDtLixeira( agora );
+					new PastaNegocio( conexao, entidade ).altera();
+				}
+				conexao.commit();
+				return new JSONObject().put( "idPasta", idPasta.toString() ).put( "pastas", arvore.size() ).put( "arquivos", arquivos.size() );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public JSONObject contarPastaLixeira( AutenticacaoLocalService.Usuario usuario, UUID idPasta ) throws Exception {
+
+		if( !usuario.papeis().contains( "GESTAO_DOCUMENTOS" ) ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode administrar pastas." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			Map<UUID, Pasta> pastas = carregarPastas( conexao );
+			Pasta alvo = pastas.get( idPasta );
+			if( alvo == null ) throw new ArgousFormsApiException( 404, "PASTA_NAO_ENCONTRADA", "Pasta não encontrada." );
+			if( alvo.pai() == null ) throw new ArgousFormsApiException( 400, "PASTA_RAIZ", "A pasta RAIZ não pode ir à lixeira." );
+			Direitos direitos = calcularDireitos( idPasta, pastas, Set.of(), Set.of(), carregarGestores( conexao, usuario.idUsuario() ), new HashMap<>(), new HashSet<>() );
+			if( !direitos.gestao() ) throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não é gestor desta pasta." );
+			String sql = "with recursive arvore as (select ID_PASTA from Docs.PASTAS where ID_PASTA = ? and DT_LIXEIRA is null and DT_EXCLUSAO is null "
+				+ "union all select p.ID_PASTA from Docs.PASTAS p join arvore a on p.ID_PASTA_PAI = a.ID_PASTA "
+				+ "where p.DT_LIXEIRA is null and p.DT_EXCLUSAO is null) "
+				+ "select (select count(*) from arvore) as pastas, (select count(*) from Docs.ARQUIVOS f join arvore a on a.ID_PASTA = f.ID_PASTA "
+				+ "where f.DT_LIXEIRA is null and f.DT_EXCLUSAO is null) as arquivos";
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+				consulta.setObject( 1, idPasta );
+				try ( ResultSet resultado = consulta.executeQuery() ) {
+					resultado.next();
+					int quantidadePastas = resultado.getInt( "pastas" );
+					int quantidadeArquivos = resultado.getInt( "arquivos" );
+					return new JSONObject().put( "pastas", quantidadePastas ).put( "arquivos", quantidadeArquivos )
+						.put( "quantidade", quantidadePastas + quantidadeArquivos );
+				}
+			}
+		}
+	}
+
+	private void verificarVinculosArquivo( Conexao conexao, UUID idArquivo ) throws Exception {
+
+		String sql = "select 1 from Docs.ARQUIVO_VERSOES v where v.ID_ARQUIVO = ? and ("
+			+ "exists (select 1 from Processos.PROTOCOLO_DOCUMENTO_PDF p where p.ID_ARQUIVO_MODELO_PDF = v.ID_ARQUIVO_VERSAO) "
+			+ "or exists (select 1 from Processos.PROTOCOLO_RECURSOS r where r.ID_ARQUIVO_VERSAO = v.ID_ARQUIVO_VERSAO) "
+			+ "or exists (select 1 from Cadastro.RECURSOS_INSTITUICAO r where r.ID_ARQUIVO_VERSAO = v.ID_ARQUIVO_VERSAO)) limit 1";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idArquivo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				if( resultado.next() ) throw new ArgousFormsApiException( 409, "ARQUIVO_VINCULADO", "Este arquivo ainda está vinculado a um modelo ou recurso." );
 			}
 		}
 	}
@@ -300,7 +431,7 @@ public final class DocumentosService {
 	private Arquivo exigirArquivo( Conexao conexao, UUID idArquivo ) throws Exception {
 
 		String sql = "select ID_ARQUIVO, ID_PASTA, DS_NOME_ARQUIVO, DS_TITULO, DS_DESCRICAO, "
-			+ "TP_CLASSIFICACAO, DT_VENCIMENTO, DT_INCLUSAO, CD_CONTENT_TYPE "
+			+ "TP_CLASSIFICACAO, DT_VENCIMENTO, DT_INCLUSAO, DT_ALTERACAO, CD_CONTENT_TYPE "
 			+ "from Docs.ARQUIVOS where ID_ARQUIVO = ? and DT_LIXEIRA is null and DT_EXCLUSAO is null";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			consulta.setObject( 1, idArquivo );
@@ -316,6 +447,7 @@ public final class DocumentosService {
 				arquivo.setTpClassificacao( resultado.getString( "TP_CLASSIFICACAO" ) );
 				arquivo.setDtVencimento( QtData.criaQtData( resultado.getTimestamp( "DT_VENCIMENTO" ) ) );
 				arquivo.setDtInclusao( QtData.criaQtData( resultado.getTimestamp( "DT_INCLUSAO" ) ) );
+				arquivo.setDtAlteracao( QtData.criaQtData( resultado.getTimestamp( "DT_ALTERACAO" ) ) );
 				arquivo.setCdContentType( resultado.getString( "CD_CONTENT_TYPE" ) );
 				return arquivo;
 			}
@@ -352,20 +484,22 @@ public final class DocumentosService {
 			.put( "nome", arquivo.getDsNomeArquivo() ).put( "titulo", arquivo.getDsTitulo() )
 			.put( "descricao", nulo( arquivo.getDsDescricao() ) ).put( "classificacao", arquivo.getTpClassificacao() )
 			.put( "contentType", nulo( arquivo.getCdContentType() ) );
-		String sql = "select DT_VENCIMENTO, DT_INCLUSAO from Docs.ARQUIVOS where ID_ARQUIVO = ?";
+		String sql = "select DT_VENCIMENTO, DT_INCLUSAO, DT_ALTERACAO from Docs.ARQUIVOS where ID_ARQUIVO = ?";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			consulta.setObject( 1, arquivo.getIdArquivo() );
 			try ( ResultSet resultado = consulta.executeQuery() ) {
 				resultado.next();
-				dados.put( "vencimento", data( resultado, "DT_VENCIMENTO" ) ).put( "inclusao", data( resultado, "DT_INCLUSAO" ) );
+				dados.put( "vencimento", data( resultado, "DT_VENCIMENTO" ) ).put( "inclusao", data( resultado, "DT_INCLUSAO" ) )
+					.put( "alteracao", data( resultado, "DT_ALTERACAO" ) );
 			}
 		}
-		String versoes = "select NR_VERSAO, NR_TAMANHO_BYTES from Docs.ARQUIVO_VERSOES "
+		String versoes = "select NR_VERSAO, NR_TAMANHO_BYTES, DT_INCLUSAO from Docs.ARQUIVO_VERSOES "
 			+ "where ID_ARQUIVO = ? order by NR_VERSAO desc limit 1";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( versoes ) ) {
 			consulta.setObject( 1, arquivo.getIdArquivo() );
 			try ( ResultSet resultado = consulta.executeQuery() ) {
-				if( resultado.next() ) dados.put( "versao", resultado.getInt( 1 ) ).put( "tamanhoBytes", resultado.getLong( 2 ) );
+				if( resultado.next() ) dados.put( "versao", resultado.getInt( 1 ) ).put( "tamanhoBytes", resultado.getLong( 2 ) )
+					.put( "dataVersao", data( resultado, "DT_INCLUSAO" ) );
 			}
 		}
 		return dados;
@@ -374,12 +508,14 @@ public final class DocumentosService {
 	private static Map<UUID, Pasta> carregarPastas( Conexao conexao ) throws SQLException {
 
 		Map<UUID, Pasta> pastas = new LinkedHashMap<>();
-		String sql = "select ID_PASTA, ID_PASTA_PAI, DS_NOME, DS_DESCRICAO from Docs.PASTAS "
+		String sql = "select ID_PASTA, ID_PASTA_PAI, DS_NOME, DS_DESCRICAO, ID_USUARIO_CRIOU, DT_INCLUSAO, DT_ALTERACAO from Docs.PASTAS "
 			+ "where DT_LIXEIRA is null and DT_EXCLUSAO is null order by lower(DS_NOME), ID_PASTA";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ); ResultSet resultado = consulta.executeQuery() ) {
 			while( resultado.next() ) {
 				UUID id = resultado.getObject( "ID_PASTA", UUID.class );
-				pastas.put( id, new Pasta( id, resultado.getObject( "ID_PASTA_PAI", UUID.class ), resultado.getString( "DS_NOME" ), resultado.getString( "DS_DESCRICAO" ) ) );
+				pastas.put( id, new Pasta( id, resultado.getObject( "ID_PASTA_PAI", UUID.class ), resultado.getString( "DS_NOME" ),
+					resultado.getString( "DS_DESCRICAO" ), resultado.getTimestamp( "DT_INCLUSAO" ).toInstant(),
+					resultado.getTimestamp( "DT_ALTERACAO" ).toInstant(), resultado.getObject( "ID_USUARIO_CRIOU", UUID.class ) ) );
 			}
 		}
 		return pastas;
@@ -483,8 +619,8 @@ public final class DocumentosService {
 		}
 
 		String sql = "select a.ID_ARQUIVO, a.DS_NOME_ARQUIVO, a.DS_TITULO, a.DS_DESCRICAO, a.CD_CONTENT_TYPE, "
-			+ "a.TP_CLASSIFICACAO, a.DT_VENCIMENTO, a.DT_INCLUSAO, v.NR_VERSAO, v.NR_TAMANHO_BYTES "
-			+ "from Docs.ARQUIVOS a left join lateral (select NR_VERSAO, NR_TAMANHO_BYTES from Docs.ARQUIVO_VERSOES "
+			+ "a.TP_CLASSIFICACAO, a.DT_VENCIMENTO, a.DT_INCLUSAO, a.DT_ALTERACAO, v.NR_VERSAO, v.NR_TAMANHO_BYTES, v.DT_INCLUSAO as DT_VERSAO "
+			+ "from Docs.ARQUIVOS a left join lateral (select NR_VERSAO, NR_TAMANHO_BYTES, DT_INCLUSAO from Docs.ARQUIVO_VERSOES "
 			+ "where ID_ARQUIVO = a.ID_ARQUIVO order by NR_VERSAO desc limit 1) v on true "
 			+ "where a.ID_PASTA = ? and a.DT_LIXEIRA is null and a.DT_EXCLUSAO is null "
 			+ "order by lower(a.DS_NOME_ARQUIVO), a.ID_ARQUIVO";
@@ -501,6 +637,7 @@ public final class DocumentosService {
 						.put( "classificacao", resultado.getString( "TP_CLASSIFICACAO" ) )
 						.put( "vencimento", data( resultado, "DT_VENCIMENTO" ) )
 						.put( "inclusao", data( resultado, "DT_INCLUSAO" ) )
+						.put( "alteracao", data( resultado, "DT_ALTERACAO" ) ).put( "dataVersao", data( resultado, "DT_VERSAO" ) )
 						.put( "versao", resultado.getObject( "NR_VERSAO" ) == null ? JSONObject.NULL : resultado.getInt( "NR_VERSAO" ) )
 						.put( "tamanhoBytes", resultado.getObject( "NR_TAMANHO_BYTES" ) == null ? JSONObject.NULL : resultado.getLong( "NR_TAMANHO_BYTES" ) );
 					arquivos.put( item );

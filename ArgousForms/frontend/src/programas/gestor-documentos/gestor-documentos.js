@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, LinearProgress, Link, Menu, MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
-import { Download, FileText, Folder, GitBranch, Plus, Upload } from 'lucide-react';
+import { Download, FileText, Folder, GitBranch, Plus, Trash2, Upload } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { pageReducer } from '../../utils/page-state.js';
 import { useI18n } from '../../components/i18n/i18n.js';
@@ -11,7 +11,7 @@ import { enviarArquivo } from './upload-arquivo.js';
 export const GestorDocumentosContext = createContext(null);
 
 function Conteudo() {
-  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado } = useContext(GestorDocumentosContext);
+  const { value, dispatch, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, prepararLixeira, confirmarLixeira, usuario, podeEnviar, aoProcessoCriado } = useContext(GestorDocumentosContext);
   const { t, system } = useI18n();
   const [menuNovo, setMenuNovo] = useState(null);
   const [iniciarAberto, setIniciarAberto] = useState(false);
@@ -110,29 +110,38 @@ function Conteudo() {
       <TableContainer component={Paper} className="panel">
         <Table aria-label={t('Conteúdo da pasta')}>
           <TableHead><TableRow>
-            <TableCell>{t('NOME')}</TableCell><TableCell>{t('TIPO')}</TableCell><TableCell>{t('TAMANHO')}</TableCell><TableCell>{t('VERSÃO')}</TableCell>
+            <TableCell>{t('NOME')}</TableCell><TableCell>{t('TIPO')}</TableCell><TableCell>{t('TAMANHO')}</TableCell>
+            <TableCell>{t('CRIADO EM')}</TableCell><TableCell>{t('ALTERADO EM')}</TableCell><TableCell>{t('ÚLTIMA VERSÃO')}</TableCell><TableCell />
           </TableRow></TableHead>
           <TableBody>
             {value.dados.pastas.map((pasta) => <TableRow key={pasta.idPasta} hover>
               <TableCell><Button sx={{ textTransform: 'none' }} startIcon={<Folder size={18} />}
-                onClick={() => dispatch({ field: 'idPasta', value: pasta.idPasta })}>{pasta.nome}</Button></TableCell>
-              <TableCell>{t('Pasta')}</TableCell><TableCell>—</TableCell><TableCell>—</TableCell>
+                onClick={() => dispatch({ field: 'idPasta', value: pasta.idPasta })}>{pasta.nome}</Button>
+                {pasta.descricao && <Typography variant="caption" color="text.secondary" display="block">{pasta.descricao}</Typography>}</TableCell>
+              <TableCell>{t('Pasta')}</TableCell><TableCell>—</TableCell>
+              <TableCell>{formatarData(pasta.inclusao)}</TableCell><TableCell>{formatarData(pasta.alteracao)}</TableCell><TableCell>—</TableCell>
+              <TableCell align="right">{pasta.gestor && <Button size="small" color="error" startIcon={<Trash2 size={16} />}
+                onClick={() => prepararLixeira('pasta', pasta)}>{t('Lixeira')}</Button>}</TableCell>
             </TableRow>)}
             {value.dados.arquivos.map((arquivo) => <TableRow key={arquivo.idArquivo} hover>
               <TableCell><Button sx={{ textTransform: 'none' }} startIcon={<FileText size={18} />}
-                onClick={() => abrirArquivo(arquivo.idArquivo)}>{arquivo.nome}</Button></TableCell>
+                onClick={() => abrirArquivo(arquivo.idArquivo)}>{arquivo.nome}</Button>
+                {arquivo.descricao && <Typography variant="caption" color="text.secondary" display="block">{arquivo.descricao}</Typography>}</TableCell>
               <TableCell>{arquivo.contentType || '—'}</TableCell>
               <TableCell>{arquivo.tamanhoBytes == null ? '—' : `${(arquivo.tamanhoBytes / 1048576).toFixed(2)} MiB`}</TableCell>
-              <TableCell>{arquivo.versao ?? '—'}</TableCell>
+              <TableCell>{formatarData(arquivo.inclusao)}</TableCell><TableCell>{formatarData(arquivo.alteracao)}</TableCell>
+              <TableCell>{arquivo.versao == null ? '—' : `v${arquivo.versao} · ${formatarData(arquivo.dataVersao)}`}</TableCell>
+              <TableCell align="right">{(value.dados.pasta.gestor || podeEnviar) && <Button size="small" color="error" startIcon={<Trash2 size={16} />}
+                onClick={() => prepararLixeira('arquivo', arquivo)}>{t('Lixeira')}</Button>}</TableCell>
             </TableRow>)}
             {!value.dados.pastas.length && !value.dados.arquivos.length && <TableRow>
-              <TableCell colSpan={4}>{t('Esta pasta não contém itens disponíveis para sua conta.')}</TableCell>
+              <TableCell colSpan={7}>{t('Esta pasta não contém itens disponíveis para sua conta.')}</TableCell>
             </TableRow>}
           </TableBody>
         </Table>
       </TableContainer>
     </>}
-    <Dialog open={iniciarAberto} onClose={() => !iniciando && setIniciarAberto(false)} fullWidth maxWidth="md">
+    <Dialog open={iniciarAberto} onClose={() => !iniciando && setIniciarAberto(false)} fullWidth maxWidth="sm">
       <DialogTitle>{protocoloEscolhido ? protocoloEscolhido.titulo : t('Iniciar processo')}</DialogTitle>
       <DialogContent>
         {erroInicio && <Alert severity="error" sx={{ mb: 2 }}>{erroInicio}</Alert>}
@@ -144,24 +153,38 @@ function Conteudo() {
           {!protocolosIniciaveis.length && !erroInicio && <Alert severity="info">{t('Nenhum Protocolo disponível para iniciar.')}</Alert>}
         </>}
         {protocoloEscolhido && <>
-          <Button size="small" onClick={() => setProtocoloEscolhido(null)} sx={{ mb: 2 }}>{t('Escolher outro Protocolo')}</Button>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{protocoloEscolhido.descricao}</Typography>
-          <Typography variant="h6" sx={{ mb: 2 }}>{protocoloEscolhido.formularioTitulo}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{t('Observações')}</Typography>
+          <Typography sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>{protocoloEscolhido.descricao?.trim() || t('Nenhuma observação cadastrada.')}</Typography>
           {buscandoGestores && <LinearProgress sx={{ mb: 2 }} />}
-          {!buscandoGestores && <TextField select fullWidth label={t('Gestor inicial')} value={idGestor} sx={{ mb: 2 }}
-            disabled={gestores.some((gestor) => gestor.id === usuario?.idUsuario)}
-            onChange={(evento) => setIdGestor(evento.target.value)}>
-            {gestores.map((gestor) => <MenuItem key={gestor.id} value={gestor.id}>{gestor.nome}</MenuItem>)}
-          </TextField>}
+          {!buscandoGestores && (gestores.some((gestor) => gestor.id === usuario?.idUsuario)
+            ? <Typography sx={{ mb: 2 }}>{t('Gestor inicial')}: {gestores.find((gestor) => gestor.id === usuario.idUsuario)?.nome}</Typography>
+            : <TextField select fullWidth label={t('Gestor inicial')} value={idGestor} sx={{ mb: 2 }}
+              onChange={(evento) => setIdGestor(evento.target.value)}>
+              {gestores.map((gestor) => <MenuItem key={gestor.id} value={gestor.id}>{gestor.nome}</MenuItem>)}
+            </TextField>)}
           {!buscandoGestores && !gestores.length && !erroInicio && <Alert severity="warning" sx={{ mb: 2 }}>{t('Este Protocolo não possui gestor elegível cadastrado.')}</Alert>}
-          {(protocoloEscolhido.campos || []).map((campo) => <TextField key={campo.id} fullWidth sx={{ mb: 2 }}
-            label={campo.nome} required={campo.obrigatorio} disabled helperText={campo.acesso === 'L' ? t('Somente leitura') : ''} />)}
-          <Alert severity="info">{t('O Processo será criado somente após sua confirmação. Os campos serão preenchidos ao assumir a primeira etapa.')}</Alert>
+          <Button size="small" onClick={() => setProtocoloEscolhido(null)}>{t('Escolher outro Protocolo')}</Button>
         </>}
       </DialogContent>
       <DialogActions>
         <Button disabled={iniciando} onClick={() => setIniciarAberto(false)}>{t('Cancelar')}</Button>
         {protocoloEscolhido && <Button variant="contained" disabled={iniciando || buscandoGestores || !idGestor} onClick={confirmarInicio}>{t('Confirmar início')}</Button>}
+      </DialogActions>
+    </Dialog>
+    <Dialog open={Boolean(value.itemLixeira)} onClose={() => !value.enviandoLixeira && dispatch({ field: 'itemLixeira', value: null })} fullWidth maxWidth="sm">
+      <DialogTitle>{t('Enviar à lixeira')}</DialogTitle>
+      <DialogContent>
+        {value.contandoLixeira && <LinearProgress sx={{ mb: 2 }} />}
+        <Typography>{value.itemLixeira?.nome}</Typography>
+        {value.itemLixeira?.tipo === 'pasta' && value.contagemLixeira && <Typography sx={{ mt: 1 }}>
+          {t('Itens afetados')}: {value.contagemLixeira.pastas} {t('pastas')}, {value.contagemLixeira.arquivos} {t('arquivos')}.
+        </Typography>}
+        {value.erroLixeira && <Alert severity="error" sx={{ mt: 2 }}>{system(value.erroLixeira)}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={value.enviandoLixeira} onClick={() => dispatch({ field: 'itemLixeira', value: null })}>{t('Cancelar')}</Button>
+        <Button color="error" variant="contained" disabled={value.enviandoLixeira || value.contandoLixeira || (value.itemLixeira?.tipo === 'pasta' && !value.contagemLixeira)}
+          onClick={confirmarLixeira}>{t('Confirmar envio')}</Button>
       </DialogActions>
     </Dialog>
     <Dialog open={value.novaPastaAberta} onClose={() => !value.salvandoPasta && dispatch({ field: 'novaPastaAberta', value: false })} fullWidth maxWidth="sm">
@@ -271,6 +294,7 @@ function Conteudo() {
             : <Alert severity="info">{t('Este tipo de arquivo não possui visualização direta.')}</Alert>}
           <Typography variant="body2">{t('Nome')}: {value.arquivoDetalhe.nome} · MIME: {value.arquivoDetalhe.contentType || '—'} · {t('Versão')}: {value.arquivoDetalhe.versao ?? '—'}</Typography>
           <Typography variant="body2">{t('Tamanho')}: {value.arquivoDetalhe.tamanhoBytes == null ? '—' : `${(value.arquivoDetalhe.tamanhoBytes / 1048576).toFixed(2)} MiB`} · {t('Criado em')}: {value.arquivoDetalhe.inclusao ? new Date(value.arquivoDetalhe.inclusao).toLocaleDateString() : '—'}</Typography>
+          <Typography variant="body2">{t('Alterado em')}: {formatarData(value.arquivoDetalhe.alteracao)} · {t('Última versão em')}: {formatarData(value.arquivoDetalhe.dataVersao)}</Typography>
           <TextField label={t('Título')} value={value.detalheTitulo} disabled={!value.arquivoDetalhe.podeEditar}
             inputProps={{ maxLength: 255 }} onChange={(event) => dispatch({ field: 'detalheTitulo', value: event.target.value })} />
           <TextField label={t('Descrição')} value={value.detalheDescricao} disabled={!value.arquivoDetalhe.podeEditar}
@@ -304,6 +328,12 @@ function urlConteudo(idArquivo, modo) {
   return `/ArgousForms/arquivo-conteudo?idArquivo=${encodeURIComponent(idArquivo)}&modo=${modo}`;
 }
 
+function formatarData(valor) {
+  if (!valor) return '—';
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? '—' : data.toLocaleString();
+}
+
 export default function GestorDocumentos({ usuario, podeEnviar, aoProcessoCriado }) {
   const initialState = useMemo(() => ({ idPasta: null, dados: null, loading: false, error: '',
     novaPastaAberta: false, nomeNovaPasta: '', descricaoNovaPasta: '', salvandoPasta: false, erroNovaPasta: '',
@@ -311,7 +341,8 @@ export default function GestorDocumentos({ usuario, podeEnviar, aoProcessoCriado
     classificacaoArquivo: 'L', diasValidade: '', modoConflito: 'NOVO_ARQUIVO', enviando: false, progressoEnvio: 0, erroEnvio: '',
     detalheAberto: false, carregandoArquivo: false, salvandoArquivo: false, erroDetalhe: '', arquivoDetalhe: null,
     previewCarregando: false, previewErro: false, previewUrl: null,
-    detalheTitulo: '', detalheDescricao: '', detalheClassificacao: 'L', detalheVencimento: '' }), []);
+    detalheTitulo: '', detalheDescricao: '', detalheClassificacao: 'L', detalheVencimento: '',
+    itemLixeira: null, contagemLixeira: null, contandoLixeira: false, enviandoLixeira: false, erroLixeira: '' }), []);
   const initialStateRef = useRef(initialState);
   const [value, dispatch] = useReducer(pageReducer, initialState);
   const requestRef = useRef(0);
@@ -468,10 +499,45 @@ export default function GestorDocumentos({ usuario, podeEnviar, aoProcessoCriado
     }
   }, [value.arquivoDetalhe, value.detalheTitulo, value.detalheDescricao, value.detalheClassificacao, value.detalheVencimento, carregar]);
 
+  const prepararLixeira = useCallback(async (tipo, item) => {
+    dispatch({ field: 'itemLixeira', value: { tipo, id: tipo === 'pasta' ? item.idPasta : item.idArquivo, nome: item.nome } });
+    dispatch({ field: 'contagemLixeira', value: null });
+    dispatch({ field: 'erroLixeira', value: '' });
+    if (tipo !== 'pasta') return;
+    dispatch({ field: 'contandoLixeira', value: true });
+    try {
+      const contagem = await executar('CONTAR_PASTA_LIXEIRA', { idPasta: item.idPasta });
+      dispatch({ field: 'contagemLixeira', value: contagem });
+    } catch (error) {
+      dispatch({ field: 'erroLixeira', value: error.message });
+    } finally {
+      dispatch({ field: 'contandoLixeira', value: false });
+    }
+  }, []);
+
+  const confirmarLixeira = useCallback(async () => {
+    if (!value.itemLixeira) return;
+    dispatch({ field: 'enviandoLixeira', value: true });
+    dispatch({ field: 'erroLixeira', value: '' });
+    try {
+      if (value.itemLixeira.tipo === 'pasta') await executar('ENVIAR_PASTA_LIXEIRA', {
+        idPasta: value.itemLixeira.id, quantidade: value.contagemLixeira.quantidade,
+      });
+      else await executar('ENVIAR_ARQUIVO_LIXEIRA', { idArquivo: value.itemLixeira.id });
+      dispatch({ field: 'itemLixeira', value: null });
+      await carregar();
+    } catch (error) {
+      dispatch({ field: 'erroLixeira', value: error.message });
+    } finally {
+      dispatch({ field: 'enviandoLixeira', value: false });
+    }
+  }, [value.itemLixeira, value.contagemLixeira, carregar]);
+
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { verificarMongo(); }, [verificarMongo]);
   const contextValues = useMemo(() => ({ telaAtual: 'GestorDocumentos', loading: value.loading,
-    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado }),
-    [value, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, usuario, podeEnviar, aoProcessoCriado]);
+    value, dispatch, initialStateRef, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo,
+    prepararLixeira, confirmarLixeira, usuario, podeEnviar, aoProcessoCriado }),
+    [value, carregar, criarPasta, verificarMongo, enviar, abrirArquivo, salvarArquivo, prepararLixeira, confirmarLixeira, usuario, podeEnviar, aoProcessoCriado]);
   return <GestorDocumentosContext.Provider value={contextValues}><Conteudo /></GestorDocumentosContext.Provider>;
 }

@@ -1,0 +1,260 @@
+-- ArgousBaseApp: estrutura Cadastro para banco novo. Nao aplicar sobre o Cadastro do ArgousForms.
+-- Adaptado do DDL enviado em 09/11/2026. Sem DROP, cargas ou GRANT.
+-- Correcoes: CHECK duplicado, validade movel de sessao, raiz de variaveis institucionais.
+-- Indice porEmail redundante removido; a UNIQUE da coluna ja cria indice.
+-- CONFIRMACOES_EMAIL nao consta da modelagem enviada; ver especificacao.
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS Cadastro;
+
+CREATE TABLE Cadastro.USUARIOS_SISTEMA
+(
+	ID_USUARIO_SISTEMA UUID NOT NULL,
+	DS_NOME Varchar(200) NOT NULL,
+	DS_EMAIL Varchar(120) NOT NULL Constraint uk_usuarios_sistema_email UNIQUE ,
+	CD_HASH_SENHA Varchar(255) NULL ,
+	DT_NASCIMENTO Timestamp NULL ,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_USUARIO_SISTEMA)
+);
+
+CREATE TABLE Cadastro.HISTORICO_LOGINS
+(
+	ID_LOGIN UUID NOT NULL,
+	ID_USUARIO_ORIGEM_LOGIN UUID NOT NULL,
+	CD_BEARER_SHA256 Varchar(64) NOT NULL Constraint uk_historico_logins_bearer UNIQUE ,
+	DT_LOGIN Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_VALIDADE Timestamp NOT NULL,
+	DT_ULTIMO_ACESSO Timestamp NULL ,
+	DT_REVOGACAO Timestamp NULL ,
+	DS_ENDERECO_IP Varchar(45) NOT NULL,
+	DS_USER_AGENT Text NOT NULL,
+	DS_DADOS_NAVEGADOR JSONB NULL ,
+ primary key (ID_LOGIN)
+);
+
+CREATE TABLE Cadastro.PROGRAMAS
+(
+	ID_PROGRAMA UUID NOT NULL,
+	ID_PROGRAMA_PAI UUID NULL ,
+	CD_PROGRAMA Varchar(70) NOT NULL Constraint uk_programas_codigo UNIQUE ,
+	DS_NOME Varchar(120) NOT NULL,
+	DS_DESCRICAO Text NOT NULL,
+	TP_PROGRAMA Char(1) NOT NULL,
+	DS_ROTA_INTERFACE Varchar(200) NULL ,
+	SN_ATIVO Boolean NOT NULL Default TRUE,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_ALTERACAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PROGRAMA)
+);
+
+CREATE TABLE Cadastro.PERMISSOES
+(
+	ID_PERMISSAO UUID NOT NULL,
+	ID_PROGRAMA UUID NOT NULL,
+	CD_PERMISSAO Varchar(120) NOT NULL Constraint uk_permissoes_codigo UNIQUE ,
+	DS_NOME Varchar(120) NOT NULL,
+	DS_DESCRICAO Text NOT NULL,
+	CD_ACAO Varchar(30) NOT NULL,
+	SN_SENSIVEL Boolean NOT NULL Default FALSE,
+	SN_REQUER_CONFIRMACAO Boolean NOT NULL Default FALSE,
+	SN_ATIVA Boolean NOT NULL Default TRUE,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_ALTERACAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PERMISSAO)
+);
+
+CREATE TABLE Cadastro.PAPEIS
+(
+	ID_PAPEL UUID NOT NULL,
+	CD_PAPEL Varchar(70) NOT NULL Constraint uk_papeis_codigo UNIQUE ,
+	DS_NOME Varchar(120) NOT NULL,
+	DS_DESCRICAO Text NOT NULL,
+	SN_SISTEMA Boolean NOT NULL Default FALSE,
+	SN_ATIVO Boolean NOT NULL Default TRUE,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_ALTERACAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PAPEL)
+);
+
+CREATE TABLE Cadastro.PAPEL_PERMISSOES
+(
+	ID_PAPEL_PERMISSAO UUID NOT NULL,
+	ID_PAPEL UUID NOT NULL,
+	ID_PERMISSAO UUID NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PAPEL_PERMISSAO)
+);
+
+CREATE TABLE Cadastro.PERFIS
+(
+	ID_PERFIL UUID NOT NULL,
+	CD_PERFIL Varchar(70) NOT NULL Constraint uk_perfis_codigo UNIQUE ,
+	DS_NOME Varchar(120) NOT NULL,
+	DS_DESCRICAO Text NOT NULL,
+	SN_SISTEMA Boolean NOT NULL Default FALSE,
+	SN_ATIVO Boolean NOT NULL Default TRUE,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_ALTERACAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PERFIL)
+);
+
+CREATE TABLE Cadastro.PERFIL_PAPEIS
+(
+	ID_PERFIL_PAPEL UUID NOT NULL,
+	ID_PERFIL UUID NOT NULL,
+	ID_PAPEL UUID NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PERFIL_PAPEL)
+);
+
+CREATE TABLE Cadastro.PERFIL_PERMISSOES
+(
+	ID_PERFIL_PERMISSAO UUID NOT NULL,
+	ID_PERFIL UUID NOT NULL,
+	ID_PERMISSAO UUID NOT NULL,
+	TP_EFEITO Char(1) NOT NULL Constraint ck_perfil_permissoes_efeito Check (TP_EFEITO IN ('C','N') ),
+	DS_JUSTIFICATIVA Text NULL ,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_PERFIL_PERMISSAO)
+);
+
+CREATE TABLE Cadastro.USUARIO_PERFIS
+(
+	ID_USUARIO_PERFIL UUID NOT NULL,
+	ID_USUARIO_SISTEMA UUID NOT NULL,
+	ID_PERFIL UUID NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL Default CURRENT_TIMESTAMP,
+	DT_INICIO_VIGENCIA Timestamp NULL ,
+	DT_FIM_VIGENCIA Timestamp NULL ,
+	DT_REVOGACAO Timestamp NULL ,
+ primary key (ID_USUARIO_PERFIL)
+);
+
+CREATE TABLE Cadastro.ORIGENS_LOGIN
+(
+	ID_ORIGEM_LOGIN UUID NOT NULL,
+	CD_ORIGEM Smallint NOT NULL UNIQUE ,
+	DS_NOME Varchar(120) NOT NULL,
+	DS_DESCRICAO Text NOT NULL,
+	TP_AUTENTICACAO Char(1) NOT NULL,
+	SN_PERMITE_AUTOCADASTRO Boolean NOT NULL,
+	SN_ATIVA Boolean NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_ALTERACAO Timestamp NOT NULL,
+	DT_EXCLUSAO Timestamp NULL ,
+ primary key (ID_ORIGEM_LOGIN)
+);
+
+CREATE TABLE Cadastro.USUARIO_ORIGENS_LOGIN
+(
+	ID_USUARIO_ORIGEM_LOGIN UUID NOT NULL,
+	ID_USUARIO_SISTEMA UUID NOT NULL,
+	ID_ORIGEM_LOGIN UUID NOT NULL,
+	CD_USUARIO_NA_ORIGEM Varchar(255) NOT NULL,
+	DS_EMAIL_ORIGEM Varchar(320) NULL ,
+	SN_EMAIL_VERIFICADO Boolean NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_ULTIMO_LOGIN Timestamp NULL ,
+	DT_REVOGACAO Timestamp NULL ,
+ primary key (ID_USUARIO_ORIGEM_LOGIN)
+);
+
+CREATE TABLE Cadastro.INSTITUICAO
+(
+	ID_INSTITUICAO Smallint NOT NULL Default 1 Constraint ck_instituicoes_registro_unico Check (ID_INSTITUICAO = 1),
+	DS_NOME Varchar(200) NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_ALTERACAO Timestamp NOT NULL,
+	CD_FUSO_HORARIO Varchar(64) NOT NULL Check (BTRIM(CD_FUSO_HORARIO) <> '' ),
+	DS_URL_WEBHOOK Text NULL ,
+	DS_URL_WEBHOOK_ALTERNATIVO Text NULL ,
+	NR_DIAS_SESSAO_MOVEL Smallint NOT NULL Default 7 Check (NR_DIAS_SESSAO_MOVEL > 0 ),
+	NR_DIAS_SESSAO_ABSOLUTA Smallint NOT NULL Default 60 Check (NR_DIAS_SESSAO_ABSOLUTA > NR_DIAS_SESSAO_MOVEL ),
+ primary key (ID_INSTITUICAO)
+);
+
+CREATE TABLE Cadastro.UNIDADE
+(
+	ID_UNIDADE Smallint NOT NULL,
+	ID_INSTITUICAO Smallint NOT NULL Default 1,
+	ID_USUARIO_INCLUSAO UUID NOT NULL,
+	ID_USUARIO_ALTERACAO UUID NULL ,
+	NM_UNIDADE Varchar(100) NOT NULL,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_ALTERACAO Timestamp NULL ,
+	SN_ATIVO Boolean NOT NULL,
+ primary key (ID_UNIDADE)
+);
+
+CREATE TABLE Cadastro.SETOR
+(
+	ID_SETOR Integer NOT NULL,
+	ID_USUARIO_INCLUSAO UUID NOT NULL,
+	ID_USUARIO_ALTERACAO UUID NULL ,
+	ID_UNIDADE Smallint NOT NULL,
+	NM_SETOR Varchar(100) NOT NULL,
+	DS_LOCALIZACAO Varchar(200) NULL ,
+	DT_INCLUSAO Timestamp NOT NULL,
+	DT_ALTERACAO Timestamp NULL ,
+	SN_ATIVO Boolean NOT NULL,
+ primary key (ID_SETOR)
+);
+
+CREATE TABLE Cadastro.VARIAVEIS_INSTITUICAO
+(
+	ID_ATRIBUTO Serial NOT NULL,
+	ID_ATRIBUTO_PAI Integer NULL,
+	CD_NOME_TECNICO Varchar(40) NOT NULL,
+	TP_ATRIBUTO Char(1) NOT NULL,
+	VL_ATRIBUTO Text NULL  Check ((TP_ATRIBUTO = 'G' AND VL_ATRIBUTO IS NULL) OR (TP_ATRIBUTO = 'V' AND VL_ATRIBUTO IS NOT NULL AND BTRIM(VL_ATRIBUTO) <> '') ),
+	DT_INCLUSAO Timestamp with time zone NOT NULL,
+	DT_ALTERACAO Timestamp with time zone NOT NULL,
+	DT_INVALIDACAO Timestamp with time zone NULL ,
+ primary key (ID_ATRIBUTO)
+);
+
+
+
+
+CREATE UNIQUE INDEX Cadastro.PorPapelPermissao ON Cadastro.PAPEL_PERMISSOES (ID_PAPEL,ID_PERMISSAO);
+
+
+CREATE UNIQUE INDEX Cadastro.porPerfilPapel ON Cadastro.PERFIL_PAPEIS (ID_PERFIL,ID_PAPEL);
+
+CREATE UNIQUE INDEX Cadastro.PorPerfilPermissao ON Cadastro.PERFIL_PERMISSOES (ID_PERFIL,ID_PERMISSAO);
+
+CREATE UNIQUE INDEX Cadastro.PorUsuarioPerfil ON Cadastro.USUARIO_PERFIS (ID_USUARIO_SISTEMA,ID_PERFIL);
+
+
+CREATE UNIQUE INDEX Cadastro.porIDUsuarioOrigem ON Cadastro.USUARIO_ORIGENS_LOGIN (CD_USUARIO_NA_ORIGEM,ID_ORIGEM_LOGIN);
+
+
+ALTER TABLE Cadastro.USUARIO_PERFIS add  foreign key (ID_USUARIO_SISTEMA) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.USUARIO_ORIGENS_LOGIN add  foreign key (ID_USUARIO_SISTEMA) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.UNIDADE add  foreign key (ID_USUARIO_INCLUSAO) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.UNIDADE add  foreign key (ID_USUARIO_ALTERACAO) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.SETOR add  foreign key (ID_USUARIO_INCLUSAO) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.SETOR add  foreign key (ID_USUARIO_ALTERACAO) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PROGRAMAS add  foreign key (ID_PROGRAMA_PAI) REFERENCES Cadastro.PROGRAMAS (ID_PROGRAMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PERMISSOES add  foreign key (ID_PROGRAMA) REFERENCES Cadastro.PROGRAMAS (ID_PROGRAMA)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PAPEL_PERMISSOES add  foreign key (ID_PERMISSAO) REFERENCES Cadastro.PERMISSOES (ID_PERMISSAO)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PERFIL_PERMISSOES add  foreign key (ID_PERMISSAO) REFERENCES Cadastro.PERMISSOES (ID_PERMISSAO)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PAPEL_PERMISSOES add  foreign key (ID_PAPEL) REFERENCES Cadastro.PAPEIS (ID_PAPEL)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PERFIL_PAPEIS add  foreign key (ID_PAPEL) REFERENCES Cadastro.PAPEIS (ID_PAPEL)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PERFIL_PAPEIS add  foreign key (ID_PERFIL) REFERENCES Cadastro.PERFIS (ID_PERFIL)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.PERFIL_PERMISSOES add  foreign key (ID_PERFIL) REFERENCES Cadastro.PERFIS (ID_PERFIL)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.USUARIO_PERFIS add  foreign key (ID_PERFIL) REFERENCES Cadastro.PERFIS (ID_PERFIL)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.USUARIO_ORIGENS_LOGIN add  foreign key (ID_ORIGEM_LOGIN) REFERENCES Cadastro.ORIGENS_LOGIN (ID_ORIGEM_LOGIN)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.HISTORICO_LOGINS add  foreign key (ID_USUARIO_ORIGEM_LOGIN) REFERENCES Cadastro.USUARIO_ORIGENS_LOGIN (ID_USUARIO_ORIGEM_LOGIN)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.UNIDADE add  foreign key (ID_INSTITUICAO) REFERENCES Cadastro.INSTITUICAO (ID_INSTITUICAO)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.SETOR add  foreign key (ID_UNIDADE) REFERENCES Cadastro.UNIDADE (ID_UNIDADE)  on update restrict  on delete restrict ;
+ALTER TABLE Cadastro.VARIAVEIS_INSTITUICAO add  foreign key (ID_ATRIBUTO_PAI) REFERENCES Cadastro.VARIAVEIS_INSTITUICAO (ID_ATRIBUTO)  on update restrict  on delete restrict ;
+COMMIT;

@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import javax.mail.internet.InternetAddress;
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

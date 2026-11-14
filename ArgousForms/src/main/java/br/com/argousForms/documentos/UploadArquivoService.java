@@ -11,7 +11,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import org.json.JSONObject;
 
@@ -48,7 +48,8 @@ public final class UploadArquivoService {
 	public JSONObject enviar( AutenticacaoLocalService.Usuario usuario, ServletContext contexto, UUID idPasta, Path temporario,
 		String nomeInformado, String tituloInformado, String descricaoInformada, String contentTypeInformado,
 		String classificacao, Integer diasValidade, boolean novaVersao, int tamanho, String hash, UUID idProtocoloModelo,
-		String codigoModelo, String observacoesModelo, UUID idProtocoloRecurso, boolean recursoInstituicao, String codigoRecurso ) throws Exception {
+		String codigoModelo, String observacoesModelo, Integer diasVencimentoModelo,
+		UUID idProtocoloRecurso, boolean recursoInstituicao, String codigoRecurso ) throws Exception {
 
 		int modos = ( idProtocoloModelo != null ? 1 : 0 ) + ( idProtocoloRecurso != null ? 1 : 0 ) + ( recursoInstituicao ? 1 : 0 );
 		if( modos > 1 ) throw new ArgousFormsApiException( 400, "MODO_INVALIDO", "Escolha apenas uma finalidade para o envio." );
@@ -101,6 +102,7 @@ public final class UploadArquivoService {
 					arquivo.setTpClassificacao( classificacao );
 					arquivo.setCdContentType( contentType );
 					arquivo.setDtInclusao( agora );
+					arquivo.setDtAlteracao( agora );
 					if( diasValidade != null ) arquivo.setDtVencimento( new QtData( Instant.now().plus( diasValidade, ChronoUnit.DAYS ).toEpochMilli() ) );
 					new ArquivoNegocio( conexao, arquivo ).insere();
 					numeroVersao = 1;
@@ -118,7 +120,7 @@ public final class UploadArquivoService {
 				idVersao = versao.getIdArquivoVersao();
 				if( idProtocoloModelo != null ) {
 					new ProtocolosService().registrarModeloPdf( conexao, usuario, idProtocoloModelo, idVersao,
-						codigoModelo, titulo, observacoesModelo );
+						codigoModelo, titulo, observacoesModelo, diasVencimentoModelo );
 				}
 				if( idProtocoloRecurso != null ) new RecursosService().registrarProtocolo( conexao, usuario, idProtocoloRecurso, idVersao, codigoRecurso );
 				if( recursoInstituicao ) new RecursosService().registrarInstituicao( conexao, usuario, idVersao, codigoRecurso );

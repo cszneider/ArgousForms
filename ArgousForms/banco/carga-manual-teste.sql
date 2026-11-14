@@ -80,6 +80,7 @@ VALUES
     (gen_random_uuid(), 'EDITOR_DE_DOCUMENTOS', 'Editor de documentos', 'Inicia documentos elegíveis e edita etapas atribuídas', true, true, now()),
     (gen_random_uuid(), 'MODELADOR', 'Modelador', 'Cria e altera modelos de documentos e fluxos', true, true, now()),
     (gen_random_uuid(), 'GESTOR_DE_PROTOCOLOS', 'Gestor de Protocolos', 'Revisa e publica versões de Protocolos', true, true, now()),
+    (gen_random_uuid(), 'DESENVOLVEDOR', 'Desenvolvedor', 'Testa e consulta a documentação das integrações', true, true, now()),
     (gen_random_uuid(), 'ANALISTA_INDICADORES', 'Analista de indicadores', 'Consulta indicadores autorizados', true, true, now());
 
 INSERT INTO Cadastro.PERFIS
@@ -90,6 +91,7 @@ VALUES
     (gen_random_uuid(), 'PARTICIPANTE', 'Participante', 'Inicia documentos elegíveis e edita etapas atribuídas', true, true, now()),
     (gen_random_uuid(), 'MODELADOR', 'Modelador', 'Cria e altera modelos', true, true, now()),
     (gen_random_uuid(), 'GESTOR_DE_PROTOCOLOS', 'Gestor de Protocolos', 'Permite revisar e publicar Protocolos', false, true, now()),
+    (gen_random_uuid(), 'DESENVOLVEDOR', 'Desenvolvedor', 'Permite testar integrações e consultar sua documentação', false, true, now()),
     (gen_random_uuid(), 'GESTOR', 'Gestor', 'Consulta indicadores autorizados', true, true, now());
 
 INSERT INTO Cadastro.PERFIL_PAPEIS
@@ -106,6 +108,7 @@ SELECT gen_random_uuid(), perfil.ID_PERFIL, papel.ID_PAPEL, now()
       ('PARTICIPANTE', 'EDITOR_DE_DOCUMENTOS'),
       ('MODELADOR', 'MODELADOR'),
       ('GESTOR_DE_PROTOCOLOS', 'GESTOR_DE_PROTOCOLOS'),
+      ('DESENVOLVEDOR', 'DESENVOLVEDOR'),
       ('GESTOR', 'ANALISTA_INDICADORES')
   ) AS vinculo(CD_PERFIL, CD_PAPEL)
   JOIN Cadastro.PERFIS perfil ON perfil.CD_PERFIL = vinculo.CD_PERFIL

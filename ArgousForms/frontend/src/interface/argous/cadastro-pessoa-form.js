@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Checkbox, FormControlLabel, MenuItem, TextField, Typography } from '@mui/material';
 import { executar } from '../../programas/login/autenticacao.js';
 import { identificacaoCorresponde } from '../../programas/pessoas/regex-identificacao.js';
 
@@ -127,11 +127,12 @@ export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved,
         <MenuItem value="P">Prefiro não informar</MenuItem>
       </TextField>
     </Box>
-    <TextField select label="Nacionalidades" value={dados.nacionalidades} onChange={(e) => alterar('nacionalidades',
-      (Array.isArray(e.target.value) ? e.target.value : e.target.value.split(',')).map(Number))}
-      slotProps={{ select: { multiple: true } }} helperText="Você pode selecionar mais de um país.">
-      {catalogo.paises.map((pais) => <MenuItem key={pais.idPais} value={pais.idPais}>{pais.nome}</MenuItem>)}
-    </TextField>
+    <Autocomplete multiple filterSelectedOptions options={catalogo.paises}
+      value={catalogo.paises.filter((pais) => dados.nacionalidades.includes(Number(pais.idPais)))}
+      getOptionLabel={(pais) => pais.nome}
+      isOptionEqualToValue={(opcao, valor) => opcao.idPais === valor.idPais}
+      onChange={(_, paises) => alterar('nacionalidades', paises.map((pais) => Number(pais.idPais)))}
+      renderInput={(parametros) => <TextField {...parametros} label="Nacionalidades" helperText="Você pode selecionar mais de um país." />} />
     <Typography variant="subtitle1">Identificações por país</Typography>
     {dados.identificacoes.map((item, indice) => <Box key={indice} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
       <TextField select label="País" value={item.idPais} onChange={(e) => alterar('identificacoes', dados.identificacoes.map((atual, posicao) => posicao === indice ? { idPais: Number(e.target.value), idTipo: '', numero: '' } : atual))} sx={{ minWidth: 180 }}>

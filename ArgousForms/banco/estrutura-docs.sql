@@ -79,11 +79,27 @@ Create table  Docs.ARQUIVOS
 	TP_CLASSIFICACAO Char(1) NOT NULL,
 	DT_VENCIMENTO Timestamp with time zone NULL ,
 	DT_INCLUSAO Timestamp with time zone NOT NULL,
+	DT_ALTERACAO Timestamp with time zone NOT NULL Check (DT_ALTERACAO >= DT_INCLUSAO ),
 	DT_LIXEIRA Timestamp with time zone NULL ,
 	DT_EXCLUSAO Timestamp with time zone NULL ,
 	CD_CONTENT_TYPE Varchar(255) NULL ,
  primary key (ID_ARQUIVO)
 );
+
+-- A data registra mudanças de metadados, independentemente da inclusão de novas versões.
+CREATE OR REPLACE FUNCTION Docs.definir_alteracao_metadados_arquivo() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        NEW.DT_ALTERACAO := NEW.DT_INCLUSAO;
+    ELSIF (NEW.DS_TITULO, NEW.DS_DESCRICAO, NEW.TP_CLASSIFICACAO) IS DISTINCT FROM (OLD.DS_TITULO, OLD.DS_DESCRICAO, OLD.TP_CLASSIFICACAO) THEN
+        NEW.DT_ALTERACAO := GREATEST(CURRENT_TIMESTAMP, NEW.DT_INCLUSAO);
+    ELSE
+        NEW.DT_ALTERACAO := OLD.DT_ALTERACAO;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_definir_alteracao_metadados_arquivo BEFORE INSERT OR UPDATE ON Docs.ARQUIVOS FOR EACH ROW EXECUTE FUNCTION Docs.definir_alteracao_metadados_arquivo();
 
 Create table  Docs.ARQUIVO_VERSOES
 (

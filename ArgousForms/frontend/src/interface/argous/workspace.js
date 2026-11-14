@@ -52,19 +52,15 @@ import {
 import {
   FileStack,
   LayoutDashboard,
-  ChartNoAxesCombined,
   Inbox,
   Files,
   Columns3,
   LayoutTemplate,
   Users,
   Plus,
-  ArrowUpRight,
   ArrowRight,
   ChevronRight,
   GitBranch,
-  Clock,
-  CheckCircle2,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -72,17 +68,20 @@ import {
   FileText,
   Settings2,
   UserPlus,
+  Webhook,
 } from 'lucide-react';
 import { ThemeToggle } from '../../components/theme/theme.js';
-import { defaultDashboardFilters } from '../../programas/dashboard/dashboard.js';
+import NotificacoesPopup from '../../programas/processos/notificacoes-popup.js';
 const UserSettings = lazy(() => import('../configuracoes/index.js'));
 const GestorDocumentos = lazy(() => import('../../programas/gestor-documentos/gestor-documentos.js'));
 const Processos = lazy(() => import('../../programas/processos/processos.js'));
 const Tarefas = lazy(() => import('../../programas/processos/tarefas.js'));
-const Dashboards = lazy(() => import('../../programas/dashboard/dashboards.js').then((modulo) => ({ default: modulo.Dashboards })));
+const Notificacoes = lazy(() => import('../../programas/processos/notificacoes.js'));
+const VisaoGeralTarefas = lazy(() => import('../../programas/processos/visao-geral-tarefas.js'));
 const TemplateEditor = lazy(() => import('../../programas/modelos/template-editor.js').then((modulo) => ({ default: modulo.TemplateEditor })));
 const Protocolos = lazy(() => import('../../programas/protocolos/protocolos.js'));
 const Instituicao = lazy(() => import('../../programas/protocolos/instituicao.js'));
+const Integracao = lazy(() => import('../../programas/integracao/integracao.js'));
 import {
   DocumentView,
   Status,
@@ -101,12 +100,12 @@ import { readStore, writeStore } from '../../programas/documentos/storage.js';
 export const WorkspaceContext = createContext({});
 const nav = [
   ['home', 'Visão geral', LayoutDashboard],
-  ['dashboards', 'Dashboards', ChartNoAxesCombined],
   ['documents', 'Documentos', Files],
   ['processes', 'Processos', GitBranch],
   ['tasks', 'Tarefas', Columns3],
   ['protocols', 'Protocolos', FileStack],
   ['organization', 'Organização e acessos', Users],
+  ['integrations', 'Integração', Webhook],
 ];
 const initials = (name) =>
   name
@@ -120,7 +119,7 @@ const roleLabel = (p) =>
     : p.role === 'designer'
       ? 'Criador de modelos'
       : 'Participante';
-const profilePriority = ['ADMINISTRADOR', 'GESTOR', 'MODELADOR', 'PARTICIPANTE', 'ESSENCIAL'];
+const profilePriority = ['ADMINISTRADOR', 'GESTOR', 'MODELADOR', 'DESENVOLVEDOR', 'PARTICIPANTE', 'ESSENCIAL'];
 const profileSummary = (profiles) => {
   if (!profiles?.length) return 'Sem perfil';
   const sorted = [...profiles].sort((a, b) => {
@@ -140,12 +139,18 @@ export default function Workspace() {
       loading: false,
       state: null,
       usuario: null,
+      notificacoesNaoLidas: 0,
+      notificacoesRecentes: [],
+      notificacoesAnchor: null,
+      notificacoesCarregando: false,
+      notificacoesErro: '',
+      notificacoesRetorno: 'home',
+      processoNotificacao: null,
       loadError: '',
       dirty: false,
       actorId: 'admin',
       view: 'home',
       managementSection: 'groups',
-      dashboardFilters: { ...defaultDashboardFilters },
       documentId: null,
       editor: null,
       mobile: false,
@@ -501,6 +506,26 @@ export default function Workspace() {
     }
     carregar();
   }, []);
+  const carregarNotificacoes = useCallback(async (mostrarCarregamento = false) => {
+    if (!usuario) return;
+    if (mostrarCarregamento) dispatch({ field: 'notificacoesCarregando', value: true });
+    try {
+      const dados = await executar('LISTAR_NOTIFICACOES', { limite: 5 });
+      dispatch({ field: 'notificacoesRecentes', value: dados.notificacoes || [] });
+      dispatch({ field: 'notificacoesNaoLidas', value: dados.naoLidas || 0 });
+      dispatch({ field: 'notificacoesErro', value: '' });
+    } catch (falha) {
+      dispatch({ field: 'notificacoesErro', value: falha.message });
+    } finally {
+      if (mostrarCarregamento) dispatch({ field: 'notificacoesCarregando', value: false });
+    }
+  }, [usuario]);
+  useEffect(() => {
+    if (!usuario) return;
+    carregarNotificacoes();
+    const intervalo = window.setInterval(() => carregarNotificacoes(), 60000);
+    return () => window.clearInterval(intervalo);
+  }, [usuario, view, carregarNotificacoes]);
   const commit = useCallback(
     (next) => {
       try {
@@ -795,12 +820,13 @@ export default function Workspace() {
   const canView = (destination) => destination === 'home' ||
     (destination === 'settings' && canManageOwnData) ||
     (destination === 'documents' && canConsultDocuments) ||
-    (destination === 'processes' && canConsultDocuments) ||
-    (destination === 'tasks' && canConsultDocuments) ||
-    (destination === 'dashboards' && hasRole('ANALISTA_INDICADORES')) ||
+    (destination === 'processes' && Boolean(usuario)) ||
+    (destination === 'tasks' && Boolean(usuario)) ||
+    (destination === 'notifications' && Boolean(usuario)) ||
     (destination === 'protocols' && protocolCreator) ||
     (destination === 'templates' && designer) ||
-    (destination === 'organization' && (admin || groupManager || accessManager || institutionManager));
+    (destination === 'organization' && (admin || groupManager || accessManager || institutionManager)) ||
+    (destination === 'integrations' && (hasRole('DESENVOLVEDOR') || institutionManager));
   const managementAreas = [
     ['groups', 'Grupos e tags', groupManager],
     ['access', 'Papéis e perfis', accessManager],
@@ -810,17 +836,6 @@ export default function Workspace() {
   const activeManagementSection = managementAreas.some(([key]) => key === managementSection)
     ? managementSection
     : managementAreas[0]?.[0];
-  const tasks = state.documents.filter(
-    (d) =>
-      (canWork(d, person, state.groups) &&
-        (!d.assignee || d.assignee === person.id)) ||
-      canContribute(d, person, state.groups),
-  );
-  const active = state.documents.filter((d) => d.status !== 'done');
-  const done = state.documents.filter((d) => d.status === 'done');
-  const reviews = active.filter(
-    (d) => d.template.stages[d.stageIndex].kind === 'approve',
-  );
   const doc = state.documents.find((d) => d.id === documentId);
   const navigate = (v) => {
     if (!canView(v)) return;
@@ -1183,11 +1198,47 @@ export default function Workspace() {
                 {tr(
                   view === 'settings'
                     ? 'Configurações do usuário'
-                    : nav.find((n) => n[0] === view)?.[1] || '',
+                    : view === 'notifications' ? 'Notificações' : nav.find((n) => n[0] === view)?.[1] || '',
                 )}
               </strong>
             </div>
             <div className="participant-picker">
+              <NotificacoesPopup naoLidas={pageState.notificacoesNaoLidas} itens={pageState.notificacoesRecentes}
+                carregando={pageState.notificacoesCarregando} erro={pageState.notificacoesErro}
+                anchor={pageState.notificacoesAnchor}
+                aoAbrir={(evento) => {
+                  dispatch({ field: 'notificacoesAnchor', value: evento.currentTarget });
+                  carregarNotificacoes(true);
+                }}
+                aoFechar={() => dispatch({ field: 'notificacoesAnchor', value: null })}
+                aoSelecionar={async (item) => {
+                  dispatch({ field: 'notificacoesAnchor', value: null });
+                  if (!item.visualizacao) {
+                    try {
+                      await executar('MARCAR_NOTIFICACAO_LIDA', { idNotificacao: item.id });
+                      carregarNotificacoes();
+                    } catch (falha) {
+                      dispatch({ field: 'toast', value: { text: falha.message, error: true } });
+                    }
+                  }
+                  if (item.tipo === 'RESPONSAVEL_VINCULO_PERDIDO') {
+                    dispatch({ field: 'notificacoesRetorno', value: view });
+                    navigate('notifications');
+                  } else if (item.tipo === 'ETAPA_DISPONIVEL' && item.situacao === 'P') {
+                    navigate('tasks');
+                  } else if (item.idProcesso) {
+                    dispatch({ field: 'processoNotificacao', value: item.idProcesso });
+                    navigate('processes');
+                  } else {
+                    dispatch({ field: 'notificacoesRetorno', value: view });
+                    navigate('notifications');
+                  }
+                }}
+                aoVerTodas={() => {
+                  dispatch({ field: 'notificacoesAnchor', value: null });
+                  dispatch({ field: 'notificacoesRetorno', value: view });
+                  navigate('notifications');
+                }} />
               <ThemeToggle />
             </div>
           </header>
@@ -1222,7 +1273,7 @@ export default function Workspace() {
                     <UserSettings />
                   </>
                 )}
-                {view === 'dashboards' && canView('dashboards') && <Dashboards />}
+                {view === 'integrations' && canView('integrations') && <Integracao desenvolvedor={hasRole('DESENVOLVEDOR')} />}
                 {view === 'home' && (
                   <>
                     <div className="page-heading">
@@ -1242,150 +1293,12 @@ export default function Workspace() {
                       {canEditDocuments && <Button
                         variant="contained"
                         startIcon={<Plus size={18} />}
-                        onClick={() => openNew()}
+                        onClick={() => navigate('documents')}
                       >
-                        {tr('Novo documento')}
+                        {tr('Iniciar processo')}
                       </Button>}
                     </div>
-                    {canConsultDocuments && <div className="stats-grid">
-                      {[
-                        [
-                          Files,
-                          'Em andamento',
-                          active.length,
-                          tr('Documentos em fluxo'),
-                          'active',
-                        ],
-                        ...(canEditDocuments ? [[
-                          Inbox,
-                          tr('Minhas pendências'),
-                          tasks.length,
-                          tr('Etapas para o seu grupo'),
-                          'tasks',
-                        ]] : []),
-                        [
-                          Clock,
-                          'Em aprovação',
-                          reviews.length,
-                          tr('Aguardando revisão'),
-                          'reviews',
-                        ],
-                        [
-                          CheckCircle2,
-                          tr('Finalizados'),
-                          done.length,
-                          tr('Documentos completos'),
-                          'done',
-                        ],
-                      ].map(([Icon, title, count, sub, key]) => (
-                        <button
-                          className={'stat-card ' + key}
-                          key={key}
-                          onClick={() => {
-                            navigate('documents');
-                            if (key === 'reviews')
-                              dispatch({
-                                field: 'status',
-                                value: 'Em aprovação',
-                              });
-                            if (key === 'done')
-                              dispatch({
-                                field: 'status',
-                                value: 'Finalizado',
-                              });
-                            if (key === 'active')
-                              dispatch({ field: 'status', value: 'open' });
-                          }}
-                        >
-                          <div className="stat-top">
-                            <span>{tr(title)}</span>
-                            <Icon size={19} />
-                          </div>
-                          <strong>{count.toString().padStart(2, '0')}</strong>
-                          <small>{sub}</small>
-                        </button>
-                      ))}
-                    </div>}
-                    <div className="home-columns">
-                      {canConsultDocuments && canEditDocuments && <section className="panel attention-panel">
-                        <div className="panel-heading">
-                          <div>
-                            <h2>{tr('Seu próximo passo')}</h2>
-                            <p>{tr('As etapas que precisam de você.')}</p>
-                          </div>
-                          <Button
-                            onClick={() => navigate('documents')}
-                            endIcon={<ArrowUpRight size={16} />}
-                          >
-                            {tr('Ver pendências')}
-                          </Button>
-                        </div>
-                        {tasks.length ? (
-                          tasks.slice(0, 2).map((d) => (
-                            <button
-                              className="task-preview"
-                              key={d.id}
-                              onClick={() => {
-                                dispatch({
-                                  field: 'documentId',
-                                  value: d.id,
-                                });
-                                dispatch({ field: 'view', value: 'documents' });
-                              }}
-                            >
-                              <span className="task-preview-icon">
-                                <FileText size={22} />
-                              </span>
-                              <span className="task-preview-copy">
-                                <strong>{d.title}</strong>
-                                <small>
-                                  {d.template.stages[d.stageIndex].title} ·{' '}
-                                  {
-                                    state.groups.find(
-                                      (g) =>
-                                        g.id ===
-                                        d.template.stages[d.stageIndex].groupId,
-                                    )?.name
-                                  }
-                                </small>
-                              </span>
-                              <Status doc={d} />
-                              <ArrowRight size={18} />
-                            </button>
-                          ))
-                        ) : (
-                          <div className="empty-state compact">
-                            <CheckCircle2 size={25} />
-                            <h3>{tr('Tudo em dia')}</h3>
-                            <p>{tr('Seu grupo não tem etapas pendentes.')}</p>
-                          </div>
-                        )}
-                      </section>}
-                      {canEditDocuments && <section className="quick-start">
-                        <div className="quick-start-top">
-                          <LayoutTemplate size={25} />
-                          <span>{tr('DO MODELO À AÇÃO')}</span>
-                        </div>
-                        <h2>
-                          {tr('Um bom documento')}
-                          <br />
-                          {tr('começa com um modelo.')}
-                        </h2>
-                        <p>
-                          {tr(
-                            'Use o relatório de atendimento para experimentar um fluxo completo.',
-                          )}
-                        </p>
-                        <Button
-                          variant="contained"
-                          color="inherit"
-                          endIcon={<ArrowUpRight size={17} />}
-                          onClick={() => openNew()}
-                        >
-                          {tr('Usar um modelo')}
-                        </Button>
-                      </section>}
-                    </div>
+                    {canConsultDocuments && <VisaoGeralTarefas aoAbrirTarefas={() => navigate('tasks')} aoIniciarProcesso={canEditDocuments ? () => navigate('documents') : null} />}
                     {canConsultDocuments && <section className="panel">
                       <div className="panel-heading">
                         <div>
@@ -1424,8 +1337,14 @@ export default function Workspace() {
                 {view === 'documents' && canConsultDocuments && (
                   <GestorDocumentos usuario={usuario} podeEnviar={canEditDocuments} aoProcessoCriado={() => navigate('processes')} />
                 )}
-                {view === 'processes' && canConsultDocuments && <Processos />}
-                {view === 'tasks' && canConsultDocuments && <Tarefas />}
+                {view === 'processes' && usuario && <Processos key={pageState.processoNotificacao || 'lista'}
+                  idProcessoInicial={pageState.processoNotificacao}
+                  aoVoltar={pageState.processoNotificacao ? () => dispatch({ field: 'processoNotificacao', value: null }) : null} />}
+                {view === 'tasks' && usuario && <Tarefas />}
+                {view === 'notifications' && usuario && <Notificacoes aoVoltar={() => navigate(pageState.notificacoesRetorno || 'home')}
+                  aoNotificacoesAlteradas={() => carregarNotificacoes()} aoAbrirProcesso={(idProcesso) => {
+                  dispatch({ field: 'processoNotificacao', value: idProcesso }); navigate('processes');
+                }} aoAbrirTarefas={() => navigate('tasks')} />}
                 {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} usuarioPapeis={usuario?.papeis || []} />}
                 {view === 'templates' && designer && (
                   <>
@@ -1913,7 +1832,11 @@ export default function Workspace() {
               onSaved={async (resultado) => {
                 await carregarPessoasUsuarios();
                 dispatch({ field: 'toast', value: { text: resultado.confirmacaoPendente
-                  ? resultado.emailEnviado ? 'Cadastro salvo. O código foi enviado por e-mail.' : 'Cadastro salvo, mas o e-mail não foi enviado.'
+                  ? resultado.emailEnviado
+                    ? cadastroEdit?.modo === 'usuario' && !cadastroEdit.idUsuario
+                      ? 'Usuário cadastrado. Ele deve abrir Aceitar convite na tela de login, informar o código recebido por e-mail e definir sua senha.'
+                      : 'Cadastro salvo. O código foi enviado por e-mail.'
+                    : 'Cadastro salvo, mas o e-mail não foi enviado.'
                   : 'Cadastro salvo.', error: false } });
                 dispatch({ field: 'cadastroEdit', value: null });
               }} />}

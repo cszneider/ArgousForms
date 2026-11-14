@@ -6,6 +6,7 @@ import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +30,8 @@ import quatro.util.QtData;
 /** Gera e registra os PDFs da etapa dentro da transação da finalização. */
 public final class DocumentoPdfProcessoService {
 
-	private record Modelo( UUID idVersao, UUID idArquivoModelo, String codigo, String titulo, String classificacao, long tamanhoOrigem ) {}
+	private record Modelo( UUID idVersao, UUID idArquivoModelo, String codigo, String titulo, String classificacao,
+		long tamanhoOrigem, Integer diasVencimento ) {}
 
 	public void gerar( Conexao conexao, MongoArmazenamento mongo, UUID idUsuario, UUID idProcesso, UUID idEtapa,
 		UUID idVersaoProtocolo, JSONArray documentos, List<UUID> enviados ) throws Exception {
@@ -53,7 +55,7 @@ public final class DocumentoPdfProcessoService {
 
 	private Modelo modelo( Conexao conexao, UUID idVersaoProtocolo, UUID idModelo ) throws Exception {
 
-		String sql = "select pdf.ID_ARQUIVO_MODELO_PDF, d.CD_DOCUMENTO, d.DS_TITULO, a.TP_CLASSIFICACAO, av.NR_TAMANHO_BYTES "
+		String sql = "select pdf.ID_ARQUIVO_MODELO_PDF, d.CD_DOCUMENTO, d.DS_TITULO, a.TP_CLASSIFICACAO, av.NR_TAMANHO_BYTES, v.NR_DIAS_VENCIMENTO "
 			+ "from Processos.PROTOCOLO_VERSAO_DOCUMENTOS vd "
 			+ "join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = vd.ID_PROTOCOLO_DOCUMENTO_VERSAO "
 			+ "join Processos.PROTOCOLO_DOCUMENTOS d on d.ID_PROTOCOLO_DOCUMENTO = vd.ID_PROTOCOLO_DOCUMENTO "
@@ -66,7 +68,8 @@ public final class DocumentoPdfProcessoService {
 			consulta.setObject( 2, idModelo );
 			try ( ResultSet linha = consulta.executeQuery() ) {
 				if( !linha.next() ) throw new ArgousFormsApiException( 409, "MODELO_PDF_INVALIDO", "O documento configurado não é um PDF desta versão do Protocolo." );
-				return new Modelo( idModelo, linha.getObject( 1, UUID.class ), linha.getString( 2 ), linha.getString( 3 ), linha.getString( 4 ), linha.getLong( 5 ) );
+				return new Modelo( idModelo, linha.getObject( 1, UUID.class ), linha.getString( 2 ), linha.getString( 3 ), linha.getString( 4 ),
+					linha.getLong( 5 ), linha.getObject( 6 ) == null ? null : linha.getInt( 6 ) );
 			}
 		}
 	}
@@ -218,8 +221,13 @@ public final class DocumentoPdfProcessoService {
 		arquivo.setDsTitulo( modelo.titulo() );
 		arquivo.setTpClassificacao( modelo.classificacao() );
 		arquivo.setCdContentType( "application/pdf" );
-		QtData agora = new QtData( Instant.now().toEpochMilli() );
+		Instant instanteCriacao = Instant.now();
+		QtData agora = new QtData( instanteCriacao.toEpochMilli() );
 		arquivo.setDtInclusao( agora );
+		arquivo.setDtAlteracao( agora );
+		if( modelo.diasVencimento() != null ) {
+			arquivo.setDtVencimento( new QtData( instanteCriacao.plus( modelo.diasVencimento(), ChronoUnit.DAYS ).toEpochMilli() ) );
+		}
 		new ArquivoNegocio( conexao, arquivo ).insere();
 
 		ArquivoVersao versao = new ArquivoVersao();

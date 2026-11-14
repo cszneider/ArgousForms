@@ -18,6 +18,7 @@ export default function Instituicao() {
     executar('CONSULTAR_INSTITUICAO')
       .then((resultado) => { if (ativo) setDados({ ...resultado,
         diasLixeira: String(resultado.diasLixeira),
+        diasRetencaoLogIntegracao: String(resultado.diasRetencaoLogIntegracao),
         diasSessaoMovel: String(resultado.diasSessaoMovel),
         diasSessaoAbsoluta: String(resultado.diasSessaoAbsoluta),
         tamanhoMaximoArquivoBytes: String(resultado.tamanhoMaximoArquivoBytes),
@@ -39,6 +40,7 @@ export default function Instituicao() {
     try {
       const resultado = await executar('SALVAR_INSTITUICAO', dados);
       setDados({ ...resultado, diasLixeira: String(resultado.diasLixeira),
+        diasRetencaoLogIntegracao: String(resultado.diasRetencaoLogIntegracao),
         diasSessaoMovel: String(resultado.diasSessaoMovel),
         diasSessaoAbsoluta: String(resultado.diasSessaoAbsoluta),
         tamanhoMaximoArquivoBytes: String(resultado.tamanhoMaximoArquivoBytes) });
@@ -63,6 +65,9 @@ export default function Instituicao() {
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
           <TextField label={t('Dias de permanência na lixeira')} type="number" value={dados.diasLixeira}
             inputProps={{ min: 1, step: 1 }} onChange={(evento) => alterar('diasLixeira', evento.target.value)} required />
+          <TextField label={t('Dias de retenção do histórico de integração')} type="number" value={dados.diasRetencaoLogIntegracao}
+            inputProps={{ min: 1, step: 1 }} onChange={(evento) => alterar('diasRetencaoLogIntegracao', evento.target.value)} required
+            helperText={t('Prazo inicial: 90 dias. A limpeza automática será ligada com o registro das chamadas.')} />
           <TextField label={t('Tamanho máximo de arquivo (bytes)')} type="number" value={dados.tamanhoMaximoArquivoBytes}
             inputProps={{ min: 1, max: 2147483647, step: 1 }}
             helperText={t('104857600 bytes correspondem a 100 MiB.')} onChange={(evento) => alterar('tamanhoMaximoArquivoBytes', evento.target.value)} required />

@@ -5,7 +5,7 @@ import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import org.bson.BsonString;
 import org.bson.Document;
@@ -17,6 +17,7 @@ import com.mongodb.WriteConcern;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.MongoCollection;
 import com.mongodb.client.gridfs.GridFSBucket;
 import com.mongodb.client.gridfs.GridFSBuckets;
 import com.mongodb.client.gridfs.model.GridFSUploadOptions;
@@ -44,6 +45,11 @@ public final class MongoArmazenamento implements AutoCloseable {
 	public void verificar() {
 
 		banco.runCommand( new Document( "ping", 1 ) );
+	}
+
+	public MongoCollection<Document> colecaoCacheIntegracao() {
+
+		return banco.getCollection( "integracao_get_data_cache" );
 	}
 
 	public void enviar( UUID idArquivo, UUID idVersao, String nome, String titulo, String contentType, InputStream conteudo ) {

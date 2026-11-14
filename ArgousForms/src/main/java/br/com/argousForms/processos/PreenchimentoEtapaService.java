@@ -17,7 +17,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -50,6 +50,14 @@ public final class PreenchimentoEtapaService {
 
 	private static final Logger LOG = Logger.getLogger( PreenchimentoEtapaService.class.getName() );
 	private final ProcessosService processos = new ProcessosService();
+
+	private String tituloDestino( Conexao conexao, UUID idEtapa ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select DS_TITULO from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_ETAPA = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			try ( ResultSet linha = consulta.executeQuery() ) { return linha.next() ? linha.getString( 1 ) : "Etapa"; }
+		}
+	}
 
 	public JSONObject consultar( AutenticacaoLocalService.Usuario usuario, UUID idEtapa ) throws Exception {
 
@@ -86,6 +94,8 @@ public final class PreenchimentoEtapaService {
 				new ProcessoEtapaResponsavelNegocio( conexao, historico ).insere();
 				ForumProcessoService.registrar( conexao, UUID.fromString( dados.getString( "idProcesso" ) ), usuario.idUsuario(), "A",
 					"Etapa assumida: " + dados.getString( "titulo" ) + ".", new JSONObject().put( "idEtapa", idEtapa.toString() ) );
+				new NotificacoesService().etapaAssumida( conexao, idEtapa, UUID.fromString( dados.getString( "idProcesso" ) ),
+					usuario.idUsuario(), dados.getString( "titulo" ) );
 				conexao.commit();
 				return new JSONObject().put( "idEtapa", idEtapa.toString() );
 			} catch ( Exception e ) {
@@ -139,7 +149,15 @@ public final class PreenchimentoEtapaService {
 				Processo processo = ProcessoLocalizador.buscaProcesso( conexao, idProcesso );
 				if( idDestino == null ) {
 					if( possuiOutraEtapaAberta( conexao, idProcesso, idEtapa ) ) throw fluxoAindaNaoExecutavel();
-					processo.setTpSituacao( "A" );
+					if( gestorFinaliza( conexao, UUID.fromString( dados.getString( "idVersao" ) ) ) ) {
+						processo.setTpSituacao( "A" );
+						new NotificacoesService().aguardaConclusao( conexao, idProcesso, idEtapa, processo.getIdUsuarioGestor(), usuario.idUsuario() );
+					} else {
+						processo.setTpSituacao( "F" );
+						processo.setDtEncerramento( agora );
+						ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído automaticamente após a última etapa.", null );
+						new NotificacoesService().processoConcluido( conexao, idProcesso, usuario.idUsuario() );
+					}
 				} else {
 					ProcessoEtapa proxima = new ProcessoEtapa();
 					proxima.setIdProcessoEtapa( UUID.randomUUID() );
@@ -161,6 +179,8 @@ public final class PreenchimentoEtapaService {
 					passagem.setTpMovimento( "E" );
 					passagem.setDtInclusao( agora );
 					new ProcessoEtapaEncaminhamentoNegocio( conexao, passagem ).insere();
+					new NotificacoesService().etapaDisponivel( conexao, idProcesso, proxima.getIdProcessoEtapa(), idDestino,
+						UUID.fromString( dados.getString( "idVersao" ) ), usuario.idUsuario(), tituloDestino( conexao, idDestino ) );
 					processo.setTpSituacao( "E" );
 				}
 				new ProcessoNegocio( conexao, processo ).altera();
@@ -168,7 +188,7 @@ public final class PreenchimentoEtapaService {
 					new JSONObject().put( "idEtapa", idEtapa.toString() ).put( "idEtapaDestino", idDestino == null ? JSONObject.NULL : idDestino.toString() ) );
 				commitTentado = true;
 				conexao.commit();
-				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", idDestino == null ? "A" : "E" );
+				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", processo.getTpSituacao() );
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) {
 					try { conexao.rollback(); }
@@ -265,6 +285,18 @@ public final class PreenchimentoEtapaService {
 				historico.setDtFim( agora );
 				historico.setTpFim( "9" );
 				new ProcessoEtapaResponsavelNegocio( conexao, historico ).altera();
+			}
+		}
+	}
+
+	private boolean gestorFinaliza( Conexao conexao, UUID idVersao ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+			"select SN_GESTOR_FINALIZA from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO_VERSAO = ?" ) ) {
+			consulta.setObject( 1, idVersao );
+			try ( ResultSet linha = consulta.executeQuery() ) {
+				if( !linha.next() ) throw new ArgousFormsApiException( 409, "VERSAO_NAO_ENCONTRADA", "Versão do Protocolo não encontrada." );
+				return linha.getBoolean( 1 );
 			}
 		}
 	}

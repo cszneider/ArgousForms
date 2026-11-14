@@ -44,7 +44,7 @@ Não transformar itens identificados nesses documentos como proposta, recomenda�
 ## Base técnica já definida
 
 - Backend Java 21 em projeto Maven para Eclipse.
-- Empacotamento WAR, Servlet 4.0 e conteúdo web em `src/main/webapp`.
+- Empacotamento WAR, Jakarta Servlet 6.1 para Tomcat 11.0.15 e conteúdo web em `src/main/webapp`.
 - Artefato final `ArgousForms.war` e aplicação explodida `target/ArgousForms/`.
 - Biblioteca `br.com.quatro:Quatro:0.0.8`.
 - PostgreSQL com driver `org.postgresql:postgresql:42.7.3`.
@@ -91,7 +91,7 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 
 - `ArgousForms/src/main/webapp/WEB-INF/agforms.xml` contém parâmetros específicos da aplicação e referências do keystore de desenvolvimento.
 - `ArgousForms/src/main/webapp/WEB-INF/parametros-agforms.xml` contém a estrutura de parâmetros da Quatro; credenciais e URL do banco permanecem pendentes de configuração.
-- `ArgousForms/src/main/webapp/WEB-INF/web.xml` configura o `quatro.util.StartupServlet` e aponta para o arquivo de parâmetros na aplicação explodida de desenvolvimento.
+- `ArgousForms/src/main/webapp/WEB-INF/web.xml` configura o `ArgousFormsInicializacaoListener` próprio e o servlet de entrada; a inicialização não utiliza mais `quatro.util.StartupServlet`.
 - Não inserir credenciais reais nesses arquivos nem substituir valores pendentes sem autorização e sem definir a forma segura de proteção.
 - A chave HMAC da confirmação de e-mail foi configurada pelo gestor em `agforms.xml`, na entrada `chave-confirmacao`. O valor armazenado é codificado: a leitura deverá aplicar `quatro.util.BDUtil.decodifica()` e depois decodificar o Base64 para recuperar os bytes da chave. Essa definição substitui o uso da variável de ambiente `ARGOUSFORMS_CONFIRMACAO_CHAVE`; não registrar o valor em logs ou documentação. A leitura utiliza o recurso `/WEB-INF/agforms.xml` da aplicação pelo contexto Servlet.
 
@@ -103,11 +103,13 @@ Versões, bibliotecas e ferramentas não relacionadas acima não devem ser presu
 - Usar linhas vazias para separar blocos lógicos e facilitar a leitura humana do método.
 - Preservar quebras de linha quando a expressão for genuinamente longa ou complexa e a compactação prejudicar a interpretação.
 - Não deixar espaços ou tabulações no final das linhas.
-- Usar `CodigoConfirmacao.java`, ajustada pelo gestor, como referência concreta de formatação Java.
+- Usar `CodigoConfirmacao.java` e as alterações feitas pelo gestor em `LimiteCadastro.java` como referências concretas de formatação Java. Em `LimiteCadastro.java`, tomar como regras as linhas efetivamente ajustadas pelo gestor; trechos que ele não modificou não definem exceções ao estilo.
 - Inserir espaços internos nos parênteses não vazios de declarações, chamadas, construções e condições: `metodo( argumento )`, `new Tipo( argumento )`, `if( condicao )` e `catch ( Exception e )`. Manter parênteses vazios como `metodo()`.
 - Usar `if(`, sem espaço entre `if` e `(`, conforme a referência do gestor.
 - Em alocações de arrays, usar espaços internos: `new byte[ 32 ]`; declarações de tipo permanecem `byte[]`.
 - Em métodos com vários blocos lógicos, deixar uma linha vazia após a abertura do corpo e entre validação, processamento e retorno. Métodos simples de retorno direto podem permanecer compactos.
+- Como em `LimiteCadastro.java`, separar a preparação dos dados, os blocos condicionais e as verificações finais com linhas realmente vazias. Aplicar a mesma separação após a abertura de classes internas quando ela ajudar a distinguir seus membros; não inserir tabulações ou espaços nas linhas vazias.
+- Manter expressões lambda simples na mesma linha da chamada quando legíveis, com os espaços internos dos parênteses externos: `removeIf( entrada -> condicao )`.
 - Manter guardas simples com `return` na mesma linha quando legíveis; usar bloco com chaves para validações que lançam exceção, conforme a classe de referência.
 - Separar os grupos de imports `java.*` e `javax.*` por uma linha vazia.
 - Antes de entregar alterações Java, revisar a parte tocada contra essas regras; não aplicar formatação automática que remova os espaços internos ou as separações de blocos.

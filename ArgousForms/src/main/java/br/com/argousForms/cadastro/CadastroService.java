@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 import javax.mail.internet.InternetAddress;
-import javax.servlet.ServletContext;
+import jakarta.servlet.ServletContext;
 
 import br.com.argousForms.api.ArgousFormsApiException;
 import br.com.argousForms.email.EmailException;
