@@ -1473,7 +1473,7 @@ public final class ProtocolosService {
 		return consultar( usuario, idProtocolo );
 	}
 
-	private void validarDiasVencimento( Integer diasVencimento ) {
+	private void validarDiasVencimento( Integer diasVencimento ) throws ArgousFormsApiException {
 
 		if( diasVencimento != null && ( diasVencimento < 1 || diasVencimento > Short.MAX_VALUE ) ) {
 			throw new ArgousFormsApiException( 400, "VENCIMENTO_INVALIDO", "Informe um prazo de 1 a 32767 dias ou deixe sem vencimento." );

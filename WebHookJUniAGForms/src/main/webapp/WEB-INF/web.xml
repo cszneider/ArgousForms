@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_1.xsd"
+         version="6.1">
+  <display-name>WebHookJUniAGForms</display-name>
+
+  <servlet>
+    <servlet-name>WebHookServlet</servlet-name>
+    <servlet-class>br.com.unimed.webhook.WebHookServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>WebHookServlet</servlet-name>
+    <url-pattern>/webhook</url-pattern>
+  </servlet-mapping>
+</web-app>

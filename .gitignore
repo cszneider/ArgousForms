@@ -6,6 +6,15 @@
 /ArgousForms/.project
 /ArgousForms/.settings/
 
+/WebHookJUniAGForms/target/
+/WebHookJUniAGForms/bin/
+/WebHookJUniAGForms/.classpath
+/WebHookJUniAGForms/.project
+/WebHookJUniAGForms/.settings/
+/WebHookJUniAGForms/.env
+/WebHookJUniAGForms/.env.*
+!/WebHookJUniAGForms/.env.example
+
 /ArgousForms/frontend/node_modules/
 /ArgousForms/frontend/dist/
 /ArgousForms/frontend/.env
