@@ -46,7 +46,7 @@ Não transformar itens identificados nesses documentos como proposta, recomenda�
 - Backend Java 21 em projeto Maven para Eclipse.
 - Empacotamento WAR, Jakarta Servlet 6.1 para Tomcat 11.0.15 e conteúdo web em `src/main/webapp`.
 - Artefato final `ArgousForms.war` e aplicação explodida `target/ArgousForms/`.
-- Biblioteca `br.com.quatro:Quatro:0.0.8`.
+- Biblioteca `br.com.quatro:Quatro:0.0.9`.
 - PostgreSQL com driver `org.postgresql:postgresql:42.7.3`.
 - MongoDB para documentos e estruturas documentais dinâmicas.
 - Redis para cache e dados efêmeros.
