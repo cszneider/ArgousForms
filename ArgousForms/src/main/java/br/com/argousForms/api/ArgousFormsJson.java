@@ -2,7 +2,7 @@ package br.com.argousForms.api;
 
 import java.io.IOException;
 import java.util.Map;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import org.json.JSONObject;
 
 public final class ArgousFormsJson {

@@ -1,0 +1,12 @@
+-- Adequa a base existente aos campos de finalização e vencimento dos modelos.
+-- Executar uma vez. Versões existentes preservam a finalização pelo gestor.
+BEGIN;
+
+ALTER TABLE Processos.PROTOCOLO_VERSOES ADD COLUMN SN_GESTOR_FINALIZA Boolean;
+UPDATE Processos.PROTOCOLO_VERSOES SET SN_GESTOR_FINALIZA = TRUE;
+ALTER TABLE Processos.PROTOCOLO_VERSOES ALTER COLUMN SN_GESTOR_FINALIZA SET NOT NULL;
+
+ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_VERSOES ADD COLUMN NR_DIAS_VENCIMENTO Smallint NULL;
+ALTER TABLE Processos.PROTOCOLO_DOCUMENTO_VERSOES ADD CONSTRAINT ck_protocolo_documento_versoes_dias_vencimento CHECK (NR_DIAS_VENCIMENTO IS NULL OR NR_DIAS_VENCIMENTO > 0);
+
+COMMIT;

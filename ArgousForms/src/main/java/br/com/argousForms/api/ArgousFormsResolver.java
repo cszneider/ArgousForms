@@ -13,12 +13,12 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.servlet.ServletException;
-import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.json.JSONException;
 import org.json.JSONArray;
@@ -43,10 +43,14 @@ import br.com.argousForms.protocolos.GestoresProtocoloService;
 import br.com.argousForms.processos.ForumProcessoService;
 import br.com.argousForms.processos.ProcessosService;
 import br.com.argousForms.processos.PreenchimentoEtapaService;
+import br.com.argousForms.processos.NotificacoesService;
 import br.com.argousForms.protocolos.FluxoProtocolosService;
 import br.com.argousForms.protocolos.VariaveisSistema;
 import br.com.argousForms.protocolos.VariaveisInstituicaoService;
 import br.com.argousForms.recursos.RecursosService;
+import br.com.argousForms.integracao.IntegracaoService;
+import br.com.argousForms.integracao.HistoricoIntegracaoService;
+import br.com.argousForms.integracao.ChavesWebhookService;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.sql.Query;
@@ -71,10 +75,14 @@ public final class ArgousFormsResolver extends HttpServlet {
 	private final NovaVersaoProtocoloService novaVersaoProtocolo = new NovaVersaoProtocoloService();
 	private final GestoresProtocoloService gestoresProtocolo = new GestoresProtocoloService();
 	private final ProcessosService processos = new ProcessosService();
+	private final NotificacoesService notificacoes = new NotificacoesService();
 	private final FluxoProtocolosService fluxoProtocolos = new FluxoProtocolosService();
 	private final VariaveisInstituicaoService variaveisInstituicao = new VariaveisInstituicaoService();
 	private final RecursosService recursos = new RecursosService();
 	private final InstituicaoService instituicao = new InstituicaoService();
+	private final IntegracaoService integracao = new IntegracaoService();
+	private final HistoricoIntegracaoService historicoIntegracao = new HistoricoIntegracaoService();
+	private final ChavesWebhookService chavesWebhook = new ChavesWebhookService();
 
 	@Override
 	protected void service( HttpServletRequest request, HttpServletResponse response ) throws ServletException, IOException {
@@ -111,6 +119,57 @@ public final class ArgousFormsResolver extends HttpServlet {
 	}
 
 	private void executarOperacao( String operacao, JSONObject dados, HttpServletRequest request, HttpServletResponse response ) throws Exception {
+
+		if( "DOCUMENTACAO_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, integracao.documentacao( usuario ) );
+			return;
+		}
+
+		if( "LISTAR_PROTOCOLOS_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, integracao.listarProtocolos( usuario ) );
+			return;
+		}
+
+		if( "TESTAR_GET_DATA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			UUID idProtocolo = dados.has( "idProtocolo" ) && !dados.isNull( "idProtocolo" ) && !dados.optString( "idProtocolo", "" ).isBlank()
+				? uuidObrigatorio( dados, "idProtocolo" ) : null;
+			ArgousFormsJson.enviarSucesso( response, 200, integracao.testar( usuario, getServletContext(), idProtocolo, dados.optString( "codigo", "" ), dados.optJSONObject( "parametros" ) ) );
+			return;
+		}
+
+		if( "LISTAR_CACHE_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, integracao.listarCache( usuario, getServletContext(), uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
+		if( "INVALIDAR_CACHE_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, integracao.invalidarCache( usuario, getServletContext(), uuidObrigatorio( dados, "idProtocolo" ), dados.optString( "idCache", "" ) ) );
+			return;
+		}
+
+		if( "LISTAR_CONSULTAS_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			UUID idRequisicao = dados.optString( "idRequisicao", "" ).isBlank() ? null : uuidObrigatorio( dados, "idRequisicao" );
+			ArgousFormsJson.enviarSucesso( response, 200, historicoIntegracao.listar( usuario, dados.optString( "codigo", "" ), idRequisicao, dados.optInt( "pagina", 0 ) ) );
+			return;
+		}
+
+		if( "LISTAR_TENTATIVAS_INTEGRACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, historicoIntegracao.tentativas( usuario, uuidObrigatorio( dados, "idRequisicao" ) ) );
+			return;
+		}
+
+		if( "LISTAR_CHAVES_WEBHOOK".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, chavesWebhook.listar( usuario ) );
+			return;
+		}
 
 		if( "PING".equals( operacao ) ) {
 			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "dataHoraSistema", ZonedDateTime.now().toString() ) ) );
@@ -206,6 +265,25 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "LISTAR_NOTIFICACOES".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, notificacoes.listar( usuario, dados.optInt( "limite", 100 ) ) );
+			return;
+		}
+
+		if( "MARCAR_NOTIFICACAO_LIDA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, notificacoes.marcarLida( usuario, uuidObrigatorio( dados, "idNotificacao" ) ) );
+			return;
+		}
+
+		if( "DECIDIR_RESPONSAVEL_NOTIFICACAO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, notificacoes.decidirResponsavel( usuario,
+				uuidObrigatorio( dados, "idNotificacao" ), dados.optBoolean( "manter", false ) ) );
+			return;
+		}
+
 		if( "CONSULTAR_ETAPA_PROCESSO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, new PreenchimentoEtapaService().consultar( usuario, uuidObrigatorio( dados, "idEtapa" ) ) );
@@ -264,10 +342,16 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "DESCARTAR_RASCUNHO_PROTOCOLO".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.descartarRascunho( usuario, uuidObrigatorio( dados, "idProtocolo" ) ) );
+			return;
+		}
+
 		if( "SALVAR_DADOS_PROTOCOLO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarDados( usuario, uuidObrigatorio( dados, "idProtocolo" ),
-				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ) ) );
+				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optBoolean( "gestorFinaliza", true ) ) );
 			return;
 		}
 
@@ -418,7 +502,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.alterarModeloPdf( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), uuidObrigatorio( dados, "idModelo" ),
-				dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ) ) );
+				dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ), diasVencimento( dados ) ) );
 			return;
 		}
 
@@ -427,7 +511,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarModeloHtml( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idModelo" ),
 				dados.optString( "codigo", "" ), dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ),
-				dados.optString( "css", "" ), dados.optJSONArray( "partes" ) ) );
+				dados.optString( "css", "" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
 			return;
 		}
 
@@ -478,6 +562,24 @@ public final class ArgousFormsResolver extends HttpServlet {
 			String nome = ArgousFormsJson.getStringObrigatoria( dados, "nome", true );
 			String descricao = dados.optString( "descricao", "" );
 			ArgousFormsJson.enviarSucesso( response, 201, documentos.criarPasta( usuario, idPai, nome, descricao ) );
+			return;
+		}
+
+		if( "ENVIAR_ARQUIVO_LIXEIRA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.enviarArquivoLixeira( usuario, uuidObrigatorio( dados, "idArquivo" ) ) );
+			return;
+		}
+
+		if( "CONTAR_PASTA_LIXEIRA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.contarPastaLixeira( usuario, uuidObrigatorio( dados, "idPasta" ) ) );
+			return;
+		}
+
+		if( "ENVIAR_PASTA_LIXEIRA".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, documentos.enviarPastaLixeira( usuario, uuidObrigatorio( dados, "idPasta" ), dados.optInt( "quantidade", -1 ) ) );
 			return;
 		}
 
@@ -802,6 +904,16 @@ public final class ArgousFormsResolver extends HttpServlet {
 			throw new ArgousFormsApiException( 400, "IDENTIFICADOR_INVALIDO", "Informe um identificador de atributo válido." );
 		}
 		return numero;
+	}
+
+	private Integer diasVencimento( JSONObject dados ) throws ArgousFormsApiException {
+
+		Object valor = dados.opt( "diasVencimento" );
+		if( valor == null || JSONObject.NULL.equals( valor ) ) return null;
+		if( !( valor instanceof Integer dias ) || dias < 1 || dias > Short.MAX_VALUE ) {
+			throw new ArgousFormsApiException( 400, "VENCIMENTO_INVALIDO", "Informe um prazo de 1 a 32767 dias ou deixe sem vencimento." );
+		}
+		return dias;
 	}
 
 	private UUID uuidOpcional( JSONObject dados, String campo ) throws ArgousFormsApiException {

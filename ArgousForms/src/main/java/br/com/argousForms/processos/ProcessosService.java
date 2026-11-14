@@ -55,6 +55,7 @@ public final class ProcessosService {
 				processo.setDtEncerramento( new QtData( Instant.now().toEpochMilli() ) );
 				new ProcessoNegocio( conexao, processo ).altera();
 				ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído pelo gestor.", null );
+				new NotificacoesService().processoConcluido( conexao, idProcesso, usuario.idUsuario() );
 				conexao.commit();
 				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", "F" );
 			} catch ( Exception e ) {
@@ -107,6 +108,8 @@ public final class ProcessosService {
 				new ProcessoEtapaEncaminhamentoNegocio( conexao, entrada ).insere();
 				ForumProcessoService.registrar( conexao, processo.getIdProcesso(), usuario.idUsuario(), "A", "Processo iniciado.",
 					new JSONObject().put( "idEtapa", etapa.getIdProcessoEtapa().toString() ) );
+				new NotificacoesService().etapaDisponivel( conexao, processo.getIdProcesso(), etapa.getIdProcessoEtapa(), idEtapa,
+					idVersao, usuario.idUsuario(), tituloEtapa( conexao, idEtapa ) );
 
 				conexao.commit();
 				return new JSONObject().put( "idProcesso", processo.getIdProcesso().toString() ).put( "idEtapa", etapa.getIdProcessoEtapa().toString() );
@@ -122,6 +125,14 @@ public final class ProcessosService {
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select 1 from Cadastro.USUARIOS_SISTEMA where ID_USUARIO_SISTEMA = ? and DT_EXCLUSAO is null" ) ) {
 			consulta.setObject( 1, idUsuario );
 			try ( ResultSet linhas = consulta.executeQuery() ) { return linhas.next(); }
+		}
+	}
+
+	private String tituloEtapa( Conexao conexao, UUID idEtapa ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select DS_TITULO from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_ETAPA = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			try ( ResultSet linha = consulta.executeQuery() ) { return linha.next() ? linha.getString( 1 ) : "Etapa"; }
 		}
 	}
 

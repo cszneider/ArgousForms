@@ -221,7 +221,8 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
 
   async function excluirProtocolo() {
     if (!exclusao) return;
-    await executarEdicao('EXCLUIR_PROTOCOLO', { idProtocolo: exclusao }, () => {
+    const publicado = (protocolos.find((item) => item.id === exclusao)?.versaoPublicada || 0) > 0;
+    await executarEdicao(publicado ? 'DESCARTAR_RASCUNHO_PROTOCOLO' : 'EXCLUIR_PROTOCOLO', { idProtocolo: exclusao }, () => {
       setExclusao(null);
       setSelecionado(null);
       setArea('visao');
@@ -252,6 +253,12 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       setErro(t('Informe código, título e arquivo PDF.'));
       return;
     }
+    const diasVencimento = modeloPdf.diasVencimento === '' || modeloPdf.diasVencimento == null
+      ? null : Number(modeloPdf.diasVencimento);
+    if (diasVencimento !== null && (!Number.isInteger(diasVencimento) || diasVencimento < 1 || diasVencimento > 32767)) {
+      setErro(t('Informe um prazo de 1 a 32767 dias ou deixe sem vencimento.'));
+      return;
+    }
     if (!modeloPdf.id && protocolo.rascunho.documentos.some((item) => item.codigo === codigo)) {
       setErro(t('Já existe um modelo de documento com este código.'));
       return;
@@ -261,7 +268,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
     try {
       if (modeloPdf.id) {
         await executar('ALTERAR_MODELO_PDF', { idProtocolo: protocolo.id, idModelo: modeloPdf.id,
-          titulo, observacoes: modeloPdf.observacoes });
+          titulo, observacoes: modeloPdf.observacoes, diasVencimento });
         await atualizarLista(protocolo.id);
         setModeloPdf(null);
         return;
@@ -271,6 +278,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       dados.append('codigoModelo', codigo);
       dados.append('titulo', titulo);
       dados.append('observacoesModelo', modeloPdf.observacoes);
+      if (diasVencimento !== null) dados.append('diasVencimentoModelo', String(diasVencimento));
       dados.append('arquivo', modeloPdf.arquivo);
       await enviarArquivo(dados, setProgressoPdf);
       await atualizarLista(protocolo.id);
@@ -284,11 +292,16 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
   }
 
   async function salvarModeloHtml(dados) {
+    const diasVencimento = dados.diasVencimento === '' || dados.diasVencimento == null
+      ? null : Number(dados.diasVencimento);
+    if (diasVencimento !== null && (!Number.isInteger(diasVencimento) || diasVencimento < 1 || diasVencimento > 32767)) {
+      throw new Error(t('Informe um prazo de 1 a 32767 dias ou deixe sem vencimento.'));
+    }
     setSalvando(true);
     try {
       await executar('SALVAR_MODELO_HTML', { idProtocolo: protocolo.id, idModelo: dados.id || null,
         codigo: dados.codigo.trim(), titulo: dados.titulo.trim(), observacoes: dados.observacoes || '',
-        css: dados.css || '', partes: dados.partes });
+        css: dados.css || '', partes: dados.partes, diasVencimento });
       await atualizarLista(protocolo.id);
       setModeloHtml(null);
     } finally {
@@ -318,7 +331,8 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       });
       return;
     }
-    await executarEdicao('SALVAR_DADOS_PROTOCOLO', { idProtocolo: protocolo.id, titulo, descricao: cadastro.descricao }, () => setCadastro(null));
+    await executarEdicao('SALVAR_DADOS_PROTOCOLO', { idProtocolo: protocolo.id, titulo,
+      descricao: cadastro.descricao, gestorFinaliza: cadastro.gestorFinaliza }, () => setCadastro(null));
   }
 
   async function salvarVariavel() {
@@ -612,6 +626,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                     modo: 'editar',
                     titulo: protocolo.titulo,
                     descricao: protocolo.descricao,
+                    gestorFinaliza: protocolo.rascunho.gestorFinaliza,
                   });
                 }}
               >
@@ -625,7 +640,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                   setExclusao(protocolo.id);
                 }}
               >
-                {t('Excluir Protocolo')}
+                {t(protocolo.versaoPublicada > 0 ? 'Descartar rascunho' : 'Excluir Protocolo')}
               </Button>
             </div>
           </header>
@@ -669,6 +684,9 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                         'Comece pelos formulários; crie variáveis quando precisar. Depois organize as etapas e os documentos que o processo poderá gerar.',
                       )}
                     </p>
+                    <p>{protocolo.rascunho.gestorFinaliza
+                      ? t('O gestor confirma a conclusão do Processo após a última etapa.')
+                      : t('O Processo termina automaticamente após a última etapa.')}</p>
                   </div>
                   <div className="protocolos-area-grid">
                     {areas.map(({ id, titulo, Icon }) => (
@@ -1132,11 +1150,11 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                     </div>
                     <Button variant="contained" startIcon={<Plus size={16} />}
                       disabled={!protocolo.rascunho.pasta}
-                      onClick={() => { setErro(''); setModeloPdf({ codigo: '', titulo: '', observacoes: '', arquivo: null }); }}>
+                      onClick={() => { setErro(''); setModeloPdf({ codigo: '', titulo: '', observacoes: '', diasVencimento: '', arquivo: null }); }}>
                       {t('Novo modelo PDF')}
                     </Button>
                     <Button variant="outlined" startIcon={<Plus size={16} />}
-                      onClick={() => { setErro(''); setModeloHtml({ codigo: '', titulo: '', observacoes: '', css: '', partes: [] }); }}>
+                      onClick={() => { setErro(''); setModeloHtml({ codigo: '', titulo: '', observacoes: '', diasVencimento: '', css: '', partes: [] }); }}>
                       {t('Novo modelo HTML')}
                     </Button>
                   </div>
@@ -1150,6 +1168,9 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                             <strong>{documento.titulo}</strong>
                             <small>{documento.codigo} · {documento.tipoModelo === 'H' ? 'HTML' : `PDF · ${documento.arquivoNome}`}</small>
                             {documento.observacoes && <p>{documento.observacoes}</p>}
+                            <p>{documento.diasVencimento
+                              ? `${t('Prazo de validade')}: ${documento.diasVencimento} ${t('dias')}`
+                              : t('Sem vencimento')}</p>
                           </div>
                           {documento.tipoModelo === 'H' ? <>
                             <Button size="small" onClick={() => setModeloHtml({ ...documento })}>{t('Editar HTML')}</Button>
@@ -1186,10 +1207,15 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       )}
 
       <Dialog open={!!exclusao} onClose={() => setExclusao(null)} fullWidth maxWidth="sm">
-        <DialogTitle>{t('Excluir Protocolo')}</DialogTitle>
+        <DialogTitle>{t(protocolos.find((item) => item.id === exclusao)?.versaoPublicada > 0 ? 'Descartar rascunho' : 'Excluir Protocolo')}</DialogTitle>
         <DialogContent>
-          <p>{t('Deseja excluir o Protocolo')} <strong>{protocolos.find((item) => item.id === exclusao)?.titulo}</strong>?</p>
-          <p>{t('O rascunho, seus formulários, variáveis e modelos de documentos serão excluídos. Esta ação não pode ser desfeita.')}</p>
+          {protocolos.find((item) => item.id === exclusao)?.versaoPublicada > 0 ? <>
+            <p>{t('Deseja descartar o rascunho de')} <strong>{protocolos.find((item) => item.id === exclusao)?.titulo}</strong>?</p>
+            <p>{t('Somente a nova versão em rascunho será excluída. As versões publicadas e os processos existentes permanecerão. Esta ação não pode ser desfeita.')}</p>
+          </> : <>
+            <p>{t('Deseja excluir o Protocolo')} <strong>{protocolos.find((item) => item.id === exclusao)?.titulo}</strong>?</p>
+            <p>{t('O rascunho, seus formulários, variáveis e modelos de documentos serão excluídos. Esta ação não pode ser desfeita.')}</p>
+          </>}
           {protocolos.find((item) => item.id === exclusao)?.rascunho?.pasta &&
             <p>{t('A pasta associada permanecerá no gestor de documentos.')}</p>}
           {protocolos.find((item) => item.id === exclusao)?.rascunho?.documentos?.some((item) => item.tipoModelo !== 'H') &&
@@ -1199,7 +1225,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setExclusao(null)}>{t('Cancelar')}</Button>
-          <Button color="error" variant="contained" onClick={excluirProtocolo}>{t('Excluir Protocolo')}</Button>
+          <Button color="error" variant="contained" onClick={excluirProtocolo}>{t(protocolos.find((item) => item.id === exclusao)?.versaoPublicada > 0 ? 'Descartar rascunho' : 'Excluir Protocolo')}</Button>
         </DialogActions>
       </Dialog>
       {seletorPastaAberto && <SeletorPasta aberto permitirCriacao pastaAtual={protocolo?.rascunho?.pasta}
@@ -1237,6 +1263,11 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
           <TextField label={t('Observações (opcional)')} fullWidth multiline minRows={2}
             value={modeloPdf?.observacoes || ''} disabled={salvando}
             onChange={(evento) => setModeloPdf({ ...modeloPdf, observacoes: evento.target.value })} />
+          <TextField label={t('Prazo de validade em dias (opcional)')} type="number" fullWidth
+            value={modeloPdf?.diasVencimento ?? ''} disabled={salvando}
+            inputProps={{ min: 1, max: 32767, step: 1 }}
+            onChange={(evento) => setModeloPdf({ ...modeloPdf, diasVencimento: evento.target.value })}
+            helperText={t('Sem prazo, o documento não vence.')} />
           {!modeloPdf?.id && <Button component="label" variant="outlined" disabled={salvando}>
             {modeloPdf?.arquivo?.name || t('Escolher PDF')}
             <input hidden type="file" accept="application/pdf,.pdf" onChange={(evento) => {
@@ -1304,6 +1335,10 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
               setCadastro({ ...cadastro, descricao: evento.target.value })
             }
           />
+          {cadastro?.modo !== 'novo' && <FormControlLabel
+            label={t('Exigir confirmação do gestor para concluir o Processo')}
+            control={<Checkbox checked={cadastro?.gestorFinaliza !== false}
+              onChange={(evento) => setCadastro({ ...cadastro, gestorFinaliza: evento.target.checked })} />} />}
           <p>{t('Você poderá definir a pasta antes da publicação.')}</p>
         </DialogContent>
         <DialogActions>

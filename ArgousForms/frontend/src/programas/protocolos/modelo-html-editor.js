@@ -275,6 +275,10 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
           onChange={(evento) => setDados({ ...dados, titulo: evento.target.value })} inputProps={{ maxLength: 70 }} />
         <TextField label={t('Observações (opcional)')} value={dados.observacoes || ''} disabled={salvando || modelo.versao > 1}
           onChange={(evento) => setDados({ ...dados, observacoes: evento.target.value })} />
+        <TextField label={t('Prazo de validade em dias (opcional)')} type="number"
+          value={dados.diasVencimento ?? ''} disabled={salvando} inputProps={{ min: 1, max: 32767, step: 1 }}
+          onChange={(evento) => setDados({ ...dados, diasVencimento: evento.target.value })}
+          helperText={t('Sem prazo, o documento não vence.')} />
       </div>
       <div className="modelo-html-partes">
         <aside>

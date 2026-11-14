@@ -14,6 +14,9 @@ CREATE SCHEMA IF NOT EXISTS Cadastro;
 CREATE SCHEMA IF NOT EXISTS Docs;
 
 DROP TABLE IF EXISTS Cadastro.RECURSOS_INSTITUICAO;
+DROP TABLE IF EXISTS Cadastro.INTEGRACAO_TENTATIVAS;
+DROP TABLE IF EXISTS Cadastro.INTEGRACAO_CONSULTAS;
+DROP TABLE IF EXISTS Cadastro.CHAVES_WEBHOOK;
 DROP TABLE IF EXISTS Cadastro.INSTITUICAO;
 DROP TABLE IF EXISTS Docs.ARQUIVO_TAGS;
 DROP TABLE IF EXISTS Docs.TAGS_ARQUIVO;
@@ -219,8 +222,9 @@ Create table  Cadastro.INSTITUICAO
 	ID_INSTITUICAO Smallint NOT NULL Default 1 Constraint ck_instituicoes_registro_unico Check (ID_INSTITUICAO = 1 ),
 	DS_NOME Varchar(200) NOT NULL,
 	NR_DIAS_PERMANENCIA_LIXEIRA Integer NOT NULL Default 30 Check (NR_DIAS_PERMANENCIA_LIXEIRA > 0),
-	NR_DIAS_SESSAO_MOVEL Integer NOT NULL Default 7 Check (NR_DIAS_SESSAO_MOVEL > 0),
-	NR_DIAS_SESSAO_ABSOLUTA Integer NOT NULL Default 60 Check (NR_DIAS_SESSAO_ABSOLUTA > 0),
+	NR_DIAS_SESSAO_MOVEL Smallint NOT NULL Default 7 Check (NR_DIAS_SESSAO_MOVEL > 0),
+	NR_DIAS_SESSAO_ABSOLUTA Smallint NOT NULL Default 60 Check (NR_DIAS_SESSAO_ABSOLUTA > 0),
+	NR_DIAS_RETENCAO_LOG_INTEGRACAO Smallint NOT NULL Default 90 Check (NR_DIAS_RETENCAO_LOG_INTEGRACAO > 0),
 	NR_TAMANHO_MAXIMO_ARQUIVO_BYTES BigInt NOT NULL Default 33554432 Check (NR_TAMANHO_MAXIMO_ARQUIVO_BYTES > 0),
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_ALTERACAO Timestamp NOT NULL,
@@ -231,6 +235,67 @@ Create table  Cadastro.INSTITUICAO
 	ID_PASTA UUID NULL,
  primary key (ID_INSTITUICAO)
 );
+
+-- Chaves de integração: o segredo cifrado e seu nonce nunca são expostos em consultas.
+Create table Cadastro.CHAVES_WEBHOOK
+(
+	ID_WEBHOOK UUID NOT NULL,
+	DS_TITULO Varchar(50) NOT NULL Check (BTRIM(DS_TITULO) <> ''),
+	VL_CHAVE_CIFRADA Bytea NOT NULL,
+	VL_NONCE Bytea NOT NULL,
+	ID_USUARIO_INCLUSAO UUID NOT NULL,
+	DT_INCLUSAO Timestamp with time zone NOT NULL,
+	DT_ATIVACAO Timestamp with time zone NULL,
+	DT_VENCIMENTO Timestamp with time zone NULL Check (DT_VENCIMENTO IS NULL OR DT_VENCIMENTO > DT_INCLUSAO),
+	ID_USUARIO_INVALIDACAO UUID NULL,
+	DT_INVALIDACAO Timestamp with time zone NULL,
+	primary key (ID_WEBHOOK),
+	CONSTRAINT ck_chave_webhook_invalidacao CHECK ((DT_INVALIDACAO IS NULL AND ID_USUARIO_INVALIDACAO IS NULL) OR (DT_INVALIDACAO IS NOT NULL AND ID_USUARIO_INVALIDACAO IS NOT NULL AND DT_INVALIDACAO >= DT_INCLUSAO)),
+	CONSTRAINT ck_chave_webhook_ativacao CHECK (DT_ATIVACAO IS NULL OR (DT_ATIVACAO >= DT_INCLUSAO AND (DT_VENCIMENTO IS NULL OR DT_ATIVACAO < DT_VENCIMENTO)))
+);
+
+Create table Cadastro.INTEGRACAO_CONSULTAS
+(
+	ID_REQUISICAO UUID NOT NULL,
+	DT_INICIO Timestamp with time zone NOT NULL,
+	DT_FIM Timestamp with time zone NULL,
+	ID_USUARIO_ORIGEM UUID NULL,
+	ID_PROTOCOLO UUID NULL,
+	ID_PROCESSO UUID NULL,
+	TP_ORIGEM Char(1) NOT NULL Check (TP_ORIGEM IN ('U', 'S')),
+	CD_ACAO Varchar(30) NOT NULL Check (BTRIM(CD_ACAO) <> ''),
+	CD_CONSULTA Varchar(100) NOT NULL Check (BTRIM(CD_CONSULTA) <> ''),
+	TP_RESULTADO Char(1) NOT NULL Check (TP_RESULTADO IN ('P', 'S', 'N', 'C', 'E')),
+	ID_CACHE Varchar(64) NULL,
+	CD_ERRO Varchar(60) NULL,
+	DS_ERRO Text NULL,
+	primary key (ID_REQUISICAO),
+	CONSTRAINT ck_integracao_consulta_usuario CHECK (TP_ORIGEM <> 'U' OR ID_USUARIO_ORIGEM IS NOT NULL),
+	CONSTRAINT ck_integracao_consulta_periodo CHECK (DT_FIM IS NULL OR DT_FIM >= DT_INICIO),
+	CONSTRAINT ck_integracao_consulta_pendente CHECK ((TP_RESULTADO = 'P') = (DT_FIM IS NULL))
+);
+
+Create table Cadastro.INTEGRACAO_TENTATIVAS
+(
+	ID_TENTATIVA UUID NOT NULL,
+	ID_REQUISICAO UUID NOT NULL,
+	ID_WEBHOOK UUID NOT NULL,
+	TP_DESTINO Char(1) NOT NULL Check (TP_DESTINO IN ('P', 'A')),
+	DT_INICIO Timestamp with time zone NOT NULL,
+	DT_FIM Timestamp with time zone NULL,
+	NR_STATUS_HTTP Smallint NULL Check (NR_STATUS_HTTP IS NULL OR NR_STATUS_HTTP BETWEEN 100 AND 599),
+	TP_RESULTADO Char(1) NOT NULL Check (TP_RESULTADO IN ('P', 'S', 'N', 'H', 'T', 'R', 'V')),
+	CD_ERRO Varchar(60) NULL,
+	DS_ERRO Text NULL,
+	primary key (ID_TENTATIVA),
+	CONSTRAINT ck_integracao_tentativa_periodo CHECK (DT_FIM IS NULL OR DT_FIM >= DT_INICIO),
+	CONSTRAINT ck_integracao_tentativa_pendente CHECK ((TP_RESULTADO = 'P') = (DT_FIM IS NULL))
+);
+
+Create unique index chave_webhook_unica_ativa on Cadastro.CHAVES_WEBHOOK ((1)) where DT_ATIVACAO IS NOT NULL AND DT_INVALIDACAO IS NULL;
+Create index tentativa_integracao_por_destino on Cadastro.INTEGRACAO_TENTATIVAS (ID_REQUISICAO, TP_DESTINO);
+Create index integracao_consultas_dt_fim on Cadastro.INTEGRACAO_CONSULTAS (DT_FIM);
+Create index integracao_tentativas_requisicao on Cadastro.INTEGRACAO_TENTATIVAS (ID_REQUISICAO);
 
 Create table Cadastro.RECURSOS_INSTITUICAO
 (
@@ -450,6 +515,55 @@ Alter table Cadastro.GRUPO_TAGS add  foreign key (CD_TAG) references Cadastro.TA
 Alter table Cadastro.USUARIO_TAGS add  foreign key (CD_TAG) references Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
 Alter table Cadastro.VINCULO_TAGS add  foreign key (CD_TAG) references Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
 Alter table Cadastro.VARIAVEIS_INSTITUICAO add foreign key (ID_ATRIBUTO_PAI) references Cadastro.VARIAVEIS_INSTITUICAO (ID_ATRIBUTO) on update restrict on delete restrict;
+Alter table Cadastro.CHAVES_WEBHOOK add constraint fk_chave_webhook_usuario_inclusao foreign key (ID_USUARIO_INCLUSAO) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA) on update restrict on delete restrict;
+Alter table Cadastro.CHAVES_WEBHOOK add constraint fk_chave_webhook_usuario_invalidacao foreign key (ID_USUARIO_INVALIDACAO) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA) on update restrict on delete restrict;
+Alter table Cadastro.INTEGRACAO_CONSULTAS add constraint fk_integracao_consulta_usuario foreign key (ID_USUARIO_ORIGEM) references Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA) on update restrict on delete restrict;
+Alter table Cadastro.INTEGRACAO_TENTATIVAS add constraint fk_integracao_tentativa_consulta foreign key (ID_REQUISICAO) references Cadastro.INTEGRACAO_CONSULTAS (ID_REQUISICAO) on update restrict on delete restrict;
+Alter table Cadastro.INTEGRACAO_TENTATIVAS add constraint fk_integracao_tentativa_chave foreign key (ID_WEBHOOK) references Cadastro.CHAVES_WEBHOOK (ID_WEBHOOK) on update restrict on delete restrict;
+
+Create or replace function Cadastro.validar_ciclo_chave_webhook() returns trigger language plpgsql as $$
+begin
+    if TG_OP = 'DELETE' then
+        raise exception 'Chaves de webhook devem ser invalidadas, não excluídas.';
+    end if;
+
+    if TG_OP = 'UPDATE' then
+        if NEW.ID_WEBHOOK IS DISTINCT FROM OLD.ID_WEBHOOK
+            or NEW.VL_CHAVE_CIFRADA IS DISTINCT FROM OLD.VL_CHAVE_CIFRADA
+            or NEW.VL_NONCE IS DISTINCT FROM OLD.VL_NONCE
+            or NEW.ID_USUARIO_INCLUSAO IS DISTINCT FROM OLD.ID_USUARIO_INCLUSAO
+            or NEW.DT_INCLUSAO IS DISTINCT FROM OLD.DT_INCLUSAO
+            or NEW.DT_ATIVACAO IS DISTINCT FROM OLD.DT_ATIVACAO and OLD.DT_ATIVACAO IS NOT NULL
+            or NEW.DT_INVALIDACAO IS DISTINCT FROM OLD.DT_INVALIDACAO and OLD.DT_INVALIDACAO IS NOT NULL then
+            raise exception 'Identidade, segredo e eventos já registrados da chave são imutáveis.';
+        end if;
+        if OLD.DT_INVALIDACAO IS NOT NULL and NEW.ID_USUARIO_INVALIDACAO IS DISTINCT FROM OLD.ID_USUARIO_INVALIDACAO then
+            raise exception 'A invalidação da chave é definitiva.';
+        end if;
+    end if;
+
+    if NEW.DT_INVALIDACAO IS NOT NULL and NEW.DT_ATIVACAO IS NOT NULL and NEW.DT_INVALIDACAO < NEW.DT_ATIVACAO then
+        raise exception 'A invalidação não pode anteceder a ativação.';
+    end if;
+    return NEW;
+end;
+$$;
+Create trigger trg_validar_ciclo_chave_webhook before insert or update or delete on Cadastro.CHAVES_WEBHOOK for each row execute function Cadastro.validar_ciclo_chave_webhook();
+
+-- A rotina não é agendada pelo banco; o serviço de manutenção deve chamá-la periodicamente.
+Create or replace function Cadastro.limpar_historico_integracao() returns integer language plpgsql as $$
+declare
+    eliminadas integer;
+begin
+    delete from Cadastro.INTEGRACAO_TENTATIVAS t using Cadastro.INTEGRACAO_CONSULTAS c, Cadastro.INSTITUICAO i
+     where t.ID_REQUISICAO = c.ID_REQUISICAO
+       and c.DT_FIM < CURRENT_TIMESTAMP - make_interval(days => i.NR_DIAS_RETENCAO_LOG_INTEGRACAO);
+    delete from Cadastro.INTEGRACAO_CONSULTAS c using Cadastro.INSTITUICAO i
+     where c.DT_FIM < CURRENT_TIMESTAMP - make_interval(days => i.NR_DIAS_RETENCAO_LOG_INTEGRACAO);
+    get diagnostics eliminadas = ROW_COUNT;
+    return eliminadas;
+end;
+$$;
 
 -- Executar a estrutura com um proprietário distinto do usuário da aplicação.
 REVOKE CREATE ON SCHEMA Cadastro FROM PUBLIC;

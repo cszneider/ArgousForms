@@ -101,6 +101,7 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
             <div className="protocolo-publicado-detalhe">
               <h3>{t('Percurso')}</h3>
               <p>{etapas.length ? `${t('Início')} → ${etapas.find((item) => item.id === dados.fluxo?.inicio)?.titulo || etapas[0].titulo} · ${etapas.length} ${t('etapas no fluxo')}` : t('Nenhuma etapa')}</p>
+              <p>{dados.gestorFinaliza ? t('O gestor confirma a conclusão do Processo.') : t('O Processo termina ao finalizar a última etapa.')}</p>
               {etapas.length > 0 && <Button size="small" endIcon={<ArrowRight size={15} />} onClick={() => setArea('fluxo')}>{t('Ver fluxo completo')}</Button>}
             </div>
           </>}
@@ -185,6 +186,7 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
             {documento && <div className="protocolo-publicado-detalhe">
               <button type="button" className="protocolos-voltar" onClick={() => setDocumentoId(null)}><ArrowLeft size={15} /> {t('Fechar prévia')}</button>
               <h3>{documento.titulo}</h3><p>{documento.observacoes}</p>
+              <p>{documento.diasVencimento ? `${t('Prazo de validade')}: ${documento.diasVencimento} ${t('dias')}` : t('Sem vencimento')}</p>
               {documento.tipoModelo === 'H'
                 ? <ModeloHtmlPublicado documento={documento} variaveis={variaveis} />
                 : <iframe title={documento.titulo} className="protocolo-publicado-pdf"

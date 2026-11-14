@@ -34,6 +34,7 @@ public final class InstituicaoService {
 		exigirAdministrador( usuario );
 		String nome = textoObrigatorio( dados, "nome", 200 );
 		int diasLixeira = inteiroPositivo( dados, "diasLixeira" );
+		int diasRetencaoLogIntegracao = inteiroPositivo( dados, "diasRetencaoLogIntegracao" );
 		int diasSessaoMovel = inteiroPositivo( dados, "diasSessaoMovel" );
 		int diasSessaoAbsoluta = inteiroPositivo( dados, "diasSessaoAbsoluta" );
 		long tamanhoMaximo = longoPositivo( dados, "tamanhoMaximoArquivoBytes" );
@@ -61,6 +62,7 @@ public final class InstituicaoService {
 				if( instituicao == null ) throw new ArgousFormsApiException( 503, "INSTITUICAO_NAO_CONFIGURADA", "A instituição ainda não está configurada." );
 				instituicao.setDsNome( nome );
 				instituicao.setNrDiasPermanenciaLixeira( diasLixeira );
+				instituicao.setNrDiasRetencaoLogIntegracao( diasRetencaoLogIntegracao );
 				instituicao.setNrDiasSessaoMovel( diasSessaoMovel );
 				instituicao.setNrDiasSessaoAbsoluta( diasSessaoAbsoluta );
 				instituicao.setNrTamanhoMaximoArquivoBytes( tamanhoMaximo );
@@ -83,6 +85,7 @@ public final class InstituicaoService {
 
 		return new JSONObject().put( "nome", instituicao.getDsNome() )
 			.put( "diasLixeira", instituicao.getNrDiasPermanenciaLixeira() )
+			.put( "diasRetencaoLogIntegracao", instituicao.getNrDiasRetencaoLogIntegracao() )
 			.put( "diasSessaoMovel", instituicao.getNrDiasSessaoMovel() )
 			.put( "diasSessaoAbsoluta", instituicao.getNrDiasSessaoAbsoluta() )
 			.put( "tamanhoMaximoArquivoBytes", instituicao.getNrTamanhoMaximoArquivoBytes() )
@@ -125,10 +128,11 @@ public final class InstituicaoService {
 		if( valor.isEmpty() ) return null;
 		try {
 			URI uri = URI.create( valor );
-			if( ( "https".equalsIgnoreCase( uri.getScheme() ) || "http".equalsIgnoreCase( uri.getScheme() ) )
+			boolean httpDesenvolvimento = "true".equalsIgnoreCase( System.getenv( "ARGOUSFORMS_WEBHOOK_HTTP_DESENVOLVIMENTO" ) );
+			if( ( "https".equalsIgnoreCase( uri.getScheme() ) || ( httpDesenvolvimento && "http".equalsIgnoreCase( uri.getScheme() ) ) )
 				&& uri.getHost() != null && uri.getUserInfo() == null && uri.getFragment() == null ) return valor;
 		} catch ( IllegalArgumentException e ) { /* A mensagem abaixo informa o formato aceito. */ }
-		throw new ArgousFormsApiException( 400, "WEBHOOK_INVALIDO", "Informe uma URL HTTP ou HTTPS válida, sem credenciais nem fragmento." );
+		throw new ArgousFormsApiException( 400, "WEBHOOK_INVALIDO", "Informe uma URL HTTPS válida, sem credenciais nem fragmento. HTTP é permitido somente no desenvolvimento configurado." );
 	}
 
 	private void exigirAdministrador( AutenticacaoLocalService.Usuario usuario ) throws ArgousFormsApiException {

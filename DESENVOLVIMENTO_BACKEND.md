@@ -88,6 +88,8 @@ O cadastro inicial de modelos PDF usa `Processos.PROTOCOLO_DOCUMENTOS`, `PROTOCO
 - Regras específicas da aplicação ficam na classe `*NegocioEspecifico`, usando o gancho apropriado do ciclo de persistência, como `antesDeInserir`, `depoisDeInserir`, `antesDeAlterar` ou `depoisDeAlterar`. A classe `*Negocio` gerada não deve ser editada para acrescentar essas regras.
 - Se uma regra valer para mais de uma operação, os ganchos envolvidos devem chamar um método compartilhado que receba a entidade. Na confirmação de e-mail, `checaRegrasDeNegocio( ConfirmacaoEmail )` valida o hash antes da inclusão e da alteração.
 
+`DESCARTAR_RASCUNHO_PROTOCOLO` permite ao Criador responsável eliminar apenas o rascunho de um Protocolo já publicado, em uma transação. Remove fluxo, formulários, versões de modelos e definições de variáveis exclusivas do rascunho; preserva versões publicadas, Processos e arquivos do gestor de documentos.
+
 ## API central
 
 O formato conceitual será:
