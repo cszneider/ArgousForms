@@ -1,0 +1,51 @@
+:root { font-family: Arial, Helvetica, sans-serif; color-scheme: light; }
+body { margin: 0; }
+.pagina-login { min-height: 100svh; display: grid; grid-template-columns: 1fr 1fr; }
+.identidade { background: #0c4943; color: #fff; display: flex; flex-direction: column; padding: 44px 9%; position: relative; overflow: hidden; }
+.identidade::before { content: ''; position: absolute; width: 600px; height: 600px; border: 1px solid #ffffff0a; border-radius: 50%; right: -380px; top: 70px; box-shadow: 0 0 0 85px #ffffff03, 0 0 0 170px #ffffff02; pointer-events: none; }
+.marca { display: flex; align-items: center; gap: 11px; font-size: 14px; font-weight: 600; color: #e1efeb; position: relative; }
+.marca-divisor { margin: 0 9px; color: #88aaa2; font-weight: 400; }
+.simbolo { width: 56px; height: 56px; color: #a9d9c7; flex-shrink: 0; }
+.simbolo.pequeno { width: 32px; height: 32px; }
+.identidade-conteudo { margin: auto 0; padding: 80px 0; position: relative; }
+.sobretitulo { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; color: #9ac8bb; }
+.instituicao.MuiTypography-root { font-size: clamp(30px, 3.4vw, 51px); line-height: 1.12; font-weight: 700; letter-spacing: -1.8px; margin: 23px 0 20px; overflow-wrap: anywhere; max-width: 580px; }
+.subtitulo.MuiTypography-root { font-size: clamp(20px, 2.1vw, 29px); color: #d5e8e1; font-weight: 400; line-height: 1.4; letter-spacing: -.4px; }
+.assinatura { display: block; margin-top: 13px; font-size: 14px; color: #a2c7ba; }
+.conexao { display: flex; align-items: center; gap: 13px; margin-top: 52px; max-width: 320px; }
+.conexao > span { width: 68px; height: 62px; border: 1px solid #7ea99e60; border-radius: 14px; display: grid; place-content: center; text-align: center; color: #cce3db; font-size: 12px; }
+.conexao i { height: 1px; flex: 1; background: #7ea99e70; position: relative; }
+.conexao i::after { content: ''; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #a3d9bf; top: -2px; right: 0; }
+.identidade-descricao { font-size: 13px; line-height: 1.8; color: #a8c7bd; margin: 25px 0 0; }
+.identidade-rodape { display: flex; align-items: center; gap: 9px; font-size: 11px; color: #a8c7bd; }
+.ponto { width: 6px; height: 6px; border-radius: 50%; background: #9fc8b8; }
+.acesso { background: #fbfcfd; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 48px 32px; min-width: 0; }
+.painel-login { width: 100%; max-width: 390px; margin: auto 0; padding: 55px 0; }
+.rotulo-acesso { display: flex; align-items: center; gap: 8px; color: #647a79; font-size: 12px; margin-bottom: 27px; }
+.cadeado { color: #12665b; border: 1px solid #d7e6e0; border-radius: 8px; padding: 3px 9px; font-size: 20px; background: #f0f6f3; }
+.titulo-login.MuiTypography-root { font-size: 34px; font-weight: 700; letter-spacing: -1.2px; }
+.intro.MuiTypography-root { margin: 13px 0 31px; font-size: 14px; line-height: 1.7; }
+.formulario { display: flex; flex-direction: column; gap: 23px; }
+.botao-entrar.MuiButton-root { min-height: 53px; border-radius: 8px; display: flex; justify-content: space-between; padding: 12px 21px; font-size: 14px; }
+.botao-entrar span { font-size: 22px; font-weight: 400; }
+.primeiro-acesso { display: flex; gap: 14px; margin-top: 31px; padding-top: 25px; border-top: 1px solid #e3e9e9; }
+.primeiro-icone { color: #548e7b; font-size: 22px; }
+.primeiro-acesso strong { font-size: 12px; color: #47645d; }
+.primeiro-acesso p { margin: 7px 0 0; color: #758580; font-size: 12px; line-height: 1.7; }
+.rodape-acesso { text-align: center; color: #81908f; font-size: 10px; line-height: 1.8; }
+.rodape-acesso span { padding: 0 8px; }
+.estado { display: flex; align-items: center; gap: 15px; min-height: 230px; }
+@media (min-width: 1500px) { .identidade { padding-left: 14%; padding-right: 12%; } }
+@media (max-width: 800px) {
+  .pagina-login { grid-template-columns: 1fr; }
+  .identidade { padding: 26px 28px; }
+  .identidade-conteudo { padding: 38px 0 15px; }
+  .instituicao.MuiTypography-root { font-size: 32px; margin-top: 17px; letter-spacing: -1px; }
+  .subtitulo.MuiTypography-root { font-size: 20px; }
+  .subtitulo br { display: none; }
+  .subtitulo br::after { content: ' '; }
+  .conexao, .identidade-descricao, .identidade-rodape { display: none; }
+  .acesso { padding: 15px 28px 25px; }
+  .painel-login { padding: 35px 0; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

@@ -4,6 +4,8 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.zone.ZoneRulesException;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -18,6 +20,8 @@ import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
 
 public final class InstituicaoService {
+
+	private static final Pattern DOMINIO_CSS = Pattern.compile( "(?i)^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$" );
 
 	public JSONObject consultar( AutenticacaoLocalService.Usuario usuario ) throws Exception {
 
@@ -51,6 +55,7 @@ public final class InstituicaoService {
 		}
 		String urlPrincipal = url( dados.optString( "urlWebhook", "" ) );
 		String urlAlternativa = url( dados.optString( "urlWebhookAlternativo", "" ) );
+		String dominiosCss = dominiosCss( dados.optString( "dominiosCssImportacao", "" ) );
 		if( urlAlternativa != null && urlPrincipal == null ) {
 			throw new ArgousFormsApiException( 400, "WEBHOOK_INVALIDO", "Configure o webhook principal antes do alternativo." );
 		}
@@ -70,6 +75,7 @@ public final class InstituicaoService {
 				instituicao.setCdFusoHorario( fuso );
 				instituicao.setDsUrlWebhook( urlPrincipal );
 				instituicao.setDsUrlWebhookAlternativo( urlAlternativa );
+				instituicao.setDsDominiosCssImportacao( dominiosCss );
 				instituicao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
 				new InstituicaoNegocio( conexao, instituicao ).altera();
 				conexao.commit();
@@ -92,7 +98,22 @@ public final class InstituicaoService {
 			.put( "permitirDestinatariosUnicos", instituicao.isSnPermitirDestinatariosUnicos() )
 			.put( "fusoHorario", instituicao.getCdFusoHorario() )
 			.put( "urlWebhook", instituicao.getDsUrlWebhook() == null ? "" : instituicao.getDsUrlWebhook() )
-			.put( "urlWebhookAlternativo", instituicao.getDsUrlWebhookAlternativo() == null ? "" : instituicao.getDsUrlWebhookAlternativo() );
+			.put( "urlWebhookAlternativo", instituicao.getDsUrlWebhookAlternativo() == null ? "" : instituicao.getDsUrlWebhookAlternativo() )
+			.put( "dominiosCssImportacao", instituicao.getDsDominiosCssImportacao() == null ? "" : instituicao.getDsDominiosCssImportacao() );
+	}
+
+	private String dominiosCss( String informados ) throws ArgousFormsApiException {
+
+		if( informados == null || informados.isBlank() ) return null;
+		String valor = informados.strip();
+		if( valor.length() > 4000 ) throw new ArgousFormsApiException( 400, "DOMINIOS_CSS_INVALIDOS", "A lista de domínios CSS deve ter até 4000 caracteres." );
+		for( String linha : valor.lines().toList() ) {
+			String dominio = linha.strip();
+			if( !DOMINIO_CSS.matcher( dominio ).matches() || dominio.length() > 253 || dominio.matches( "[0-9.]+" ) ) {
+				throw new ArgousFormsApiException( 400, "DOMINIOS_CSS_INVALIDOS", "Informe um domínio público por linha, sem protocolo, caminho ou asterisco." );
+			}
+		}
+		return valor.toLowerCase( Locale.ROOT );
 	}
 
 	private String textoObrigatorio( JSONObject dados, String campo, int tamanhoMaximo ) throws ArgousFormsApiException {

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Modelo sem credenciais. O arquivo efetivo será startup.xml, ao lado de web.xml
+  na instalação. Não incluir o arquivo preenchido no Git ou no WAR distribuído.
+  A conexão e a instituição geram configuracao.xml cifrado na inicialização.
+  O startup será removido após a instalação ou verificação bem-sucedida do banco.
+-->
+<startup>
+  <instituicao>
+    <nome/>
+    <!-- Opcional. Sem este campo, a instalação utiliza UTC. -->
+    <fusoHorario>America/Sao_Paulo</fusoHorario>
+  </instituicao>
+  <administrador>
+    <email/>
+    <nome/>
+    <senha/>
+  </administrador>
+  <postgres>
+    <endIP/>
+    <nroPorta/>
+    <database/>
+    <dbUser/>
+    <dbPasswd/>
+  </postgres>
+</startup>

@@ -1248,6 +1248,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
         }} />}
 
       {modeloHtml && <ModeloHtmlEditor modelo={modeloHtml} variaveis={protocolo?.rascunho?.variaveis || []}
+        idProtocolo={protocolo.id}
         salvando={salvando} aoFechar={() => setModeloHtml(null)} aoSalvar={salvarModeloHtml} />}
 
       <Dialog open={!!modeloPdf} onClose={() => !salvando && setModeloPdf(null)} fullWidth maxWidth="sm">
