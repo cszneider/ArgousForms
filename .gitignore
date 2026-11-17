@@ -11,6 +11,14 @@
 /WebHookJUniAGForms/.classpath
 /WebHookJUniAGForms/.project
 /WebHookJUniAGForms/.settings/
+/WebHookJUniAGForms/frontend/node_modules/
+/WebHookJUniAGForms/frontend/dist/
+/WebHookJUniAGForms/frontend/.env
+/WebHookJUniAGForms/frontend/.env.local
+/WebHookJUniAGForms/frontend/.env.*.local
+/WebHookJUniAGForms/src/main/webapp/WEB-INF/startup.xml
+/WebHookJUniAGForms/src/main/webapp/WEB-INF/configuracao.xml
+/WebHookJUniAGForms/src/main/webapp/WEB-INF/.configuracao-*.tmp
 /WebHookJUniAGForms/.env
 /WebHookJUniAGForms/.env.*
 !/WebHookJUniAGForms/.env.example

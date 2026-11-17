@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField, Tooltip } from '@mui/material';
-import { AlignCenter, AlignLeft, AlignRight, AlignJustify, ArrowDown, ArrowUp, Bold, Eye, Heading2, Image, Italic, Link, List, ListOrdered, Plus, Redo2, Table2, Trash2, Underline, Undo2 } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, AlignJustify, ArrowDown, ArrowUp, Bold, Eye, FileInput, Heading2, Image, Italic, Link, List, ListOrdered, Plus, Redo2, Table2, Trash2, Underline, Undo2 } from 'lucide-react';
 import { Mark, mergeAttributes } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -10,9 +10,12 @@ import { TableKit } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
 import DOMPurify from 'dompurify';
 import { useI18n } from '../../components/i18n/i18n.js';
+import { executar } from '../login/autenticacao.js';
 
 const TIPOS = { A: 'Apresentação', H: 'Cabeçalho', B: 'Corpo', F: 'Rodapé', X: 'Encerramento' };
 const ORDEM = ['A', 'H', 'B', 'F', 'X'];
+const TAGS_IMPORTACAO = new Set(['html', 'head', 'body', 'title', 'meta', 'link', 'style', 'a', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'i', 'li', 'main', 'ol', 'p', 'pre', 's', 'section', 'small', 'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul']);
+const ATRIBUTOS_IMPORTACAO = new Set(['class', 'id', 'title', 'style', 'width', 'height', 'colspan', 'rowspan', 'align', 'valign', 'href', 'rel', 'charset', 'lang', 'integrity', 'crossorigin', 'referrerpolicy', 'media']);
 const novaParte = (tipo) => ({ id: `${Date.now()}-${Math.random()}`, tipo, html: '<p></p>' });
 const escapar = (valor) => String(valor ?? '').replace(/[&<>"']/g, (caractere) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[caractere]);
@@ -190,7 +193,7 @@ function EditorParte({ html, aoAlterar, variaveis }) {
   </div>;
 }
 
-export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar, aoSalvar }) {
+export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salvando, aoFechar, aoSalvar }) {
   const { t } = useI18n();
   const [dados, setDados] = useState(() => ({
     ...modelo, css: modelo.css || '',
@@ -200,7 +203,100 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
   const [previa, setPrevia] = useState(false);
   const [htmlPrevia, setHtmlPrevia] = useState('');
   const [erro, setErro] = useState('');
+  const [importando, setImportando] = useState(false);
+  const [codigoImportado, setCodigoImportado] = useState('');
+  const [cssImportado, setCssImportado] = useState('');
+  const [arquivosImportacao, setArquivosImportacao] = useState({});
+  const [erroImportacao, setErroImportacao] = useState('');
+  const [resolvendoCss, setResolvendoCss] = useState(false);
   const parte = dados.partes[selecionada];
+
+  async function lerArquivo(evento) {
+    const arquivos = [...(evento.target.files || [])];
+    evento.target.value = '';
+    if (!arquivos.length) return;
+    const htmls = arquivos.filter((arquivo) => /\.html?$/i.test(arquivo.name));
+    if (htmls.length !== 1 || arquivos.some((arquivo) => arquivo.size > 500000 || !/\.(html?|css)$/i.test(arquivo.name))) {
+      setErroImportacao(t('Selecione um arquivo HTML e seus arquivos CSS, cada um com até 500 KB.'));
+      return;
+    }
+    const conteudos = await Promise.all(arquivos.map(async (arquivo) => [arquivo.name, await arquivo.text()]));
+    setArquivosImportacao(Object.fromEntries(conteudos));
+    setCodigoImportado(await htmls[0].text());
+    setErroImportacao('');
+  }
+
+  async function lerCss(evento) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (!arquivo) return;
+    if (arquivo.size > 100000) {
+      setErroImportacao(t('O arquivo CSS deve ter até 100 KB.'));
+      return;
+    }
+    setCssImportado(await arquivo.text());
+    setErroImportacao('');
+  }
+
+  async function importarHtml() {
+    const origem = codigoImportado.trim();
+    if (!origem) { setErroImportacao(t('Cole o HTML ou escolha um arquivo.')); return; }
+    const documento = new DOMParser().parseFromString(origem, 'text/html');
+    if (/<\s*(?:\?|%|\/?[a-z][\w-]*:)|[#$]\{[^}]*}/i.test(origem)) {
+      setErroImportacao(t('O HTML contém uma tag de servidor ou expressão executável, como JSF.'));
+      return;
+    }
+    for (const elemento of documento.querySelectorAll('*')) {
+      const tag = elemento.localName;
+      if (!TAGS_IMPORTACAO.has(tag)) { setErroImportacao(t(`A tag <${tag}> não é permitida.`)); return; }
+      for (const atributo of elemento.attributes) {
+        if (!ATRIBUTOS_IMPORTACAO.has(atributo.name)) {
+          setErroImportacao(t(`O atributo ${atributo.name} não é permitido na tag <${tag}>.`));
+          return;
+        }
+      }
+    }
+    const cssLocais = [];
+    setResolvendoCss(true);
+    try {
+      for (const link of documento.querySelectorAll('link[rel~="stylesheet"]')) {
+        const referencia = link.getAttribute('href')?.trim() || '';
+        if (/^https:\/\//i.test(referencia)) {
+          const resultado = await executar('IMPORTAR_CSS_MODELO_HTML', { idProtocolo, url: referencia });
+          cssLocais.push(resultado.css);
+        } else if (/^[\w.-]+\.css$/i.test(referencia) && arquivosImportacao[referencia]) {
+          cssLocais.push(arquivosImportacao[referencia]);
+        } else {
+          setErroImportacao(t(`Selecione também o arquivo CSS referenciado: ${referencia || '(sem nome)'}.`));
+          return;
+        }
+      }
+    } catch (falha) {
+      setErroImportacao(falha.message);
+      return;
+    } finally {
+      setResolvendoCss(false);
+    }
+    const estilos = [...documento.querySelectorAll('style')].map((item) => item.textContent.trim()).filter(Boolean);
+    const corpo = documento.body.innerHTML;
+    const css = [dados.css.trim(), cssImportado.trim(), ...estilos, ...cssLocais].filter(Boolean).join('\n\n');
+    if (/\\|@import\b|url\s*\(|expression\s*\(|javascript\s*:|data\s*:|\bbehavior\s*:|\bbinding\s*:/i.test(css.replace(/\/\*[\s\S]*?\*\//g, ''))) {
+      setErroImportacao(t('O CSS contém uma referência externa ou uma construção não permitida.'));
+      return;
+    }
+    if (!corpo.trim() || corpo.length > 100000 || css.length > 100000) {
+      setErroImportacao(t('O HTML deve ter conteúdo e cada parte e o CSS devem ter até 100000 caracteres.'));
+      return;
+    }
+    setDados((atual) => ({ ...atual, css, partes: [ { ...novaParte('B'), html: corpo } ] }));
+    setSelecionada(0);
+    setPrevia(true);
+    setImportando(false);
+    setCodigoImportado('');
+    setCssImportado('');
+    setArquivosImportacao({});
+    setErroImportacao('');
+  }
 
   function alterarParte(id, html) {
     setDados((atual) => ({ ...atual, partes: atual.partes.map((item) => item.id === id ? { ...item, html } : item) }));
@@ -282,6 +378,8 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
       </div>
       <div className="modelo-html-partes">
         <aside>
+          <Button size="small" startIcon={<FileInput size={15} />} disabled={salvando}
+            onClick={() => setImportando(true)}>{t('Importar HTML')}</Button>
           {dados.partes.map((item, indice) => <div className={`modelo-html-parte${indice === selecionada ? ' selecionada' : ''}`} key={item.id}>
             <button type="button" onClick={() => { setPrevia(false); setSelecionada(indice); }}>
               {t(TIPOS[item.tipo])}{item.tipo === 'B' && ` ${dados.partes.slice(0, indice + 1).filter((valor) => valor.tipo === 'B').length}`}
@@ -305,12 +403,42 @@ export default function ModeloHtmlEditor({ modelo, variaveis, salvando, aoFechar
           {previa ? <iframe title={t('Prévia do modelo HTML')} sandbox="" srcDoc={htmlPrevia} className="modelo-html-preview" /> : <>
             <p>{t(TIPOS[parte.tipo])}</p>
             <EditorParte key={parte.id} html={parte.html} aoAlterar={(html) => alterarParte(parte.id, html)} variaveis={variaveis} />
-            <TextField label={t('CSS do documento (opcional)')} multiline minRows={5} fullWidth value={dados.css}
-              onChange={(evento) => setDados({ ...dados, css: evento.target.value })} sx={{ mt: 2 }} />
           </>}
+          <TextField label={t('CSS do documento (opcional)')} multiline minRows={5} fullWidth value={dados.css}
+            onChange={(evento) => setDados({ ...dados, css: evento.target.value })} sx={{ mt: 2 }}
+            helperText={t('As regras CSS são aplicadas à prévia e salvas com o modelo.')} />
         </section>
       </div>
     </DialogContent>
+    <Dialog open={importando} onClose={() => setImportando(false)} fullWidth maxWidth="md">
+      <DialogTitle>{t('Importar documento HTML')}</DialogTitle>
+      <DialogContent>
+        {erroImportacao && <Alert severity="error" sx={{ mb: 2 }}>{erroImportacao}</Alert>}
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {t('A importação substitui as partes atuais por uma parte de corpo. As regras de <style> são adicionadas ao CSS do documento. Confira a prévia antes de salvar.')}
+        </Alert>
+        <Button component="label" variant="outlined" sx={{ mb: 2 }}>
+          {t('Escolher HTML e arquivos CSS')}
+          <input hidden type="file" multiple accept=".html,.htm,.css,text/html,text/css" onChange={lerArquivo} />
+        </Button>
+        <p>{t('Selecione o HTML e todos os arquivos CSS locais referenciados por ele na mesma escolha.')}</p>
+        <TextField label={t('Código HTML completo ou trecho do documento')} multiline minRows={12} fullWidth
+          value={codigoImportado} onChange={(evento) => { setCodigoImportado(evento.target.value); setErroImportacao(''); }} />
+        <Button component="label" variant="outlined" sx={{ mt: 2, mb: 2 }}>
+          {t('Escolher arquivo CSS')}
+          <input hidden type="file" accept=".css,text/css" onChange={lerCss} />
+        </Button>
+        <TextField label={t('CSS externo (opcional)')} multiline minRows={5} fullWidth
+          value={cssImportado} onChange={(evento) => { setCssImportado(evento.target.value); setErroImportacao(''); }}
+          helperText={t('Cole o conteúdo do arquivo CSS referenciado pelo HTML.')} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setImportando(false)}>{t('Cancelar')}</Button>
+        <Button variant="contained" disabled={resolvendoCss} onClick={importarHtml}>
+          {resolvendoCss ? t('Carregando estilos…') : t('Importar e pré-visualizar')}
+        </Button>
+      </DialogActions>
+    </Dialog>
     <DialogActions>
       <Button disabled={salvando} onClick={aoFechar}>{t('Cancelar')}</Button>
       <Button variant="contained" disabled={salvando} onClick={salvar}>{t('Salvar modelo HTML')}</Button>

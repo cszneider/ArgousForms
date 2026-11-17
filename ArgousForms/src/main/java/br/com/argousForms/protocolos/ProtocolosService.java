@@ -83,6 +83,22 @@ public final class ProtocolosService {
 
 	private final DocumentosService documentos = new DocumentosService();
 
+	public JSONObject importarCssRemoto( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, String endereco ) throws Exception {
+
+		exigirCriador( usuario );
+		if( endereco == null || endereco.length() > 2048 ) throw new ArgousFormsApiException( 400, "CSS_REMOTO_INVALIDO", "Informe uma URL de CSS válida." );
+		String dominios;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select DS_DOMINIOS_CSS_IMPORTACAO from Cadastro.INSTITUICAO where ID_INSTITUICAO = 1" );
+				ResultSet resultado = consulta.executeQuery() ) {
+				if( !resultado.next() ) throw new ArgousFormsApiException( 503, "INSTITUICAO_NAO_CONFIGURADA", "A instituição ainda não está configurada." );
+				dominios = resultado.getString( 1 );
+			}
+		}
+		return new JSONObject().put( "css", CssRemoto.buscar( endereco, dominios ) );
+	}
+
 	public JSONObject publicar( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo ) throws Exception {
 
 		if( !usuario.papeis().contains( "GESTOR_DE_PROTOCOLOS" ) ) {
@@ -1121,6 +1137,7 @@ public final class ProtocolosService {
 		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
 		String observacoes = observacoesInformadas == null ? "" : observacoesInformadas.strip();
 		String css = cssInformado == null ? "" : cssInformado;
+		ValidacaoModeloHtml.validarCss( css );
 		if( codigo.isEmpty() || codigo.length() > 30 || titulo.isEmpty() || titulo.length() > 70 || css.length() > 100000 ) {
 			throw new ArgousFormsApiException( 400, "MODELO_INVALIDO", "Informe código e título válidos; o CSS deve ter até 100000 caracteres." );
 		}
@@ -1138,6 +1155,7 @@ public final class ProtocolosService {
 			if( entrada == null ) throw new ArgousFormsApiException( 400, "PARTE_INVALIDA", "Parte HTML inválida." );
 			String tipo = entrada.optString( "tipo", "" );
 			String html = entrada.optString( "html", "" );
+			ValidacaoModeloHtml.validarHtml( html );
 			if( !tipo.matches( "[HABXF]" ) || html.isBlank() || html.length() > 100000 ) {
 				throw new ArgousFormsApiException( 400, "PARTE_INVALIDA", "Cada parte deve ter tipo válido e HTML de até 100000 caracteres." );
 			}

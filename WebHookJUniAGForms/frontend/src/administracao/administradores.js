@@ -1,0 +1,22 @@
+import React from 'react';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Switch, TextField } from '@mui/material';
+import { usePainel } from './contexto.js';
+import { Card, EstadoVazio, Filtros, Icone, Paginacao } from './componentes.js';
+import { dataHora, numero } from './dados.js';
+
+export function Administradores() {
+  const { value, dispatch, conta } = usePainel();
+  const abrir = (item) => {
+    dispatch({ field: 'erroEdicao', value: '' });
+    dispatch({ field: 'edicaoAdmin', value: item ? { ...item, senhaTemporaria: '', ativoOriginal: item.ativo } : { id: '', nome: '', email: '', ativo: true, senhaTemporaria: '' } });
+  };
+  return <><div className="admin-lista-acoes"><Filtros busca /><Button variant="contained" startIcon={<Icone nome="plus" />} onClick={() => abrir(null)}>Novo administrador</Button></div><Card titulo="Contas administrativas" apoio={`${numero(value.dados.total)} contas · todos os administradores têm a mesma autoridade`}>{!value.dados.itens.length ? <EstadoVazio titulo="Nenhum administrador encontrado" texto="Ajuste a busca ou cadastre uma nova conta." icone="users" /> : <div className="admin-tabela-scroll"><table className="admin-tabela"><thead><tr><th>Administrador</th><th>Situação</th><th>Sessões ativas</th><th>Criado em</th><th className="admin-col-acao"><span className="sr-only">Editar</span></th></tr></thead><tbody>{value.dados.itens.map((item) => <tr key={item.id}><td><strong>{item.nome} {item.id === conta.sessao.idAdministrador && <span className="admin-voce">Você</span>}</strong><small>{item.email}</small></td><td><Chip size="small" variant="outlined" color={item.ativo ? 'success' : 'default'} label={item.ativo ? 'Ativo' : 'Inativo'} />{item.trocarSenha && <small>Troca de senha pendente</small>}</td><td>{numero(item.sessoesAtivas)}</td><td>{dataHora(item.criadoEm, value.fuso)}</td><td className="admin-col-acao"><Button size="small" onClick={() => abrir(item)} aria-label={`Editar ${item.nome}`}>Editar</Button></td></tr>)}</tbody></table></div>}<Paginacao /></Card><EdicaoAdministrador /></>;
+}
+
+function EdicaoAdministrador() {
+  const { value, dispatch, salvarAdmin, conta } = usePainel();
+  const item = value.edicaoAdmin;
+  const alterar = (campo, valor) => dispatch({ field: 'edicaoAdmin', value: (antes) => ({ ...antes, [campo]: valor }) });
+  const fechar = () => { if (!value.salvando) { dispatch({ field: 'edicaoAdmin', value: null }); dispatch({ field: 'erroEdicao', value: '' }); } };
+  return <Dialog open={!!item} onClose={fechar} fullWidth maxWidth="sm"><DialogTitle>{item?.id ? 'Editar administrador' : 'Novo administrador'}</DialogTitle>{item && <Box component="form" onSubmit={(e) => { e.preventDefault(); if (item.id && item.ativoOriginal && !item.ativo) dispatch({ field: 'confirmacao', value: { tipo: 'admin', titulo: 'Desativar administrador?', texto: `As sessões de ${item.nome} serão encerradas.${item.id === conta.sessao.idAdministrador ? ' Seu próprio acesso será encerrado.' : ''}` } }); else salvarAdmin(); }}><DialogContent><div className="admin-formulario"><TextField label="Nome" required autoFocus value={item.nome} disabled={value.salvando} onChange={(e) => alterar('nome', e.target.value)} slotProps={{ htmlInput: { maxLength: 200 } }} /><TextField label="E-mail" type="email" required value={item.email} disabled={value.salvando} onChange={(e) => alterar('email', e.target.value)} slotProps={{ htmlInput: { maxLength: 100 } }} />{!item.id && <TextField label="Senha temporária" type="password" autoComplete="new-password" required value={item.senhaTemporaria} disabled={value.salvando} onChange={(e) => alterar('senhaTemporaria', e.target.value)} helperText="De 8 a 1024 caracteres e ao menos três categorias: maiúsculas, minúsculas, números e símbolos. A conta exigirá troca no primeiro acesso." slotProps={{ htmlInput: { minLength: 8, maxLength: 1024 } }} />}<FormControlLabel control={<Switch checked={item.ativo} disabled={value.salvando} onChange={(e) => alterar('ativo', e.target.checked)} />} label="Conta ativa" />{value.erroEdicao && <Alert severity="error">{value.erroEdicao}</Alert>}<Alert severity="info">A conta terá acesso à administração desta instalação. Não há divisão por papéis ou perfis.</Alert></div></DialogContent><DialogActions><Button onClick={fechar} disabled={value.salvando}>Cancelar</Button><Button variant="contained" type="submit" disabled={value.salvando}>{value.salvando ? 'Salvando…' : 'Salvar administrador'}</Button></DialogActions></Box>}</Dialog>;
+}

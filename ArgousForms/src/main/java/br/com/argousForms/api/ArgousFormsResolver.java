@@ -59,7 +59,7 @@ import quatro.sql.Query;
 public final class ArgousFormsResolver extends HttpServlet {
 
 	private static final long serialVersionUID = 1L;
-	private static final int TAMANHO_MAXIMO_REQUEST = 64 * 1024;
+	private static final int TAMANHO_MAXIMO_REQUEST = 512 * 1024;
 	private static final Logger LOG = Logger.getLogger( ArgousFormsResolver.class.getName() );
 	private final LimiteCadastro limiteCadastro = new LimiteCadastro();
 	private final LimiteCadastro limiteLogin = new LimiteCadastro();
@@ -512,6 +512,13 @@ public final class ArgousFormsResolver extends HttpServlet {
 				uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idModelo" ),
 				dados.optString( "codigo", "" ), dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ),
 				dados.optString( "css", "" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
+			return;
+		}
+
+		if( "IMPORTAR_CSS_MODELO_HTML".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, protocolos.importarCssRemoto( usuario,
+				uuidObrigatorio( dados, "idProtocolo" ), dados.optString( "url", "" ) ) );
 			return;
 		}
 
@@ -977,7 +984,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 	}
 
 	private ArgousFormsApiException payloadMuitoGrande() {
-		return new ArgousFormsApiException( 413, "PAYLOAD_MUITO_GRANDE", "A requisição excede o limite de 64 KiB." );
+		return new ArgousFormsApiException( 413, "PAYLOAD_MUITO_GRANDE", "A requisição excede o limite de 512 KiB." );
 	}
 
 	private String tokenSessao( HttpServletRequest request ) {

@@ -91,6 +91,9 @@ export default function Instituicao() {
         <TextField label={t('URL do webhook alternativo')} value={dados.urlWebhookAlternativo || ''} type="url"
           onChange={(evento) => alterar('urlWebhookAlternativo', evento.target.value)}
           helperText={t('Usado quando o webhook principal estiver indisponível.')} />
+        <TextField label={t('Domínios autorizados para importar CSS')} value={dados.dominiosCssImportacao || ''}
+          onChange={(evento) => alterar('dominiosCssImportacao', evento.target.value)} multiline minRows={4}
+          helperText={t('Um domínio por linha, sem https:// ou caminho. Apenas CSS desses domínios poderá ser incorporado aos modelos HTML.')} />
         <Box><Button variant="contained" disabled={salvando} onClick={salvar}>{salvando ? t('Salvando…') : t('Salvar parâmetros')}</Button></Box>
       </Box>}
     </section>
