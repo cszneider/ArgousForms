@@ -511,7 +511,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarModeloHtml( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idModelo" ),
 				dados.optString( "codigo", "" ), dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ),
-				dados.optString( "css", "" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
+				dados.optJSONArray( "estilos" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
 			return;
 		}
 
@@ -519,6 +519,12 @@ public final class ArgousFormsResolver extends HttpServlet {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.importarCssRemoto( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), dados.optString( "url", "" ) ) );
+			return;
+		}
+
+		if( "AUTORIZAR_DOMINIO_CSS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, instituicao.autorizarDominioCss( usuario, dados.optString( "dominio", "" ) ) );
 			return;
 		}
 

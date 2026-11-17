@@ -193,7 +193,7 @@ function EditorParte({ html, aoAlterar, variaveis }) {
   </div>;
 }
 
-export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salvando, aoFechar, aoSalvar }) {
+export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, usuarioPapeis = [], salvando, aoFechar, aoSalvar }) {
   const { t } = useI18n();
   const [dados, setDados] = useState(() => ({
     ...modelo, css: modelo.css || '',
@@ -209,19 +209,22 @@ export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salva
   const [arquivosImportacao, setArquivosImportacao] = useState({});
   const [erroImportacao, setErroImportacao] = useState('');
   const [resolvendoCss, setResolvendoCss] = useState(false);
+  const [dominioPendente, setDominioPendente] = useState('');
+  const [autorizandoDominio, setAutorizandoDominio] = useState(false);
   const parte = dados.partes[selecionada];
 
   async function lerArquivo(evento) {
-    const arquivos = [...(evento.target.files || [])];
+    const arquivos = [...(evento.target.files || [])].filter((arquivo) => /\.(html?|css)$/i.test(arquivo.name));
     evento.target.value = '';
     if (!arquivos.length) return;
     const htmls = arquivos.filter((arquivo) => /\.html?$/i.test(arquivo.name));
-    if (htmls.length !== 1 || arquivos.some((arquivo) => arquivo.size > 500000 || !/\.(html?|css)$/i.test(arquivo.name))) {
-      setErroImportacao(t('Selecione um arquivo HTML e seus arquivos CSS, cada um com até 500 KB.'));
+    if (htmls.length !== 1 || arquivos.some((arquivo) => arquivo.size > 500000)) {
+      setErroImportacao(t('Selecione uma pasta com um único arquivo HTML e os arquivos CSS necessários, cada um com até 500 KB.'));
       return;
     }
-    const conteudos = await Promise.all(arquivos.map(async (arquivo) => [arquivo.name, await arquivo.text()]));
-    setArquivosImportacao(Object.fromEntries(conteudos));
+    const conteudos = await Promise.all(arquivos.map(async (arquivo) => [arquivo.webkitRelativePath || arquivo.name, await arquivo.text()]));
+    const pastaHtml = (htmls[0].webkitRelativePath || htmls[0].name).replace(/[^/]+$/, '');
+    setArquivosImportacao(Object.fromEntries(conteudos.map(([caminho, conteudo]) => [caminho.startsWith(pastaHtml) ? caminho.slice(pastaHtml.length) : caminho, conteudo])));
     setCodigoImportado(await htmls[0].text());
     setErroImportacao('');
   }
@@ -262,10 +265,20 @@ export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salva
       for (const link of documento.querySelectorAll('link[rel~="stylesheet"]')) {
         const referencia = link.getAttribute('href')?.trim() || '';
         if (/^https:\/\//i.test(referencia)) {
-          const resultado = await executar('IMPORTAR_CSS_MODELO_HTML', { idProtocolo, url: referencia });
-          cssLocais.push(resultado.css);
-        } else if (/^[\w.-]+\.css$/i.test(referencia) && arquivosImportacao[referencia]) {
+          try {
+            const resultado = await executar('IMPORTAR_CSS_MODELO_HTML', { idProtocolo, url: referencia });
+            cssLocais.push(resultado.css);
+          } catch (falha) {
+            if (falha.codigo !== 'DOMINIO_CSS_NAO_AUTORIZADO') throw falha;
+            const dominio = new URL(referencia).hostname;
+            if (usuarioPapeis.includes('ADMINISTRADOR_INSTITUICAO')) setDominioPendente(dominio);
+            else setErroImportacao(t(`O domínio ${dominio} precisa ser incluído pelo Administrador da instituição. A importação foi interrompida.`));
+            return;
+          }
+        } else if (/^(?!\/|\.\.)[\w./-]+\.css$/i.test(referencia) && arquivosImportacao[referencia]) {
           cssLocais.push(arquivosImportacao[referencia]);
+        } else if (/^[\w.-]+\.css$/i.test(referencia) && cssImportado.trim() && documento.querySelectorAll('link[rel~="stylesheet"]').length === 1) {
+          continue;
         } else {
           setErroImportacao(t(`Selecione também o arquivo CSS referenciado: ${referencia || '(sem nome)'}.`));
           return;
@@ -296,6 +309,21 @@ export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salva
     setCssImportado('');
     setArquivosImportacao({});
     setErroImportacao('');
+  }
+
+  async function autorizarDominio() {
+    if (!dominioPendente || autorizandoDominio) return;
+    setAutorizandoDominio(true);
+    try {
+      await executar('AUTORIZAR_DOMINIO_CSS', { dominio: dominioPendente });
+      setDominioPendente('');
+      await importarHtml();
+    } catch (falha) {
+      setErroImportacao(falha.message);
+      setDominioPendente('');
+    } finally {
+      setAutorizandoDominio(false);
+    }
   }
 
   function alterarParte(id, html) {
@@ -421,7 +449,11 @@ export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salva
           {t('Escolher HTML e arquivos CSS')}
           <input hidden type="file" multiple accept=".html,.htm,.css,text/html,text/css" onChange={lerArquivo} />
         </Button>
-        <p>{t('Selecione o HTML e todos os arquivos CSS locais referenciados por ele na mesma escolha.')}</p>
+        <Button component="label" variant="outlined" sx={{ mb: 2, ml: 1 }}>
+          {t('Escolher pasta do documento')}
+          <input hidden type="file" webkitdirectory="" directory="" onChange={lerArquivo} />
+        </Button>
+        <p>{t('Para carregar automaticamente um CSS no mesmo diretório, escolha a pasta do documento. Você também pode selecionar o HTML e os CSS juntos.')}</p>
         <TextField label={t('Código HTML completo ou trecho do documento')} multiline minRows={12} fullWidth
           value={codigoImportado} onChange={(evento) => { setCodigoImportado(evento.target.value); setErroImportacao(''); }} />
         <Button component="label" variant="outlined" sx={{ mt: 2, mb: 2 }}>
@@ -437,6 +469,18 @@ export default function ModeloHtmlEditor({ modelo, variaveis, idProtocolo, salva
         <Button variant="contained" disabled={resolvendoCss} onClick={importarHtml}>
           {resolvendoCss ? t('Carregando estilos…') : t('Importar e pré-visualizar')}
         </Button>
+      </DialogActions>
+    </Dialog>
+    <Dialog open={!!dominioPendente} onClose={() => !autorizandoDominio && setDominioPendente('')} fullWidth maxWidth="xs">
+      <DialogTitle>{t('Autorizar domínio de CSS')}</DialogTitle>
+      <DialogContent>
+        <p>{t('Este domínio ainda não está autorizado pela instituição:')}</p>
+        <strong>{dominioPendente}</strong>
+        <p>{t('Ao confirmar, ele será adicionado à lista de domínios confiáveis e poderá ser usado em futuras importações.')}</p>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={autorizandoDominio} onClick={() => setDominioPendente('')}>{t('Cancelar importação')}</Button>
+        <Button variant="contained" disabled={autorizandoDominio} onClick={autorizarDominio}>{t('Confiar e continuar')}</Button>
       </DialogActions>
     </Dialog>
     <DialogActions>

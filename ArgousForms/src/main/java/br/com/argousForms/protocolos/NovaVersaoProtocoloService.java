@@ -16,6 +16,7 @@ import br.com.argousForms.model.negocio.processos.EncaminhamentoNegocio;
 import br.com.argousForms.model.negocio.processos.FormularioNegocio;
 import br.com.argousForms.model.negocio.processos.FormularioVariavelNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHTMLNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHtmlCssNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHtmlParteNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPDFNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPdfCampoNegocio;
@@ -31,6 +32,7 @@ import br.com.argousForms.model.persistencia.processos.EncaminhamentoLocalizador
 import br.com.argousForms.model.persistencia.processos.Formulario;
 import br.com.argousForms.model.persistencia.processos.FormularioVariavel;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHTML;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHtmlCss;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHtmlParte;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPDF;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPdfCampo;
@@ -255,15 +257,28 @@ public final class NovaVersaoProtocoloService {
 
 	private void copiarHtml( Conexao conexao, UUID origem, UUID destino, QtData agora ) throws Exception {
 
-		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select TX_CSS from Processos.PROTOCOLO_DOCUMENTO_HTML where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select 1 from Processos.PROTOCOLO_DOCUMENTO_HTML where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {
 			consulta.setObject( 1, origem );
 			try ( ResultSet linha = consulta.executeQuery() ) {
 				if( !linha.next() ) throw new ArgousFormsApiException( 409, "HTML_AUSENTE", "Modelo HTML publicado sem conteúdo." );
 				ProtocoloDocumentoHTML html = new ProtocoloDocumentoHTML();
 				html.setIdProtocoloDocumentoVersao( destino );
-				html.setTxCss( linha.getString( 1 ) );
 				html.setDtInclusao( agora );
 				new ProtocoloDocumentoHTMLNegocio( conexao, html ).insere();
+			}
+		}
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select DS_NOME_ARQUIVO, NR_ORDEM, DS_CONTEUDO from Processos.PROTOCOLO_DOCUMENTO_HTML_CSS where ID_PROTOCOLO_DOCUMENTO_VERSAO = ? order by NR_ORDEM" ) ) {
+			consulta.setObject( 1, origem );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) {
+					ProtocoloDocumentoHtmlCss estilo = new ProtocoloDocumentoHtmlCss();
+					estilo.setIdDocumentoCss( UUID.randomUUID() );
+					estilo.setIdProtocoloDocumentoVersao( destino );
+					estilo.setDsNomeArquivo( linhas.getString( 1 ) );
+					estilo.setNrOrdem( linhas.getInt( 2 ) );
+					estilo.setDsConteudo( linhas.getString( 3 ) );
+					new ProtocoloDocumentoHtmlCssNegocio( conexao, estilo ).insere();
+				}
 			}
 		}
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select TP_PARTE, NR_ORDEM, TX_HTML from Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {

@@ -24,6 +24,7 @@ import br.com.argousForms.model.negocio.processos.FormularioNegocio;
 import br.com.argousForms.model.negocio.processos.FormularioVariavelNegocio;
 import br.com.argousForms.model.negocio.processos.ProcotoloVariavelVersaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHTMLNegocio;
+import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHtmlCssNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoHtmlParteNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoNegocio;
 import br.com.argousForms.model.negocio.processos.ProtocoloDocumentoPDFNegocio;
@@ -50,6 +51,7 @@ import br.com.argousForms.model.persistencia.processos.ProcotoloVariavelVersaoLo
 import br.com.argousForms.model.persistencia.processos.Protocolo;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumento;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHTML;
+import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHtmlCss;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoHtmlParte;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoLocalizador;
 import br.com.argousForms.model.persistencia.processos.ProtocoloDocumentoPDF;
@@ -988,7 +990,7 @@ public final class ProtocolosService {
 	private void carregarModelosHtml( Conexao conexao, JSONObject rascunho ) throws Exception {
 
 		String sql = "select d.ID_PROTOCOLO_DOCUMENTO, d.CD_DOCUMENTO, d.DS_TITULO, d.DS_OBSERVACOES, " +
-			"v.ID_PROTOCOLO_DOCUMENTO_VERSAO, v.NR_VERSAO, v.NR_DIAS_VENCIMENTO, html.TX_CSS " +
+			"v.ID_PROTOCOLO_DOCUMENTO_VERSAO, v.NR_VERSAO, v.NR_DIAS_VENCIMENTO " +
 			"from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x " +
 			"join Processos.PROTOCOLO_DOCUMENTOS d on d.ID_PROTOCOLO_DOCUMENTO = x.ID_PROTOCOLO_DOCUMENTO " +
 			"join Processos.PROTOCOLO_DOCUMENTO_VERSOES v on v.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO " +
@@ -1006,11 +1008,29 @@ public final class ProtocolosService {
 						.put( "observacoes", resultado.getString( "DS_OBSERVACOES" ) == null ? "" : resultado.getString( "DS_OBSERVACOES" ) )
 						.put( "idVersao", idVersao.toString() ).put( "versao", resultado.getInt( "NR_VERSAO" ) )
 						.put( "diasVencimento", resultado.getObject( "NR_DIAS_VENCIMENTO" ) == null ? JSONObject.NULL : resultado.getInt( "NR_DIAS_VENCIMENTO" ) )
-						.put( "tipoModelo", "H" ).put( "css", resultado.getString( "TX_CSS" ) == null ? "" : resultado.getString( "TX_CSS" ) )
+						.put( "tipoModelo", "H" ).put( "estilos", carregarEstilosHtml( conexao, idVersao ) )
 						.put( "partes", carregarPartesHtml( conexao, idVersao ) ) );
 				}
 			}
 		}
+	}
+
+	private JSONArray carregarEstilosHtml( Conexao conexao, UUID idVersao ) throws Exception {
+
+		JSONArray estilos = new JSONArray();
+		String sql = "select ID_DOCUMENTO_CSS, DS_NOME_ARQUIVO, NR_ORDEM, DS_CONTEUDO from Processos.PROTOCOLO_DOCUMENTO_HTML_CSS " +
+			"where ID_PROTOCOLO_DOCUMENTO_VERSAO = ? order by NR_ORDEM";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idVersao );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				while( resultado.next() ) estilos.put( new JSONObject()
+					.put( "id", resultado.getString( "ID_DOCUMENTO_CSS" ) )
+					.put( "nome", resultado.getString( "DS_NOME_ARQUIVO" ) )
+					.put( "ordem", resultado.getInt( "NR_ORDEM" ) )
+					.put( "conteudo", resultado.getString( "DS_CONTEUDO" ) == null ? "" : resultado.getString( "DS_CONTEUDO" ) ) );
+			}
+		}
+		return estilos;
 	}
 
 	private JSONArray carregarPartesHtml( Conexao conexao, UUID idVersao ) throws Exception {
@@ -1128,7 +1148,7 @@ public final class ProtocolosService {
 	}
 
 	public JSONObject salvarModeloHtml( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idModelo,
-		String codigoInformado, String tituloInformado, String observacoesInformadas, String cssInformado, JSONArray partesInformadas,
+		String codigoInformado, String tituloInformado, String observacoesInformadas, JSONArray estilosInformados, JSONArray partesInformadas,
 		Integer diasVencimento ) throws Exception {
 
 		exigirCriador( usuario );
@@ -1136,10 +1156,32 @@ public final class ProtocolosService {
 		String codigo = codigoInformado == null ? "" : codigoInformado.strip();
 		String titulo = tituloInformado == null ? "" : tituloInformado.strip();
 		String observacoes = observacoesInformadas == null ? "" : observacoesInformadas.strip();
-		String css = cssInformado == null ? "" : cssInformado;
-		ValidacaoModeloHtml.validarCss( css );
-		if( codigo.isEmpty() || codigo.length() > 30 || titulo.isEmpty() || titulo.length() > 70 || css.length() > 100000 ) {
-			throw new ArgousFormsApiException( 400, "MODELO_INVALIDO", "Informe código e título válidos; o CSS deve ter até 100000 caracteres." );
+		if( codigo.isEmpty() || codigo.length() > 30 || titulo.isEmpty() || titulo.length() > 70 ) {
+			throw new ArgousFormsApiException( 400, "MODELO_INVALIDO", "Informe código e título válidos." );
+		}
+		if( estilosInformados == null || estilosInformados.length() > 100 ) {
+			throw new ArgousFormsApiException( 400, "ESTILOS_INVALIDOS", "Informe uma lista de até 100 arquivos CSS." );
+		}
+		List<ProtocoloDocumentoHtmlCss> estilos = new ArrayList<>();
+		Set<String> nomesCss = new HashSet<>();
+		int tamanhoCss = 0;
+		for( int indice = 0; indice < estilosInformados.length(); indice++ ) {
+			JSONObject entrada = estilosInformados.optJSONObject( indice );
+			if( entrada == null ) throw new ArgousFormsApiException( 400, "ESTILO_INVALIDO", "Arquivo CSS inválido." );
+			String nome = entrada.optString( "nome", "" ).strip();
+			String conteudo = entrada.optString( "conteudo", "" );
+			if( nome.isEmpty() || nome.length() > 200 || !nomesCss.add( nome ) ) {
+				throw new ArgousFormsApiException( 400, "ESTILO_INVALIDO", "Cada CSS precisa de um nome único de até 200 caracteres." );
+			}
+			ValidacaoModeloHtml.validarCss( conteudo );
+			tamanhoCss += conteudo.length();
+			if( tamanhoCss > 100000 ) throw new ArgousFormsApiException( 400, "ESTILO_INVALIDO", "O conjunto de CSS deve ter até 100000 caracteres." );
+			ProtocoloDocumentoHtmlCss estilo = new ProtocoloDocumentoHtmlCss();
+			estilo.setIdDocumentoCss( UUID.randomUUID() );
+			estilo.setDsNomeArquivo( nome );
+			estilo.setNrOrdem( indice + 1 );
+			estilo.setDsConteudo( conteudo.isEmpty() ? null : conteudo );
+			estilos.add( estilo );
 		}
 		if( partesInformadas == null || partesInformadas.length() == 0 || partesInformadas.length() > 100 ) {
 			throw new ArgousFormsApiException( 400, "PARTES_INVALIDAS", "Informe de 1 a 100 partes para o modelo HTML." );
@@ -1173,8 +1215,8 @@ public final class ProtocolosService {
 			parte.setTxHtml( html );
 			partes.add( parte );
 		}
-		if( corpos == 0 || cabecalhos > 1 || rodapes > 1 ) {
-			throw new ArgousFormsApiException( 400, "PARTES_INVALIDAS", "Inclua ao menos uma parte de corpo e, no máximo, um cabeçalho e um rodapé." );
+		if( corpos == 0 || apresentacoes > 1 || cabecalhos > 1 || rodapes > 1 || encerramentos > 1 ) {
+			throw new ArgousFormsApiException( 400, "PARTES_INVALIDAS", "Inclua ao menos um corpo e, no máximo, uma apresentação, um cabeçalho, um rodapé e um encerramento." );
 		}
 
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
@@ -1204,7 +1246,6 @@ public final class ProtocolosService {
 
 					ProtocoloDocumentoHTML html = new ProtocoloDocumentoHTML();
 					html.setIdProtocoloDocumentoVersao( idVersaoModelo );
-					html.setTxCss( css.isBlank() ? null : css );
 					html.setDtInclusao( agora );
 					new ProtocoloDocumentoHTMLNegocio( conexao, html ).insere();
 
@@ -1234,12 +1275,7 @@ public final class ProtocolosService {
 						documento.setDsObservacoes( observacoes.isEmpty() ? null : observacoes );
 						new ProtocoloDocumentoNegocio( conexao, documento ).altera();
 					}
-					ProtocoloDocumentoHTML html = new ProtocoloDocumentoHTML();
-					html.setIdProtocoloDocumentoVersao( idVersaoModelo );
-					html.setTxCss( css.isBlank() ? null : css );
-					html.setDtInclusao( versaoModelo.getDtInclusao() );
-					new ProtocoloDocumentoHTMLNegocio( conexao, html ).altera();
-
+					excluirEstilosHtml( conexao, idVersaoModelo );
 					List<UUID> idsPartes = new ArrayList<>();
 					try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
 						"select ID_DOCUMENTO_HTML_PARTE from Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {
@@ -1253,6 +1289,10 @@ public final class ProtocolosService {
 						antiga.setIdDocumentoHtmlParte( idParte );
 						new ProtocoloDocumentoHtmlParteNegocio( conexao, antiga ).exclui();
 					}
+				}
+				for( ProtocoloDocumentoHtmlCss estilo : estilos ) {
+					estilo.setIdProtocoloDocumentoVersao( idVersaoModelo );
+					new ProtocoloDocumentoHtmlCssNegocio( conexao, estilo ).insere();
 				}
 				for( ProtocoloDocumentoHtmlParte parte : partes ) {
 					parte.setIdProtocoloDocumentoVersao( idVersaoModelo );
@@ -1268,6 +1308,23 @@ public final class ProtocolosService {
 			}
 		}
 		return consultar( usuario, idProtocolo );
+	}
+
+	private void excluirEstilosHtml( Conexao conexao, UUID idVersaoModelo ) throws Exception {
+
+		List<UUID> ids = new ArrayList<>();
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
+			"select ID_DOCUMENTO_CSS from Processos.PROTOCOLO_DOCUMENTO_HTML_CSS where ID_PROTOCOLO_DOCUMENTO_VERSAO = ?" ) ) {
+			consulta.setObject( 1, idVersaoModelo );
+			try ( ResultSet resultado = consulta.executeQuery() ) {
+				while( resultado.next() ) ids.add( resultado.getObject( 1, UUID.class ) );
+			}
+		}
+		for( UUID id : ids ) {
+			ProtocoloDocumentoHtmlCss estilo = new ProtocoloDocumentoHtmlCss();
+			estilo.setIdDocumentoCss( id );
+			new ProtocoloDocumentoHtmlCssNegocio( conexao, estilo ).exclui();
+		}
 	}
 
 	public JSONObject salvarCamposPdf( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, UUID idModelo, JSONArray campos ) throws Exception {
@@ -1537,6 +1594,7 @@ public final class ProtocolosService {
 			parte.setIdDocumentoHtmlParte( idParte );
 			new ProtocoloDocumentoHtmlParteNegocio( conexao, parte ).exclui();
 		}
+		excluirEstilosHtml( conexao, idVersaoModelo );
 		ProtocoloDocumentoHTML html = new ProtocoloDocumentoHTML();
 		html.setIdProtocoloDocumentoVersao( idVersaoModelo );
 		new ProtocoloDocumentoHTMLNegocio( conexao, html ).exclui();

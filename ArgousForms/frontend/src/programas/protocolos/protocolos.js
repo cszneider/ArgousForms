@@ -41,7 +41,7 @@ import {
 } from './protocolos-store.js';
 import SeletorPasta from './seletor-pasta.js';
 import PdfCampos from './pdf-campos.js';
-import ModeloHtmlEditor from './modelo-html-editor.js';
+import ModeloHtmlEditor from './modelo-html-editor-mock.js';
 import VariaveisInstituicao from './variaveis-instituicao.js';
 import Recursos from './recursos.js';
 import GestoresElegiveis from './gestores-elegiveis.js';
@@ -301,7 +301,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
     try {
       await executar('SALVAR_MODELO_HTML', { idProtocolo: protocolo.id, idModelo: dados.id || null,
         codigo: dados.codigo.trim(), titulo: dados.titulo.trim(), observacoes: dados.observacoes || '',
-        css: dados.css || '', partes: dados.partes, diasVencimento });
+        estilos: dados.estilos || [], partes: dados.partes, diasVencimento });
       await atualizarLista(protocolo.id);
       setModeloHtml(null);
     } finally {
@@ -1249,6 +1249,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
 
       {modeloHtml && <ModeloHtmlEditor modelo={modeloHtml} variaveis={protocolo?.rascunho?.variaveis || []}
         idProtocolo={protocolo.id}
+        usuarioPapeis={usuarioPapeis}
         salvando={salvando} aoFechar={() => setModeloHtml(null)} aoSalvar={salvarModeloHtml} />}
 
       <Dialog open={!!modeloPdf} onClose={() => !salvando && setModeloPdf(null)} fullWidth maxWidth="sm">

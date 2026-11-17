@@ -124,6 +124,7 @@ CREATE TRIGGER trg_variavel_versoes_publicadas BEFORE INSERT OR UPDATE OR DELETE
 CREATE TRIGGER trg_documento_versoes_publicadas BEFORE UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_VERSOES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_html_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_html_parte_publicada BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
+CREATE TRIGGER trg_documento_html_css_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML_CSS FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_pdf_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_pdf_campo_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 
