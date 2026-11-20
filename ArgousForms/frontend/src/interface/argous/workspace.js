@@ -80,6 +80,7 @@ const Notificacoes = lazy(() => import('../../programas/processos/notificacoes.j
 const VisaoGeralTarefas = lazy(() => import('../../programas/processos/visao-geral-tarefas.js'));
 const TemplateEditor = lazy(() => import('../../programas/modelos/template-editor.js').then((modulo) => ({ default: modulo.TemplateEditor })));
 const Protocolos = lazy(() => import('../../programas/protocolos/protocolos.js'));
+const ProtocolosNovo = lazy(() => import('../../programas/protocolos/protocolos-novo.js'));
 const Instituicao = lazy(() => import('../../programas/protocolos/instituicao.js'));
 const Integracao = lazy(() => import('../../programas/integracao/integracao.js'));
 import {
@@ -104,6 +105,7 @@ const nav = [
   ['processes', 'Processos', GitBranch],
   ['tasks', 'Tarefas', Columns3],
   ['protocols', 'Protocolos', FileStack],
+  ['protocols-new', 'Protocolos Novo', FileStack],
   ['organization', 'Organização e acessos', Users],
   ['integrations', 'Integração', Webhook],
 ];
@@ -823,7 +825,7 @@ export default function Workspace() {
     (destination === 'processes' && Boolean(usuario)) ||
     (destination === 'tasks' && Boolean(usuario)) ||
     (destination === 'notifications' && Boolean(usuario)) ||
-    (destination === 'protocols' && protocolCreator) ||
+    ((destination === 'protocols' || destination === 'protocols-new') && protocolCreator) ||
     (destination === 'templates' && designer) ||
     (destination === 'organization' && (admin || groupManager || accessManager || institutionManager)) ||
     (destination === 'integrations' && (hasRole('DESENVOLVEDOR') || institutionManager));
@@ -1346,6 +1348,7 @@ export default function Workspace() {
                   dispatch({ field: 'processoNotificacao', value: idProcesso }); navigate('processes');
                 }} aoAbrirTarefas={() => navigate('tasks')} />}
                 {view === 'protocols' && protocolCreator && <Protocolos key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} usuarioPapeis={usuario?.papeis || []} />}
+                {view === 'protocols-new' && protocolCreator && <ProtocolosNovo key={usuario?.idUsuario || person.id} usuarioId={usuario?.idUsuario || person.id} usuarioPapeis={usuario?.papeis || []} />}
                 {view === 'templates' && designer && (
                   <>
                     <div className="page-heading">

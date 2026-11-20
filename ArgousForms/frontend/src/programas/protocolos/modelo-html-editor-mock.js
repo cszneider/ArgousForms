@@ -134,11 +134,13 @@ function BotaoFerramenta( { Icone, rotulo, desativado = true, aoClicar, ativo = 
     className={ativo ? 'html-studio-tool-active' : ''}><Icone size={18} /></IconButton></span></Tooltip>;
 }
 
-export default function ModeloHtmlEditorMock( { modelo, variaveis = [], idProtocolo, aoFechar } ) {
+export default function ModeloHtmlEditorMock( { modelo, variaveis = [], idProtocolo, salvando = false, aoFechar, aoSalvar } ) {
   const [partes, setPartes] = useState( () => partesIniciais( modelo ) );
   const [selecionada, setSelecionada] = useState( () => partesIniciais( modelo ).find( ( parte ) => parte.tipo === 'B' )?.id );
   const [aba, setAba] = useState( 'html' );
-  const [propriedades, setPropriedades] = useState( false );
+  const [propriedades, setPropriedades] = useState( !modelo.id );
+  const [metadados, setMetadados] = useState( () => ({ codigo: modelo.codigo || '', titulo: modelo.titulo || '', observacoes: modelo.observacoes || '', diasVencimento: modelo.diasVencimento ?? '' }) );
+  const [erroSalvar, setErroSalvar] = useState( '' );
   const [codigoFonte, setCodigoFonte] = useState( false );
   const [estilos, setEstilos] = useState( () => modelo.estilos || [] );
   const [erroImportacao, setErroImportacao] = useState( '' );
@@ -1024,30 +1026,60 @@ export default function ModeloHtmlEditorMock( { modelo, variaveis = [], idProtoc
     } );
   }
 
+  async function salvarDocumento() {
+    const htmlAtual = aba === 'html' && !codigoFonte ? htmlDoEditor() : null;
+    const partesParaSalvar = partes.filter( ( parte ) => parte.ativa ).map( ( parte ) => ({
+      tipo: parte.tipo,
+      html: parte.id === selecionada && htmlAtual !== null ? htmlAtual : parte.html,
+    }) );
+    if( !metadados.codigo.trim() || !metadados.titulo.trim() ) {
+      setErroSalvar( 'Informe o código técnico e o título nas propriedades do documento.' );
+      setPropriedades( true );
+      return;
+    }
+    if( !partesParaSalvar.some( ( parte ) => parte.tipo === 'B' && parte.html.trim() ) || partesParaSalvar.some( ( parte ) => !parte.html.trim() ) ) {
+      setErroSalvar( 'Preencha todas as partes ativadas, incluindo ao menos um Corpo.' );
+      return;
+    }
+    try {
+      setErroSalvar( '' );
+      await aoSalvar( { ...modelo, ...metadados, partes: partesParaSalvar,
+        estilos: estilos.map( ( estilo ) => ({ nome: estilo.nome, conteudo: estilo.conteudo || '' }) ) } );
+    } catch ( erro ) {
+      setErroSalvar( erro.message || 'Não foi possível salvar o documento HTML.' );
+    }
+  }
+
   return <Dialog open fullScreen onClose={() => { capturarEdicao(); aoFechar(); }} className="html-studio-dialog">
     <div className="html-studio-shell">
       <header className="html-studio-header">
         <div className="html-studio-heading">
           <IconButton aria-label={aba === 'html' ? 'Voltar ao Protocolo' : 'Voltar ao documento HTML'}
             onClick={() => aba === 'html' ? aoFechar() : mudarAba( 'html' )}><ArrowLeft size={21} /></IconButton>
-          <div><span className="html-studio-kicker">MODELO DE DOCUMENTO <span className="html-studio-badge">Edição local · sem salvar</span></span>
-            <h1>{modelo.titulo || 'Novo documento HTML'}</h1></div>
+          <div><span className="html-studio-kicker">MODELO DE DOCUMENTO <span className="html-studio-badge">Rascunho</span></span>
+            <h1>{metadados.titulo || 'Novo documento HTML'}</h1></div>
         </div>
         <div className="html-studio-header-actions">
           <button className="html-studio-properties-button" type="button" onClick={() => setPropriedades( ( atual ) => !atual )}
             aria-expanded={propriedades}><Settings2 size={18} /> Propriedades <ChevronDown size={15} /></button>
-          <button className="html-studio-save" type="button" disabled>Salvar documento</button>
+          <button className="html-studio-save" type="button" disabled={salvando || !aoSalvar} onClick={salvarDocumento}>{salvando ? 'Salvando…' : 'Salvar documento'}</button>
           <IconButton aria-label="Fechar protótipo" onClick={aoFechar}><X size={20} /></IconButton>
         </div>
       </header>
       <input ref={arquivosInput} hidden type="file" multiple accept={aba === 'html' ? '.html,.htm,.css,text/html,text/css' : '.css,text/css'} onChange={importarArquivos} />
 
       {propriedades && <section className="html-studio-properties" aria-label="Propriedades do modelo">
-        <div><span>Código técnico</span><strong>{modelo.codigo || 'Ainda não definido'}</strong></div>
-        <div><span>Título</span><strong>{modelo.titulo || 'Ainda não definido'}</strong></div>
-        <div><span>Observações</span><strong>{modelo.observacoes || 'Sem observações'}</strong></div>
-        <div><span>Validade</span><strong>{modelo.diasVencimento ? `${modelo.diasVencimento} dias` : 'Sem vencimento'}</strong></div>
+        <label><span>Código técnico</span><input value={metadados.codigo} maxLength={30} disabled={!!modelo.id}
+          onChange={( evento ) => setMetadados( ( atual ) => ({ ...atual, codigo: evento.target.value }) )} /></label>
+        <label><span>Título</span><input value={metadados.titulo} maxLength={70}
+          onChange={( evento ) => setMetadados( ( atual ) => ({ ...atual, titulo: evento.target.value }) )} /></label>
+        <label><span>Observações</span><input value={metadados.observacoes}
+          onChange={( evento ) => setMetadados( ( atual ) => ({ ...atual, observacoes: evento.target.value }) )} /></label>
+        <label><span>Validade em dias</span><input type="number" min="1" max="32767" placeholder="Sem vencimento" value={metadados.diasVencimento}
+          onChange={( evento ) => setMetadados( ( atual ) => ({ ...atual, diasVencimento: evento.target.value }) )} /></label>
       </section>}
+
+      {erroSalvar && <output className="html-studio-import-error" role="alert">{erroSalvar}</output>}
 
       <nav className="html-studio-tabs" aria-label="Arquivos do documento">
         <button type="button" className={aba === 'html' ? 'active' : ''} onClick={() => mudarAba( 'html' )}><FileText size={16} /> Documento HTML</button>

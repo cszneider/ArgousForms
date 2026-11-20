@@ -7,9 +7,13 @@
 .html-studio-badge { background: #e9f5f1; color: #14695c; border-radius: 20px; padding: 4px 8px; letter-spacing: 0; font-size: 11px; }
 .html-studio-header button, .html-studio-tabs button, .html-studio-outline button, .html-studio-toolbar button { font: inherit; }
 .html-studio-properties-button, .html-studio-source-button { border: 1px solid #d8e1e8; background: #fff; border-radius: 9px; color: #264b57; display: flex; align-items: center; gap: 8px; padding: 9px 13px; cursor: pointer; font-weight: 650 !important; }
-.html-studio-save { border: 0; border-radius: 9px; background: #c6dad6; color: #47746d; padding: 11px 16px; font-weight: 700 !important; cursor: not-allowed; }
+.html-studio-save { border: 0; border-radius: 9px; background: #126c5c; color: #fff; padding: 11px 16px; font-weight: 700 !important; cursor: pointer; }
+.html-studio-save:disabled { background: #c6dad6; color: #47746d; cursor: not-allowed; }
 .html-studio-properties { flex: none; background: #fff; border-bottom: 1px solid #dfe5eb; display: grid; grid-template-columns: minmax(130px, 1fr) minmax(220px, 2fr) minmax(220px, 2fr) minmax(150px, 1fr); gap: 16px; padding: 20px 34px; }
 .html-studio-properties div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.html-studio-properties label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.html-studio-properties input { width: 100%; min-width: 0; border: 1px solid #d8e1e8; border-radius: 8px; background: #fff; color: #1c3047; padding: 9px 11px; font: inherit; font-size: 14px; }
+.html-studio-properties input:disabled { background: #f2f5f5; color: #657985; }
 .html-studio-properties span { color: #6c7e8f; font-size: 12px; }
 .html-studio-properties strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .html-studio-tabs { flex: none; height: 52px; display: flex; align-items: stretch; gap: 3px; padding: 0 24px; background: #fff; border-bottom: 1px solid #dfe5eb; overflow-x: auto; }
@@ -100,4 +104,4 @@
 .html-studio-image-list strong, .html-studio-image-list small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .html-studio-image-fields { display: grid; grid-template-columns: 1fr 130px; gap: 10px; }
 @media (max-width: 900px) { .html-studio-workspace { grid-template-columns: 220px minmax(0,1fr); } .html-studio-main { padding: 0 18px 18px; } .html-studio-properties { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 650px) { .html-studio-header { padding: 12px; } .html-studio-heading h1 { font-size: 16px; } .html-studio-header-actions { gap: 5px; } .html-studio-properties-button { font-size: 0 !important; gap: 0; } .html-studio-properties-button svg:last-child, .html-studio-save { display: none; } .html-studio-workspace { grid-template-columns: 1fr; } .html-studio-outline { border-right: 0; border-bottom: 1px solid #dfe5eb; max-height: 230px; } .html-studio-outline-note { display: none; } .html-studio-main { padding: 0 14px 14px; } .html-studio-canvas { padding: 18px 10px; } .html-studio-properties { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .html-studio-header { padding: 12px; } .html-studio-heading h1 { font-size: 16px; } .html-studio-header-actions { gap: 5px; } .html-studio-properties-button { font-size: 0 !important; gap: 0; } .html-studio-properties-button svg:last-child { display: none; } .html-studio-workspace { grid-template-columns: 1fr; } .html-studio-outline { border-right: 0; border-bottom: 1px solid #dfe5eb; max-height: 230px; } .html-studio-outline-note { display: none; } .html-studio-main { padding: 0 14px 14px; } .html-studio-canvas { padding: 18px 10px; } .html-studio-properties { grid-template-columns: 1fr; } }
