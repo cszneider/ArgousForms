@@ -79,7 +79,7 @@ export default function Notificacoes({ aoAbrirProcesso, aoAbrirTarefas, aoVoltar
       {itens.map((item) => <Paper key={item.id} className="panel" sx={{ p: 2, borderLeft: item.visualizacao ? 0 : 4, borderColor: 'primary.main' }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
           <Box><Stack direction="row" alignItems="center" gap={1}><Bell size={17} />
-            <Typography variant="subtitle1" fontWeight={item.visualizacao ? 500 : 700}>{item.titulo}</Typography></Stack>
+            <Typography variant="subtitle1" fontWeight={item.visualizacao ? 500 : 700}>{item.titulo}{item.numeroProcesso ? ` · ${item.numeroProcesso}` : ''}</Typography></Stack>
             {item.resumo && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{item.resumo}</Typography>}
             <Typography variant="caption" color="text.secondary">{new Date(item.entrega).toLocaleString()}</Typography>
           </Box>

@@ -79,6 +79,11 @@ public final class FluxoProtocolosService {
 					if( titulo.isEmpty() || titulo.length() > 255 ) throw invalido( "Informe um título válido para cada etapa." );
 					UUID formulario = uuidObrigatorio( etapa, "formularioId" );
 					if( !formularios.contains( formulario ) ) throw invalido( "O formulário da etapa não pertence ao rascunho." );
+					String resultado = etapa.isNull( "resultadoPadrao" ) ? "" : etapa.optString( "resultadoPadrao", "" );
+					if( !resultado.isBlank() && !"P".equals( resultado ) && !"N".equals( resultado ) ) throw invalido( "Resultado padrão inválido na etapa." );
+					int prazo = etapa.optInt( "prazo", 0 );
+					String unidade = etapa.optString( "unidadePrazo", "" );
+					if( prazo < 0 || ( prazo == 0 ) != unidade.isBlank() || ( !unidade.isBlank() && !"U".equals( unidade ) && !"C".equals( unidade ) && !"H".equals( unidade ) ) ) throw invalido( "Informe prazo positivo e unidade juntos, ou deixe ambos vazios." );
 					JSONArray documentos = etapa.optJSONArray( "documentos" );
 					if( documentos == null ) documentos = new JSONArray();
 					Set<UUID> escolhidos = new HashSet<>();
@@ -143,7 +148,7 @@ public final class FluxoProtocolosService {
 			String inicio = null;
 			Map<UUID, UUID> encaminhamentos = new HashMap<>();
 			Set<String> destinos = new HashSet<>();
-			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROTOCOLO_ETAPA, ID_FORMULARIO, DS_TITULO, DS_OBSERVACOES, NR_POSICAO_X, NR_POSICAO_Y, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO, ID_ENCAMINHAMENTO, JS_GERACAO_DOCUMENTOS from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = ? order by DS_TITULO" ) ) {
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROTOCOLO_ETAPA, ID_FORMULARIO, DS_TITULO, DS_OBSERVACOES, NR_POSICAO_X, NR_POSICAO_Y, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO, ID_ENCAMINHAMENTO, JS_GERACAO_DOCUMENTOS, TP_RESULTADO_PADRAO, NR_PRAZO, TP_UNIDADE_PRAZO from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = ? order by DS_TITULO" ) ) {
 				consulta.setObject( 1, idVersao );
 				try ( ResultSet linhas = consulta.executeQuery() ) {
 					while( linhas.next() ) {
@@ -151,7 +156,10 @@ public final class FluxoProtocolosService {
 						JSONObject etapa = new JSONObject().put( "id", id.toString() ).put( "formularioId", linhas.getString( 2 ) ).put( "titulo", linhas.getString( 3 ) )
 							.put( "descricao", linhas.getString( 4 ) == null ? "" : linhas.getString( 4 ) ).put( "x", linhas.getInt( 5 ) ).put( "y", linhas.getInt( 6 ) )
 							.put( "scriptInicializacao", linhas.getString( 7 ) == null ? "" : linhas.getString( 7 ) ).put( "scriptFinalizacao", linhas.getString( 8 ) == null ? "" : linhas.getString( 8 ) )
-							.put( "destinatarios", new JSONArray() ).put( "documentos", new JSONArray() );
+							.put( "destinatarios", new JSONArray() ).put( "documentos", new JSONArray() )
+							.put( "resultadoPadrao", linhas.getString( 11 ) == null ? JSONObject.NULL : linhas.getString( 11 ) )
+							.put( "prazo", linhas.getObject( 12 ) == null ? JSONObject.NULL : linhas.getInt( 12 ) )
+							.put( "unidadePrazo", linhas.getString( 13 ) == null ? JSONObject.NULL : linhas.getString( 13 ) );
 						String js = linhas.getString( 10 );
 						if( js != null ) {
 							JSONArray automaticos = new JSONObject( js ).optJSONArray( "aoFinalizar" );
@@ -251,7 +259,13 @@ public final class FluxoProtocolosService {
 		for( JSONObject dados : etapas ) {
 			ProtocoloEtapa etapa = new ProtocoloEtapa();
 			etapa.setIdProtocoloVersao( idVersao );
+			etapa.setTpBloco( "E" );
 			etapa.setIdFormulario( uuidObrigatorio( dados, "formularioId" ) );
+			String resultado = dados.isNull( "resultadoPadrao" ) ? "" : dados.optString( "resultadoPadrao", "" );
+			etapa.setTpResultadoPadrao( saidas.containsKey( dados.getString( "id" ) ) ? null : resultado.isBlank() ? "P" : resultado );
+			int prazo = dados.optInt( "prazo", 0 );
+			etapa.setNrPrazo( prazo > 0 ? prazo : null );
+			etapa.setTpUnidadePrazo( prazo > 0 ? dados.optString( "unidadePrazo" ) : null );
 			etapa.setDsTitulo( dados.getString( "titulo" ).strip() );
 			etapa.setDsObservacoes( vazioParaNulo( dados.optString( "descricao" ) ) );
 			etapa.setNrPosicaoX( dados.optInt( "x" ) );

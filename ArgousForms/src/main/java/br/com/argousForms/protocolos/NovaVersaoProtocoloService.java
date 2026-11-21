@@ -301,7 +301,7 @@ public final class NovaVersaoProtocoloService {
 
 		Map<UUID, UUID> etapas = new HashMap<>();
 		Map<UUID, UUID> saidas = new HashMap<>();
-		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROTOCOLO_ETAPA, ID_FORMULARIO, DS_TITULO, DS_OBSERVACOES, NR_POSICAO_X, NR_POSICAO_Y, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO, ID_ENCAMINHAMENTO, JS_GERACAO_DOCUMENTOS from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = ?" ) ) {
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_PROTOCOLO_ETAPA, ID_FORMULARIO, DS_TITULO, DS_OBSERVACOES, NR_POSICAO_X, NR_POSICAO_Y, TX_SCRIPT_INICIALIZACAO, TX_SCRIPT_FINALIZACAO, ID_ENCAMINHAMENTO, JS_GERACAO_DOCUMENTOS, TP_BLOCO, TP_RESULTADO_PADRAO, NR_PRAZO, TP_UNIDADE_PRAZO from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_VERSAO = ?" ) ) {
 			consulta.setObject( 1, origem );
 			try ( ResultSet linhas = consulta.executeQuery() ) {
 				while( linhas.next() ) {
@@ -311,7 +311,11 @@ public final class NovaVersaoProtocoloService {
 					ProtocoloEtapa etapa = new ProtocoloEtapa();
 					etapa.setIdProtocoloEtapa( UUID.randomUUID() );
 					etapa.setIdProtocoloVersao( destino );
+					etapa.setTpBloco( linhas.getString( 11 ) );
 					etapa.setIdFormulario( formulario );
+					etapa.setTpResultadoPadrao( linhas.getString( 12 ) );
+					etapa.setNrPrazo( linhas.getObject( 13 ) == null ? null : linhas.getInt( 13 ) );
+					etapa.setTpUnidadePrazo( linhas.getString( 14 ) );
 					etapa.setDsTitulo( linhas.getString( 3 ) );
 					etapa.setDsObservacoes( linhas.getString( 4 ) );
 					etapa.setNrPosicaoX( linhas.getInt( 5 ) );

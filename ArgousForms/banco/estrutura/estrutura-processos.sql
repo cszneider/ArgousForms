@@ -17,7 +17,21 @@ CREATE TABLE Processos.PROTOCOLOS
 	DT_INCLUSAO Timestamp NOT NULL,
 	SN_ATIVO Boolean NOT NULL,
 	ID_PASTA UUID   NULL,
+	CD_PREFIXO Varchar(6) NULL Check (CD_PREFIXO IS NULL OR CD_PREFIXO ~ '^[A-Z0-9]{2,6}$'),
+	TP_SEQUENCIA Char(1) NOT NULL Default 'A' Check (TP_SEQUENCIA IN ('A', 'C')),
  primary key (ID_PROTOCOLO)
+);
+
+COMMENT ON COLUMN Processos.PROTOCOLOS.CD_PREFIXO IS 'Prefixo do número dos processos (ex.: AUT). Obrigatório para publicar; único entre todos os protocolos, ativos ou não.';
+COMMENT ON COLUMN Processos.PROTOCOLOS.TP_SEQUENCIA IS 'A: anual (AUT-2026-000131); C: contínua (AUT-000131).';
+
+-- M-03: último número emitido por protocolo e ano (NR_ANO = 0 na sequência contínua). Incremento atômico em Processos.numerar_processo().
+CREATE TABLE Processos.PROTOCOLO_SEQUENCIAS
+(
+	ID_PROTOCOLO UUID   NOT NULL,
+	NR_ANO Smallint NOT NULL Check (NR_ANO >= 0),
+	NR_ULTIMO Integer NOT NULL Check (NR_ULTIMO > 0),
+ primary key (ID_PROTOCOLO,NR_ANO)
 );
 
 CREATE TABLE Processos.PROTOCOLO_RECURSOS
@@ -67,7 +81,8 @@ CREATE TABLE Processos.PROTOCOLOS_ETAPAS
 (
 	ID_PROTOCOLO_ETAPA UUID   NOT NULL,
 	ID_PROTOCOLO_VERSAO UUID   NOT NULL,
-	ID_FORMULARIO UUID   NOT NULL,
+	TP_BLOCO Char(1) NOT NULL Default 'E' Check (TP_BLOCO IN ('E', 'J')),
+	ID_FORMULARIO UUID   NULL,
 	DS_TITULO Varchar(255) NOT NULL,
 	DS_OBSERVACOES Text NULL ,
 	NR_POSICAO_X Integer NOT NULL,
@@ -76,8 +91,20 @@ CREATE TABLE Processos.PROTOCOLOS_ETAPAS
 	TX_SCRIPT_FINALIZACAO Text NULL ,
 	ID_ENCAMINHAMENTO UUID   NULL ,
 	JS_GERACAO_DOCUMENTOS JSONB NULL ,
- primary key (ID_PROTOCOLO_ETAPA)
+	TP_RESULTADO_PADRAO Char(1) NULL Check (TP_RESULTADO_PADRAO IS NULL OR TP_RESULTADO_PADRAO IN ('P', 'N')),
+	NR_PRAZO Smallint NULL Check (NR_PRAZO IS NULL OR NR_PRAZO > 0),
+	TP_UNIDADE_PRAZO Char(1) NULL Check (TP_UNIDADE_PRAZO IS NULL OR TP_UNIDADE_PRAZO IN ('U', 'C', 'H')),
+ primary key (ID_PROTOCOLO_ETAPA),
+	-- M-01 (b): prazo e unidade juntos; concentrador não tem prazo.
+	CONSTRAINT ck_etapa_prazo CHECK ((NR_PRAZO IS NULL) = (TP_UNIDADE_PRAZO IS NULL) AND (TP_BLOCO = 'E' OR NR_PRAZO IS NULL)),
+	-- M-01: etapa (E) tem formulário; concentrador (J) não tem formulário, documento nem resultado padrão.
+	CONSTRAINT ck_etapa_formulario CHECK ((TP_BLOCO = 'E') = (ID_FORMULARIO IS NOT NULL)),
+	CONSTRAINT ck_concentrador CHECK (TP_BLOCO = 'E' OR (JS_GERACAO_DOCUMENTOS IS NULL AND TP_RESULTADO_PADRAO IS NULL))
 );
+
+COMMENT ON COLUMN Processos.PROTOCOLOS_ETAPAS.TP_BLOCO IS 'E: etapa (formulário e ação humana); J: concentrador (junção de ramos paralelos, sem formulário nem destinatários).';
+COMMENT ON COLUMN Processos.PROTOCOLOS_ETAPAS.TP_UNIDADE_PRAZO IS 'U: dias úteis (segunda a sexta, ainda sem feriados), vence no fim do dia; C: dias corridos, vence no fim do dia; H: horas exatas. Fuso: Cadastro.INSTITUICAO.CD_FUSO_HORARIO.';
+COMMENT ON COLUMN Processos.PROTOCOLOS_ETAPAS.TP_RESULTADO_PADRAO IS 'Resultado do Processo quando termina nesta etapa final: P positivo, N negativo. Obrigatório em toda etapa final na publicação.';
 
 CREATE TABLE Processos.PROTOCOLO_VARIAVEIS
 (
@@ -128,8 +155,13 @@ CREATE TABLE Processos.ENCAMINHAMENTOS
 	TX_TESTE Text NULL ,
 	ID_PROXIMA_ETAPA UUID   NOT NULL,
 	ID_PROXIMO_ENCAMINHAMENTO UUID   NULL ,
- primary key (ID_ENCAMINHAMENTO)
+ primary key (ID_ENCAMINHAMENTO),
+	-- E direto: sem teste. T teste (verdadeiro dispara e para a cadeia) e C condicional (verdadeiro dispara e continua): teste obrigatório.
+	CONSTRAINT ck_encaminhamento_teste CHECK ((TP_ENCAMINHAMENTO = 'E' AND TX_TESTE IS NULL)
+	  OR (TP_ENCAMINHAMENTO IN ('T', 'C') AND BTRIM(COALESCE(TX_TESTE, '')) <> ''))
 );
+
+COMMENT ON COLUMN Processos.ENCAMINHAMENTOS.TP_ENCAMINHAMENTO IS 'E direto (dispara e continua a cadeia); T teste (verdadeiro dispara e para; falso continua); C condicional (verdadeiro dispara e continua; falso continua sem disparar).';
 
 CREATE TABLE Processos.PROTOCOLO_ETAPA_DESTINATARIOS
 (
@@ -251,14 +283,30 @@ CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS
 CREATE TABLE Processos.PROCESSOS
 (
 	ID_PROCESSO UUID   NOT NULL,
+	CD_NUMERO Varchar(30) NOT NULL,
 	ID_PROTOCOLO_VERSAO UUID   NOT NULL,
 	ID_USUARIO_INICIOU UUID   NOT NULL,
 	ID_USUARIO_GESTOR UUID   NULL ,
-	TP_SITUACAO Char(1) NOT NULL,
+	TP_SITUACAO Char(1) NOT NULL Check (TP_SITUACAO IN ('E', 'A', 'F', 'C')),
+	TP_RESULTADO Char(1) NULL,
+	DS_RESULTADO Text NULL,
 	DT_INICIO Timestamp with time zone NOT NULL,
 	DT_ENCERRAMENTO Timestamp with time zone NULL  Check (DT_ENCERRAMENTO > DT_INICIO ),
- primary key (ID_PROCESSO)
+ primary key (ID_PROCESSO),
+	-- M-01: resultado coerente com a situação; motivo obrigatório em N e C; encerramento só em F e C.
+	CONSTRAINT ck_processo_resultado CHECK (
+	     (TP_SITUACAO = 'E' AND TP_RESULTADO IS NULL)
+	  OR (TP_SITUACAO = 'A' AND (TP_RESULTADO IS NULL OR TP_RESULTADO IN ('P', 'N')))
+	  OR (TP_SITUACAO = 'F' AND COALESCE(TP_RESULTADO, '-') IN ('P', 'N'))
+	  OR (TP_SITUACAO = 'C' AND COALESCE(TP_RESULTADO, '-') = 'C')),
+	CONSTRAINT ck_processo_motivo CHECK (
+	  TP_SITUACAO NOT IN ('F', 'C') OR TP_RESULTADO = 'P' OR BTRIM(COALESCE(DS_RESULTADO, '')) <> ''),
+	CONSTRAINT ck_processo_encerramento CHECK ((TP_SITUACAO IN ('F', 'C')) = (DT_ENCERRAMENTO IS NOT NULL))
 );
+
+COMMENT ON COLUMN Processos.PROCESSOS.CD_NUMERO IS 'Número do processo, gerado pelo banco no INSERT (Processos.numerar_processo); imutável e nunca reutilizado.';
+COMMENT ON COLUMN Processos.PROCESSOS.TP_SITUACAO IS 'E: em execução; A: aguardando finalização pelo gestor; F: finalizado; C: cancelado.';
+COMMENT ON COLUMN Processos.PROCESSOS.TP_RESULTADO IS 'P positivo; N negativo; C cancelado. Nulo em execução; em A pode vir pré-preenchido pelo resultado padrão da etapa final.';
 
 CREATE TABLE Processos.PROCESSO_ETAPAS
 (
@@ -271,8 +319,11 @@ CREATE TABLE Processos.PROCESSO_ETAPAS
 	DT_DISPONIBILIZACAO Timestamp with time zone NOT NULL,
 	DT_ASSUMIU Timestamp with time zone NULL  Check (DT_ASSUMIU > DT_DISPONIBILIZACAO ),
 	DT_FINALIZACAO Timestamp with time zone NULL  Check (DT_FINALIZACAO > DT_ASSUMIU ),
+	DT_LIMITE Timestamp with time zone NULL Check (DT_LIMITE IS NULL OR DT_LIMITE > DT_DISPONIBILIZACAO),
  primary key (ID_PROCESSO_ETAPA)
 );
+
+COMMENT ON COLUMN Processos.PROCESSO_ETAPAS.DT_LIMITE IS 'Prazo desta passagem, calculado pelo banco ao inserir (Processos.definir_limite_etapa) a partir do prazo da etapa do Protocolo.';
 
 CREATE TABLE Processos.PROCESSO_ETAPA_ENCAMINHAMENTOS
 (
@@ -300,6 +351,7 @@ CREATE TABLE Processos.PROCESSO_VARIAVEL_VALORES
 	CD_VALOR_MONETARIO Numeric(20,2) NULL ,
 	VL_BOOLEANO Boolean NULL ,
 	VL_OPCAO Text NULL ,
+	CD_OPCAO Text NULL ,
 	VL_DATA Date NULL ,
 	VL_HORA Time with time zone NULL ,
 	VL_DATA_HORA Timestamp with time zone NULL ,
@@ -307,6 +359,9 @@ CREATE TABLE Processos.PROCESSO_VARIAVEL_VALORES
 	ID_USUARIO_ULTIMA_GRAVACAO UUID NULL ,
  primary key (ID_PROCESSO_ETAPA,ID_VARIAVEL)
 );
+
+COMMENT ON COLUMN Processos.PROCESSO_VARIAVEL_VALORES.CD_OPCAO IS 'Chave da opção escolhida (campo do tipo O). Substitui VL_OPCAO.';
+COMMENT ON COLUMN Processos.PROCESSO_VARIAVEL_VALORES.VL_OPCAO IS 'OBSOLETO: mantido temporariamente por compatibilidade; usar CD_OPCAO. Será removido.';
 
 CREATE TABLE Processos.PROCESSO_VARIAVEIS_ATUAIS
 (
@@ -351,8 +406,11 @@ CREATE TABLE Processos.PROCESSO_CONSULTAS
 	DT_ENCERRAMENTO Timestamp with time zone NULL ,
 	ID_USUARIO_ENCERROU UUID   NULL ,
 	DS_MOTIVO_ENCERRAMENTO Text NULL ,
+	DT_LIMITE Timestamp with time zone NULL Check (DT_LIMITE IS NULL OR DT_LIMITE > DT_SOLICITACAO),
  primary key (ID_PROCESSO_CONSULTA)
 );
+
+COMMENT ON COLUMN Processos.PROCESSO_CONSULTAS.DT_LIMITE IS 'Prazo do parecer, opcional, informado por quem pede (a tela sugere 2 dias).';
 
 CREATE TABLE Processos.PROCESSO_ANEXOS
 (
@@ -433,6 +491,10 @@ Create unique index VariaveisPorVersao ON Processos.PROTOCOLO_VARIAVEL_VERSOES (
 Create unique index ProtocoloPorVariavel ON Processos.PROTOCOLO_VERSAO_VARIAVEIS (ID_PROTOCOLO_VERSAO,ID_VARIAVEL);
 
 Create unique index DocumentoPorCodigo ON Processos.PROTOCOLO_DOCUMENTOS (ID_PROTOCOLO,CD_DOCUMENTO);
+
+Create unique index ProtocoloPrefixo ON Processos.PROTOCOLOS (CD_PREFIXO);
+
+Create unique index NumeroDeProcesso ON Processos.PROCESSOS (CD_NUMERO);
 
 Create unique index ProcessoEtapaPorPassagem ON Processos.PROCESSO_ETAPAS (ID_PROCESSO,ID_PROTOCOLO_ETAPA,NR_PASSAGEM);
 
@@ -515,6 +577,7 @@ ALTER TABLE Processos.PROTOCOLO_GESTORES_ELEGIVEIS add  foreign key (CD_TAG_GRUP
 ALTER TABLE Processos.PROTOCOLO_GESTORES_ELEGIVEIS add  foreign key (CD_TAG_VINCULO) REFERENCES Cadastro.TAGS (CD_TAG)  on update restrict  on delete restrict ;
 
 ALTER TABLE Processos.PROTOCOLOS add  foreign key (ID_PASTA) REFERENCES Docs.PASTAS (ID_PASTA)  on update restrict  on delete restrict ;
+ALTER TABLE Processos.PROTOCOLO_SEQUENCIAS add foreign key (ID_PROTOCOLO) REFERENCES Processos.PROTOCOLOS (ID_PROTOCOLO) on update restrict on delete restrict;
 ALTER TABLE Processos.PROTOCOLO_RECURSOS add foreign key (ID_PROTOCOLO) REFERENCES Processos.PROTOCOLOS (ID_PROTOCOLO) on update restrict on delete restrict;
 ALTER TABLE Processos.PROTOCOLO_RECURSOS add foreign key (ID_ARQUIVO_VERSAO) REFERENCES Docs.ARQUIVO_VERSOES (ID_ARQUIVO_VERSAO) on update restrict on delete restrict;
 
@@ -647,7 +710,7 @@ ALTER TABLE Processos.PROCESSO_CONSULTAS ADD CONSTRAINT fk_pc_etapa_processo FOR
 -- Domínios fechados já definidos na modelagem funcional.
 ALTER TABLE Processos.PROTOCOLO_VARIAVEIS ADD CONSTRAINT ck_protocolo_variavel_dado CHECK (TP_DADO IN ('S', 'I', 'R', 'M', 'V', 'B', 'O', 'D', 'H', 'T'));
 ALTER TABLE Processos.FORMULARIO_VARIAVEIS ADD CONSTRAINT ck_formulario_apresentacao CHECK (TP_APRESENTACAO IN ('1', '2', '3', '4', '5', '6'));
-ALTER TABLE Processos.ENCAMINHAMENTOS ADD CONSTRAINT ck_encaminhamento_tipo CHECK (TP_ENCAMINHAMENTO IN ('E', 'T'));
+ALTER TABLE Processos.ENCAMINHAMENTOS ADD CONSTRAINT ck_encaminhamento_tipo CHECK (TP_ENCAMINHAMENTO IN ('E', 'T', 'C'));
 ALTER TABLE Processos.PROTOCOLO_VERSOES ADD CONSTRAINT ck_protocolo_versao_numero CHECK (NR_VERSAO = -1 OR NR_VERSAO > 0);
 ALTER TABLE Processos.PROCESSO_ETAPAS ADD CONSTRAINT ck_processo_etapa_passagem CHECK (NR_PASSAGEM > 0);
 ALTER TABLE Processos.PROCESSO_ETAPA_ENCAMINHAMENTOS ADD CONSTRAINT ck_processo_encaminhamento_passagem CHECK (NR_PASSAGEM_DESTINO > 0);

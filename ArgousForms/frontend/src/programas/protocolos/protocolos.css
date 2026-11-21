@@ -890,6 +890,7 @@
   margin: 0;
   color: var(--theme-text-secondary, #697a89);
 }
+.protocolo-etapa-prazo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .protocolo-etapa-dialogo-previa {
   align-self: start;
   position: sticky;

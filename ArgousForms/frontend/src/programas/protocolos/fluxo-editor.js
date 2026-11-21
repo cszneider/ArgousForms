@@ -182,7 +182,9 @@ function FluxoEditorInterno({ idProtocolo, formularios = [], variaveis = [], doc
     try {
       const dados = await executar('SALVAR_FLUXO_PROTOCOLO', {
         idProtocolo, inicio: entradas[0].target,
-        etapas: etapas.map((item) => ({ ...item.data, id: item.id, x: Math.round(item.position.x), y: Math.round(item.position.y) })),
+        etapas: etapas.map((item) => ({ ...item.data, id: item.id, x: Math.round(item.position.x), y: Math.round(item.position.y),
+          resultadoPadrao: ligacoes.some((ligacao) => ligacao.source === item.id && etapas.some((etapa) => etapa.id === ligacao.target))
+            ? null : item.data.resultadoPadrao || 'P' })),
         ligacoes: ligacoes.filter((item) => etapas.some((etapa) => etapa.id === item.source) && etapas.some((etapa) => etapa.id === item.target))
           .map((item) => ({ origem: item.source, destino: item.target })),
       });
@@ -254,6 +256,7 @@ function FluxoEditorInterno({ idProtocolo, formularios = [], variaveis = [], doc
       </aside>
     </div>
     {etapaEmEdicao && <FluxoEtapaDialog key={etapaEmEdicao.id} etapa={etapaEmEdicao}
+      ehFinal={!ligacoes.some((ligacao) => ligacao.source === etapaEmEdicao.id && nos.some((no) => no.id === ligacao.target && no.type === 'etapa'))}
       formularios={formularios} variaveis={variaveis} documentos={documentos}
       catalogo={catalogo}
       aoSalvar={salvarEtapa} aoFechar={() => setEtapaAberta(null)} />}

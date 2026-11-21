@@ -255,7 +255,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 
 		if( "CONCLUIR_PROCESSO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
-			ArgousFormsJson.enviarSucesso( response, 200, processos.concluir( usuario, uuidObrigatorio( dados, "idProcesso" ) ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.concluir( usuario, uuidObrigatorio( dados, "idProcesso" ), dados.optString( "resultado", "" ), dados.optString( "motivo", "" ) ) );
 			return;
 		}
 
@@ -351,7 +351,9 @@ public final class ArgousFormsResolver extends HttpServlet {
 		if( "SALVAR_DADOS_PROTOCOLO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarDados( usuario, uuidObrigatorio( dados, "idProtocolo" ),
-				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optBoolean( "gestorFinaliza", true ) ) );
+				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optBoolean( "gestorFinaliza", true ),
+				dados.has( "prefixo" ) ? dados.optString( "prefixo", "" ) : null,
+				dados.has( "sequencia" ) ? dados.optString( "sequencia", "A" ) : null ) );
 			return;
 		}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import { Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import { ArrowLeft, FileText, GitBranch, History, Image, LayoutTemplate, MoreHorizontal, Plus, Settings2, Variable } from 'lucide-react';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { executar } from '../login/autenticacao.js';
@@ -39,6 +39,8 @@ export default function ProtocolosNovo({ usuarioId, usuarioPapeis = [] }) {
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [titulo, setTitulo] = useState('');
   const [menuAberto, setMenuAberto] = useState(false);
+  const [prefixo, setPrefixo] = useState('');
+  const [sequencia, setSequencia] = useState('A');
 
   useEffect(() => {
     let ativo = true;
@@ -72,6 +74,8 @@ export default function ProtocolosNovo({ usuarioId, usuarioPapeis = [] }) {
         setVersoesPublicadas(versaoAtual?.versoes || []);
         setPublicado(null);
         setTitulo(dados.titulo);
+        setPrefixo(dados.prefixo || '');
+        setSequencia(dados.sequencia || 'A');
       } else if (item.versaoPublicada > 0) {
         const dados = await executar('CONSULTAR_PROTOCOLO_PUBLICADO', { idProtocolo: item.id, numeroVersao: item.versaoPublicada });
         setProtocolo({ ...item, titulo: dados.titulo, descricao: dados.descricao });
@@ -103,6 +107,8 @@ export default function ProtocolosNovo({ usuarioId, usuarioPapeis = [] }) {
       setFluxoRascunho(null);
       setSecao('fluxo');
       setTitulo(dados.titulo);
+      setPrefixo(dados.prefixo || '');
+      setSequencia(dados.sequencia || 'A');
       setNovo(false);
       setTituloNovo('');
       setDescricaoNova('');
@@ -132,6 +138,19 @@ export default function ProtocolosNovo({ usuarioId, usuarioPapeis = [] }) {
     } finally {
       setSalvando(false);
     }
+  }
+
+  async function salvarNumeracao() {
+    if (prefixo && !/^[A-Z0-9]{2,6}$/.test(prefixo)) { setErro(t('Use de 2 a 6 letras maiúsculas ou dígitos no prefixo.')); return; }
+    setSalvando(true);
+    setErro('');
+    try {
+      const atualizado = await executar('SALVAR_DADOS_PROTOCOLO', { idProtocolo: protocolo.id,
+        titulo: protocolo.titulo, descricao: protocolo.descricao, gestorFinaliza: protocolo.rascunho.gestorFinaliza,
+        prefixo, sequencia });
+      setProtocolo(atualizado);
+    } catch (falha) { setErro(falha.message); }
+    finally { setSalvando(false); }
   }
 
   const rascunho = protocolo?.rascunho;
@@ -208,6 +227,17 @@ export default function ProtocolosNovo({ usuarioId, usuarioPapeis = [] }) {
             <article className="protocolos-novo-linha"><strong>{t('Observações')}</strong><span>{protocolo.descricao || '—'}</span></article>
             <article className="protocolos-novo-linha"><strong>{t('Pasta associada')}</strong><span>{rascunho?.pastaCaminho || t('Ainda não definida')}</span></article>
             <article className="protocolos-novo-linha"><strong>{t('Conclusão pelo gestor')}</strong><span>{dados?.gestorFinaliza ? t('Necessária') : t('Automática')}</span></article>
+            {rascunho && <div className="protocolos-novo-numeracao">
+              <TextField label={t('Prefixo do número')} value={prefixo} inputProps={{ maxLength: 6 }}
+                error={!!prefixo && !/^[A-Z0-9]{2,6}$/.test(prefixo)}
+                helperText={t('Use de 2 a 6 letras maiúsculas ou dígitos. Obrigatório para publicar.')}
+                onChange={(evento) => setPrefixo(evento.target.value.toUpperCase())} />
+              <TextField select label={t('Numeração')} value={sequencia} onChange={(evento) => setSequencia(evento.target.value)}>
+                <MenuItem value="A">{t('Anual')}</MenuItem><MenuItem value="C">{t('Contínua')}</MenuItem>
+              </TextField>
+              {prefixo && /^[A-Z0-9]{2,6}$/.test(prefixo) && <p>{t('Exemplo de número')}: <code>{prefixo}-{sequencia === 'A' ? `${new Date().getFullYear()}-` : ''}000001</code></p>}
+              <Button variant="contained" disabled={salvando} onClick={salvarNumeracao}>{t('Salvar numeração')}</Button>
+            </div>}
           </section>}
           {secao === 'versoes' && <section><h2>{t('Versões')}</h2><p>{t('Cada Processo segue na versão em que foi iniciado.')}</p>
             {rascunho && <article className="protocolos-novo-linha"><strong>{t('Rascunho')} · {t('versão')} {versao}</strong><small>{t('Em preparação')}</small></article>}

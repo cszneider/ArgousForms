@@ -3,8 +3,6 @@ package br.com.argousForms.processos;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
 
 import org.json.JSONArray;
@@ -25,7 +23,11 @@ import quatro.util.QtData;
 
 public final class ProcessosService {
 
-	public JSONObject concluir( AutenticacaoLocalService.Usuario usuario, UUID idProcesso ) throws Exception {
+	public JSONObject concluir( AutenticacaoLocalService.Usuario usuario, UUID idProcesso, String resultado, String motivo ) throws Exception {
+
+		if( !"P".equals( resultado ) && !"N".equals( resultado ) ) throw new ArgousFormsApiException( 400, "RESULTADO_INVALIDO", "Escolha um resultado Positivo ou Negativo." );
+		String descricao = motivo == null ? "" : motivo.strip();
+		if( "N".equals( resultado ) && descricao.isEmpty() ) throw new ArgousFormsApiException( 400, "MOTIVO_OBRIGATORIO", "Informe o motivo do resultado Negativo." );
 
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			conexao.beginTransaction();
@@ -52,12 +54,14 @@ public final class ProcessosService {
 				}
 				Processo processo = ProcessoLocalizador.buscaProcesso( conexao, idProcesso );
 				processo.setTpSituacao( "F" );
+				processo.setTpResultado( resultado );
+				processo.setDsResultado( descricao.isEmpty() ? null : descricao );
 				processo.setDtEncerramento( new QtData( Instant.now().toEpochMilli() ) );
 				new ProcessoNegocio( conexao, processo ).altera();
-				ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído pelo gestor.", null );
+				ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído pelo gestor: " + ( "P".equals( resultado ) ? "Positivo" : "Negativo" ) + ".", null );
 				new NotificacoesService().processoConcluido( conexao, idProcesso, usuario.idUsuario() );
 				conexao.commit();
-				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", "F" );
+				return new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "situacao", "F" ).put( "resultado", resultado );
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;
@@ -84,7 +88,7 @@ public final class ProcessosService {
 				processo.setIdProtocoloVersao( idVersao );
 				processo.setIdUsuarioIniciou( usuario.idUsuario() );
 				processo.setIdUsuarioGestor( idGestor );
-				processo.setTpSituacao( "I" );
+				processo.setTpSituacao( "E" );
 				processo.setDtInicio( agora );
 				new ProcessoNegocio( conexao, processo ).insere();
 
@@ -224,19 +228,22 @@ public final class ProcessosService {
 	public JSONObject meusProcessos( AutenticacaoLocalService.Usuario usuario ) throws Exception {
 
 		JSONArray processos = new JSONArray();
-		String sql = "select p.ID_PROCESSO, p.ID_USUARIO_GESTOR, p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, v.DS_TITULO, v.NR_VERSAO "
+		String sql = "select p.ID_PROCESSO, p.CD_NUMERO, p.ID_USUARIO_GESTOR, p.TP_SITUACAO, p.TP_RESULTADO, p.DS_RESULTADO, p.DT_INICIO, p.DT_ENCERRAMENTO, v.DS_TITULO, v.NR_VERSAO "
 			+ "from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
 			+ "where p.ID_USUARIO_INICIOU = ? or p.ID_USUARIO_GESTOR = ? "
 			+ "or exists (select 1 from Processos.PROCESSO_ETAPA_RESPONSAVEIS r join Processos.PROCESSO_ETAPAS e on e.ID_PROCESSO_ETAPA = r.ID_PROCESSO_ETAPA where e.ID_PROCESSO = p.ID_PROCESSO and r.ID_USUARIO_SISTEMA = ?) "
+			+ "or exists (select 1 from Processos.PROCESSO_TRANSFERENCIA_GESTAO g where g.ID_PROCESSO = p.ID_PROCESSO and (g.ID_GESTOR_ORIGEM = ? or g.ID_GESTOR_DESTINO = ?)) "
 			+ "or exists (select 1 from Processos.PROCESSO_FORUM m where m.ID_PROCESSO = p.ID_PROCESSO and m.ID_USUARIO_AUTOR = ?) "
 			+ "or exists (select 1 from Processos.PROCESSO_CONVIDADOS c where c.ID_PROCESSO = p.ID_PROCESSO and c.ID_USUARIO_CONVIDADO = ? and c.TP_SITUACAO = 'A') "
 			+ "order by p.DT_INICIO desc";
 		try ( Conexao conexao = PoolDeConexoes.getConexao(); PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
-			for( int i = 1; i <= 5; i++ ) consulta.setObject( i, usuario.idUsuario() );
+			for( int i = 1; i <= 7; i++ ) consulta.setObject( i, usuario.idUsuario() );
 			try ( ResultSet linhas = consulta.executeQuery() ) {
-				while( linhas.next() ) processos.put( new JSONObject().put( "id", linhas.getString( "ID_PROCESSO" ) )
+				while( linhas.next() ) processos.put( new JSONObject().put( "id", linhas.getString( "ID_PROCESSO" ) ).put( "numero", linhas.getString( "CD_NUMERO" ) )
 					.put( "titulo", linhas.getString( "DS_TITULO" ) ).put( "versao", linhas.getInt( "NR_VERSAO" ) )
-					.put( "situacao", linhas.getString( "TP_SITUACAO" ) ).put( "gestorAtual", usuario.idUsuario().toString().equals( linhas.getString( "ID_USUARIO_GESTOR" ) ) )
+					.put( "situacao", linhas.getString( "TP_SITUACAO" ) ).put( "resultado", linhas.getString( "TP_RESULTADO" ) == null ? JSONObject.NULL : linhas.getString( "TP_RESULTADO" ) )
+					.put( "motivo", linhas.getString( "DS_RESULTADO" ) == null ? JSONObject.NULL : linhas.getString( "DS_RESULTADO" ) )
+					.put( "gestorAtual", usuario.idUsuario().toString().equals( linhas.getString( "ID_USUARIO_GESTOR" ) ) )
 					.put( "inicio", linhas.getTimestamp( "DT_INICIO" ).toInstant().toString() )
 					.put( "encerramento", linhas.getTimestamp( "DT_ENCERRAMENTO" ) == null ? JSONObject.NULL : linhas.getTimestamp( "DT_ENCERRAMENTO" ).toInstant().toString() ) );
 			}
@@ -255,7 +262,7 @@ public final class ProcessosService {
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			JSONObject processo;
 			UUID idVersaoProtocolo;
-			String sqlProcesso = "select p.ID_PROTOCOLO_VERSAO, p.TP_SITUACAO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
+			String sqlProcesso = "select p.ID_PROTOCOLO_VERSAO, p.CD_NUMERO, p.TP_SITUACAO, p.TP_RESULTADO, p.DS_RESULTADO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
 				+ "v.DS_TITULO, v.NR_VERSAO, iniciador.DS_NOME as NOME_INICIADOR, gestor.DS_NOME as NOME_GESTOR "
 				+ "from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
 				+ "left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU "
@@ -265,8 +272,10 @@ public final class ProcessosService {
 				try ( ResultSet linha = consulta.executeQuery() ) {
 					if( !linha.next() ) throw new ArgousFormsApiException( 404, "PROCESSO_NAO_ENCONTRADO", "Processo não encontrado." );
 					idVersaoProtocolo = linha.getObject( "ID_PROTOCOLO_VERSAO", UUID.class );
-					processo = new JSONObject().put( "id", idProcesso.toString() ).put( "titulo", linha.getString( "DS_TITULO" ) )
+					processo = new JSONObject().put( "id", idProcesso.toString() ).put( "numero", linha.getString( "CD_NUMERO" ) ).put( "titulo", linha.getString( "DS_TITULO" ) )
 						.put( "versao", linha.getInt( "NR_VERSAO" ) ).put( "situacao", linha.getString( "TP_SITUACAO" ) )
+						.put( "resultado", linha.getString( "TP_RESULTADO" ) == null ? JSONObject.NULL : linha.getString( "TP_RESULTADO" ) )
+						.put( "motivo", linha.getString( "DS_RESULTADO" ) == null ? JSONObject.NULL : linha.getString( "DS_RESULTADO" ) )
 						.put( "podeConcluir", "A".equals( linha.getString( "TP_SITUACAO" ) ) && usuario.idUsuario().equals( linha.getObject( "ID_USUARIO_GESTOR", UUID.class ) ) )
 						.put( "inicio", linha.getTimestamp( "DT_INICIO" ).toInstant().toString() ).put( "iniciador", linha.getString( "ID_USUARIO_INICIOU" ) )
 						.put( "nomeIniciador", linha.getString( "NOME_INICIADOR" ) == null ? JSONObject.NULL : linha.getString( "NOME_INICIADOR" ) )
@@ -329,7 +338,7 @@ public final class ProcessosService {
 
 		JSONArray campos = new JSONArray();
 		String sql = "select x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
-			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.VL_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
+			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.CD_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
 			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = x.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
@@ -349,7 +358,7 @@ public final class ProcessosService {
 						case "M" -> linhas.getString( "CD_MOEDA" );
 						case "V" -> linhas.getString( "CD_VALOR_MONETARIO" ) == null ? null : linhas.getString( "CD_MOEDA" ) + " " + linhas.getString( "CD_VALOR_MONETARIO" );
 						case "B" -> linhas.getObject( "VL_BOOLEANO" ) == null ? null : linhas.getBoolean( "VL_BOOLEANO" ) ? "Sim" : "Não";
-						case "O" -> linhas.getString( "VL_OPCAO" );
+						case "O" -> linhas.getString( "CD_OPCAO" );
 						case "D" -> linhas.getString( "VL_DATA" );
 						case "H" -> linhas.getString( "VL_HORA" );
 						case "T" -> linhas.getTimestamp( "VL_DATA_HORA" ) == null ? null : linhas.getTimestamp( "VL_DATA_HORA" ).toInstant().toString();
@@ -366,47 +375,91 @@ public final class ProcessosService {
 
 	public JSONObject minhasTarefas( AutenticacaoLocalService.Usuario usuario ) throws Exception {
 
-		Map<String, JSONObject> tarefas = new LinkedHashMap<>();
-		JSONArray vinculados = meusProcessos( usuario ).getJSONArray( "processos" );
-		for( int i = 0; i < vinculados.length(); i++ ) {
-			JSONObject processo = vinculados.getJSONObject( i );
-			String situacao = processo.getString( "situacao" );
-			tarefas.put( processo.getString( "id" ), new JSONObject().put( "idProcesso", processo.getString( "id" ) )
-				.put( "titulo", processo.getString( "titulo" ) ).put( "situacao", situacao )
-				.put( "categoria", "F".equals( situacao ) || "C".equals( situacao ) ? "encerrados"
-					: "A".equals( situacao ) && processo.getBoolean( "gestorAtual" ) ? "aguardando" : "emAndamento" )
-				.put( "etapas", new JSONArray() ) );
-		}
-		String sql = "select p.ID_PROCESSO, p.TP_SITUACAO as PROCESSO_SITUACAO, v.DS_TITULO, e.ID_PROCESSO_ETAPA, e.ID_PROTOCOLO_ETAPA, e.TP_SITUACAO as ETAPA_SITUACAO, e.ID_USUARIO_RESPONSAVEL, pe.DS_TITULO as ETAPA_TITULO "
-			+ "from Processos.PROCESSO_ETAPAS e join Processos.PROCESSOS p on p.ID_PROCESSO = e.ID_PROCESSO "
-			+ "join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
-			+ "join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA "
-			+ "order by e.DT_DISPONIBILIZACAO desc";
-		try ( Conexao conexao = PoolDeConexoes.getConexao(); PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ); ResultSet linhas = consulta.executeQuery() ) {
-			while( linhas.next() ) {
-				UUID idProcesso = linhas.getObject( "ID_PROCESSO", UUID.class );
-				UUID idEtapa = linhas.getObject( "ID_PROCESSO_ETAPA", UUID.class );
-				String situacao = linhas.getString( "PROCESSO_SITUACAO" );
-				String responsavel = linhas.getString( "ID_USUARIO_RESPONSAVEL" );
-				boolean minha = usuario.idUsuario().toString().equals( responsavel ) && !"F".equals( linhas.getString( "ETAPA_SITUACAO" ) );
-				boolean historico = participouDaEtapa( conexao, idEtapa, usuario.idUsuario() );
-				boolean disponivel = "D".equals( linhas.getString( "ETAPA_SITUACAO" ) ) && responsavel == null
-					&& elegivel( conexao, linhas.getObject( "ID_PROTOCOLO_ETAPA", UUID.class ), usuario.idUsuario() );
-				if( !minha && !historico && !disponivel ) continue;
-				JSONObject tarefa = tarefas.get( idProcesso.toString() );
-				if( tarefa == null ) {
-					tarefa = new JSONObject().put( "idProcesso", idProcesso.toString() ).put( "titulo", linhas.getString( "DS_TITULO" ) )
-						.put( "situacao", situacao ).put( "categoria", "emAndamento" ).put( "etapas", new JSONArray() );
-					tarefas.put( idProcesso.toString(), tarefa );
+		String sql = """
+			with usuario(id) as (values (?::uuid)), base as not materialized (
+			  select p.ID_PROCESSO, p.CD_NUMERO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR,
+			         p.TP_SITUACAO, p.TP_RESULTADO, p.DT_INICIO, p.DT_ENCERRAMENTO,
+			         v.DS_TITULO, v.ID_PROTOCOLO, iniciador.DS_NOME as NOME_INICIADOR, i.CD_FUSO_HORARIO
+			    from Processos.PROCESSOS p
+			    join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO
+			    left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU
+			    cross join Cadastro.INSTITUICAO i
+			), cartoes as (
+		  select b.*, e.ID_PROCESSO_ETAPA, pe.DS_TITULO as ETAPA, pe.TP_UNIDADE_PRAZO, e.DT_LIMITE, e.DT_DISPONIBILIZACAO,
+			         responsavel.DS_NOME as NOME_RESPONSAVEL, 'paraFazer' as COLUNA
+			    from base b join Processos.PROCESSO_ETAPAS e on e.ID_PROCESSO = b.ID_PROCESSO
+			    join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
+			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL
+			    cross join usuario u
+			   where b.TP_SITUACAO in ('E','A') and e.TP_SITUACAO <> 'F' and e.ID_USUARIO_RESPONSAVEL = u.id
+			  union all
+		  select b.*, null::uuid, null::text, null::char(1), null::timestamptz, null::timestamptz, null::text, 'paraFazer'
+			    from base b cross join usuario u
+			   where b.TP_SITUACAO = 'A' and b.ID_USUARIO_GESTOR = u.id
+			  union all
+		  select b.*, e.ID_PROCESSO_ETAPA, pe.DS_TITULO, pe.TP_UNIDADE_PRAZO, e.DT_LIMITE, e.DT_DISPONIBILIZACAO,
+			         null::text, 'paraAssumir'
+			    from base b join Processos.PROCESSO_ETAPAS e on e.ID_PROCESSO = b.ID_PROCESSO
+			    join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
+			    cross join usuario u
+			   where b.TP_SITUACAO = 'E' and e.TP_SITUACAO = 'D' and e.ID_USUARIO_RESPONSAVEL is null
+			     and exists (select 1 from Processos.PROTOCOLO_ETAPA_DESTINATARIOS d
+			                  where d.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
+			                    and (d.ID_USUARIO_SISTEMA is null or d.ID_USUARIO_SISTEMA = u.id)
+			                    and (d.ID_GRUPO is null or exists (select 1 from Cadastro.USUARIO_GRUPOS ug join Cadastro.GRUPOS g on g.ID_GRUPO = ug.ID_GRUPO where ug.ID_USUARIO_SISTEMA = u.id and ug.ID_GRUPO = d.ID_GRUPO and ug.SN_ATIVO and g.SN_ATIVO))
+			                    and (d.CD_TAG_USUARIO is null or exists (select 1 from Cadastro.USUARIO_TAGS ut join Cadastro.TAGS t on t.CD_TAG = ut.CD_TAG where ut.ID_USUARIO_SISTEMA = u.id and ut.CD_TAG = d.CD_TAG_USUARIO and ut.SN_ATIVA and t.SN_ATIVA and t.SN_USUARIO))
+			                    and (d.CD_TAG_GRUPO is null or exists (select 1 from Cadastro.USUARIO_GRUPOS ug join Cadastro.GRUPO_TAGS gt on gt.ID_GRUPO = ug.ID_GRUPO join Cadastro.GRUPOS g on g.ID_GRUPO = ug.ID_GRUPO join Cadastro.TAGS t on t.CD_TAG = gt.CD_TAG where ug.ID_USUARIO_SISTEMA = u.id and ug.SN_ATIVO and g.SN_ATIVO and (d.ID_GRUPO is null or d.ID_GRUPO = ug.ID_GRUPO) and gt.CD_TAG = d.CD_TAG_GRUPO and gt.SN_ATIVA and t.SN_ATIVA and t.SN_GRUPO))
+			                    and (d.CD_TAG_VINCULO is null or exists (select 1 from Cadastro.VINCULO_TAGS vt join Cadastro.USUARIO_GRUPOS ug on ug.ID_USUARIO_SISTEMA = vt.ID_USUARIO_SISTEMA and ug.ID_GRUPO = vt.ID_GRUPO join Cadastro.TAGS t on t.CD_TAG = vt.CD_TAG where vt.ID_USUARIO_SISTEMA = u.id and (d.ID_GRUPO is null or d.ID_GRUPO = vt.ID_GRUPO) and vt.CD_TAG = d.CD_TAG_VINCULO and vt.SN_ATIVO and ug.SN_ATIVO and t.SN_ATIVA and t.SN_VINCULO)))
+			  union all
+		  select b.*, e.ID_PROCESSO_ETAPA, pe.DS_TITULO, pe.TP_UNIDADE_PRAZO, e.DT_LIMITE, e.DT_DISPONIBILIZACAO,
+			         responsavel.DS_NOME, 'acompanhando'
+			    from base b cross join usuario u
+			    left join lateral (select x.* from Processos.PROCESSO_ETAPAS x where x.ID_PROCESSO = b.ID_PROCESSO and x.TP_SITUACAO <> 'F' order by x.DT_LIMITE nulls last, x.DT_DISPONIBILIZACAO limit 1) e on true
+			    left join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
+			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL
+			   where b.TP_SITUACAO in ('E','A') and (b.ID_USUARIO_INICIOU = u.id or b.ID_USUARIO_GESTOR = u.id)
+			     and not exists (select 1 from Processos.PROCESSO_ETAPAS x where x.ID_PROCESSO = b.ID_PROCESSO and x.TP_SITUACAO <> 'F' and x.ID_USUARIO_RESPONSAVEL = u.id)
+			     and not (b.TP_SITUACAO = 'A' and b.ID_USUARIO_GESTOR = u.id)
+			  union all
+		  select b.*, null::uuid, null::text, null::char(1), null::timestamptz, null::timestamptz, null::text, 'concluidos'
+			    from base b cross join usuario u
+			   where b.TP_SITUACAO in ('F','C') and b.DT_ENCERRAMENTO >= now() - interval '7 days'
+			     and (b.ID_USUARIO_INICIOU = u.id or b.ID_USUARIO_GESTOR = u.id
+			       or exists (select 1 from Processos.PROCESSO_ETAPA_RESPONSAVEIS r join Processos.PROCESSO_ETAPAS e on e.ID_PROCESSO_ETAPA = r.ID_PROCESSO_ETAPA where e.ID_PROCESSO = b.ID_PROCESSO and r.ID_USUARIO_SISTEMA = u.id)
+			       or exists (select 1 from Processos.PROCESSO_TRANSFERENCIA_GESTAO g where g.ID_PROCESSO = b.ID_PROCESSO and (g.ID_GESTOR_ORIGEM = u.id or g.ID_GESTOR_DESTINO = u.id))
+			       or exists (select 1 from Processos.PROCESSO_FORUM f where f.ID_PROCESSO = b.ID_PROCESSO and f.ID_USUARIO_AUTOR = u.id)
+			       or exists (select 1 from Processos.PROCESSO_CONVIDADOS c where c.ID_PROCESSO = b.ID_PROCESSO and c.ID_USUARIO_CONVIDADO = u.id and c.TP_SITUACAO = 'A'))
+			)
+			select * from cartoes order by case COLUNA when 'paraFazer' then 1 when 'paraAssumir' then 2 when 'acompanhando' then 3 else 4 end,
+			  case when COLUNA = 'paraAssumir' then DT_DISPONIBILIZACAO end asc nulls last,
+			  case when COLUNA in ('paraFazer','acompanhando') then DT_LIMITE end asc nulls last,
+			  case when COLUNA = 'concluidos' then DT_ENCERRAMENTO end desc nulls last
+			""";
+		JSONArray tarefas = new JSONArray();
+		try ( Conexao conexao = PoolDeConexoes.getConexao(); PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, usuario.idUsuario() );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) {
+					String idEtapa = linhas.getString( "ID_PROCESSO_ETAPA" );
+					JSONObject contexto = new JSONObject().put( "nomeIniciador", linhas.getString( "NOME_INICIADOR" ) )
+						.put( "inicio", linhas.getTimestamp( "DT_INICIO" ).toInstant().toString() )
+						.put( "disponibilizacao", linhas.getTimestamp( "DT_DISPONIBILIZACAO" ) == null ? JSONObject.NULL : linhas.getTimestamp( "DT_DISPONIBILIZACAO" ).toInstant().toString() )
+						.put( "nomeResponsavel", linhas.getString( "NOME_RESPONSAVEL" ) );
+					String coluna = linhas.getString( "COLUNA" );
+					JSONObject tarefa = new JSONObject().put( "idProcesso", linhas.getString( "ID_PROCESSO" ) )
+						.put( "numero", linhas.getString( "CD_NUMERO" ) ).put( "idProtocolo", linhas.getString( "ID_PROTOCOLO" ) )
+						.put( "titulo", linhas.getString( "DS_TITULO" ) ).put( "idEtapa", idEtapa == null ? JSONObject.NULL : idEtapa )
+						.put( "etapa", linhas.getString( "ETAPA" ) == null ? JSONObject.NULL : linhas.getString( "ETAPA" ) )
+						.put( "coluna", coluna ).put( "categoria", coluna ).put( "contexto", contexto )
+						.put( "limite", linhas.getTimestamp( "DT_LIMITE" ) == null ? JSONObject.NULL : linhas.getTimestamp( "DT_LIMITE" ).toInstant().toString() )
+						.put( "unidadePrazo", linhas.getString( "TP_UNIDADE_PRAZO" ) == null ? JSONObject.NULL : linhas.getString( "TP_UNIDADE_PRAZO" ) )
+						.put( "fusoHorario", linhas.getString( "CD_FUSO_HORARIO" ) )
+						.put( "resultado", linhas.getString( "TP_RESULTADO" ) == null ? JSONObject.NULL : linhas.getString( "TP_RESULTADO" ) );
+					tarefas.put( tarefa );
 				}
-				if( "F".equals( situacao ) || "C".equals( situacao ) ) tarefa.put( "categoria", "encerrados" );
-				else if( minha ) tarefa.put( "categoria", "aguardando" );
-				else if( disponivel && !"aguardando".equals( tarefa.getString( "categoria" ) ) ) tarefa.put( "categoria", "disponiveis" );
-				tarefa.getJSONArray( "etapas" ).put( new JSONObject().put( "id", idEtapa.toString() )
-					.put( "titulo", linhas.getString( "ETAPA_TITULO" ) ).put( "responsavel", minha ).put( "disponivel", disponivel ) );
 			}
 		}
-		return new JSONObject().put( "tarefas", new JSONArray( tarefas.values() ) );
+		return new JSONObject().put( "tarefas", tarefas );
 	}
 
 	private boolean participouDaEtapa( Conexao conexao, UUID idEtapa, UUID idUsuario ) throws Exception {

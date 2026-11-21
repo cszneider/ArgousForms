@@ -68,5 +68,16 @@
 .tarefas-cartao p { margin: 0 0 6px; color: var(--theme-text-secondary, #697a89); font-size: 12px; }
 .tarefas-cartao-icone { color: var(--theme-accent, #12665b); }
 .tarefas-vazio { margin: 25px 6px; color: var(--theme-text-secondary, #697a89); font-size: 12px; }
+.tarefas-filtros { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 18px; }
+.tarefas-filtros > small { margin-left: auto; color: var(--theme-text-secondary, #697a89); }
+.tarefas-escopo { display: flex; gap: 4px; margin: 0; padding: 0; border: 0; }
+.tarefas-escopo legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.tarefas-numero { display: block; margin-bottom: 9px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-text-secondary, #697a89); }
+.tarefas-cartao-rodape { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.tarefas-selo { display: inline-block; padding: 4px 8px; border-radius: 7px; font-size: 12px; font-weight: 600; }
+.tarefas-selo.atrasada, .tarefas-selo.resultado-N { background: #fdecec; color: #9f2018; }
+.tarefas-selo.hoje { background: #fdf1e1; color: #8a4a0b; }
+.tarefas-selo.futuro, .tarefas-selo.resultado-C { background: #eef1f4; color: #475569; }
+.tarefas-selo.resultado-P { background: #e6f0ec; color: #1f5c4a; }
 @media (max-width: 900px) { .processo-central-grade { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .processos-cartao { flex-wrap: wrap; } .processo-central-metadata { grid-template-columns: 1fr; } .processo-central-hero { flex-direction: column; padding: 23px; } }

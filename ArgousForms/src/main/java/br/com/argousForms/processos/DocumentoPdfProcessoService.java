@@ -110,7 +110,7 @@ public final class DocumentoPdfProcessoService {
 	private String valorVariavel( Conexao conexao, UUID idProcesso, UUID idVersao, UUID idVariavel ) throws Exception {
 
 		String sql = "select x.TP_DADO, vv.JS_DEFINICAO, valor.VL_TEXTO, valor.VL_INTEIRO, valor.VL_DECIMAL, "
-			+ "valor.CD_MOEDA, valor.CD_VALOR_MONETARIO, valor.VL_BOOLEANO, valor.VL_OPCAO, valor.VL_DATA, valor.VL_HORA, valor.VL_DATA_HORA "
+			+ "valor.CD_MOEDA, valor.CD_VALOR_MONETARIO, valor.VL_BOOLEANO, valor.CD_OPCAO, valor.VL_DATA, valor.VL_HORA, valor.VL_DATA_HORA "
 			+ "from Processos.PROTOCOLO_VARIAVEIS x join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv "
 			+ "on pv.ID_VARIAVEL = x.ID_VARIAVEL and pv.ID_PROTOCOLO_VERSAO = ? "
 			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = x.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
@@ -131,7 +131,7 @@ public final class DocumentoPdfProcessoService {
 					case "M" -> linha.getString( "CD_MOEDA" );
 					case "V" -> linha.getString( "CD_MOEDA" ) == null ? null : linha.getString( "CD_MOEDA" ) + " " + linha.getString( "CD_VALOR_MONETARIO" );
 					case "B" -> linha.getObject( "VL_BOOLEANO" ) == null ? null : linha.getBoolean( "VL_BOOLEANO" ) ? "Sim" : "Não";
-					case "O" -> linha.getString( "VL_OPCAO" );
+					case "O" -> linha.getString( "CD_OPCAO" );
 					case "D" -> linha.getString( "VL_DATA" );
 					case "H" -> linha.getString( "VL_HORA" );
 					case "T" -> linha.getString( "VL_DATA_HORA" );

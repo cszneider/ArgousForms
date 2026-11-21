@@ -25,7 +25,7 @@ test('confere o identificador inteiro, inclusive quando há alternativas ou queb
 });
 
 test('aceita todas as expressões da carga manual de tipos de identificação', () => {
-  const sql = readFileSync(new URL('../../banco/carga-manual-tipos-identificacao.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(new URL('../../banco/cargas/carga-manual-tipos-identificacao.sql', import.meta.url), 'utf8');
   const expressoes = [...sql.matchAll(/'(\^[^']+\$)'/g)].map((resultado) => resultado[1]);
 
   assert.equal(expressoes.length, 15);

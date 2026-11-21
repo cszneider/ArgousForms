@@ -7,10 +7,10 @@ import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 
 const indicadores = [
-  ['aguardando', 'Aguardando minha ação', 'Processos que precisam de você', Inbox, 'tasks'],
-  ['disponiveis', 'Disponíveis', 'Etapas que você pode assumir', Clock, 'reviews'],
-  ['emAndamento', 'Em andamento', 'Processos sem ação sua agora', RefreshCw, 'active'],
-  ['encerrados', 'Encerrados', 'Processos concluídos ou cancelados', CheckCircle2, 'done'],
+  ['paraFazer', 'Para fazer', 'Processos que precisam de você', Inbox, 'tasks'],
+  ['paraAssumir', 'Para assumir', 'Etapas que você pode assumir', Clock, 'reviews'],
+  ['acompanhando', 'Acompanhando', 'Processos sem ação sua agora', RefreshCw, 'active'],
+  ['concluidos', 'Concluídos', 'Processos concluídos ou cancelados', CheckCircle2, 'done'],
 ];
 
 export default function VisaoGeralTarefas({ aoAbrirTarefas, aoIniciarProcesso }) {
@@ -32,8 +32,7 @@ export default function VisaoGeralTarefas({ aoAbrirTarefas, aoIniciarProcesso })
     return () => { ativa = false; };
   }, [atualizacao]);
 
-  const pendentes = tarefas?.filter((item) => item.categoria === 'aguardando' || item.categoria === 'disponiveis')
-    .sort((primeiro, segundo) => Number(segundo.categoria === 'aguardando') - Number(primeiro.categoria === 'aguardando')) || [];
+  const pendentes = tarefas?.filter((item) => item.coluna === 'paraFazer' || item.coluna === 'paraAssumir') || [];
 
   return <>
     {erro && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => { setTarefas(null); setErro(''); setAtualizacao((valor) => valor + 1); }}>{t('Tentar novamente')}</Button>}>{erro}</Alert>}
@@ -42,7 +41,7 @@ export default function VisaoGeralTarefas({ aoAbrirTarefas, aoIniciarProcesso })
         {indicadores.map(([categoria, titulo, descricao, Icon, classe]) => <button
           className={`stat-card ${classe}`} key={categoria} onClick={aoAbrirTarefas}>
           <div className="stat-top"><span>{t(titulo)}</span><Icon size={19} /></div>
-          <strong>{String(tarefas.filter((item) => item.categoria === categoria).length).padStart(2, '0')}</strong>
+          <strong>{String(tarefas.filter((item) => item.coluna === categoria).length).padStart(2, '0')}</strong>
           <small>{t(descricao)}</small>
         </button>)}
       </div>
@@ -53,10 +52,10 @@ export default function VisaoGeralTarefas({ aoAbrirTarefas, aoIniciarProcesso })
             <Button onClick={aoAbrirTarefas} endIcon={<ArrowUpRight size={16} />}>{t('Ver tarefas')}</Button>
           </div>
           {pendentes.length ? pendentes.slice(0, 2).map((item) => <button
-            className="task-preview" key={item.idProcesso} onClick={aoAbrirTarefas}>
+            className="task-preview" key={`${item.idProcesso}-${item.idEtapa || item.coluna}`} onClick={aoAbrirTarefas}>
             <span className="task-preview-icon"><Inbox size={22} /></span>
             <span className="task-preview-copy"><strong>{item.titulo}</strong>
-              <small>{t(item.categoria === 'aguardando' ? 'Aguardando minha ação' : 'Disponível para assumir')}{item.etapas?.[0]?.titulo ? ` · ${item.etapas[0].titulo}` : ''}</small>
+              <small>{t(item.coluna === 'paraFazer' ? 'Para fazer' : 'Para assumir')}{item.etapa ? ` · ${item.etapa}` : ''}{item.numero ? ` · ${item.numero}` : ''}</small>
             </span>
             <ArrowRight size={18} />
           </button>) : <div className="empty-state compact">

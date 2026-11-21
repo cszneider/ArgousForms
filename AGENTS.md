@@ -2,6 +2,9 @@
 
 ## Autoridade e governança
 
+- Papéis: Carlos é o proprietário (palavra final); Claude é o PO; este agente é o tech lead. Ver `Tickets/LEIA-ME.md`.
+- `ArgousForms/banco/` é mantido pelo Claude, em acordo com o gestor. Não alterar arquivos dessa pasta; quando uma tarefa exigir mudança de banco, registrar no RETORNO.md do ticket.
+- Em `Tickets/`, escrever somente no RETORNO.md do ticket em execução, conforme `Tickets/LEIA-ME.md`.
 - O usuário é o gestor do projeto e possui a decisão final sobre todas as escolhas funcionais, técnicas e arquiteturais.
 - Recomendações, alternativas, inferências e análises do agente não constituem decisões aprovadas.
 - Não criar nem alterar código-fonte, documentação, configuração, dependências, estrutura do workspace, banco de dados ou ambiente sem autorização explícita do gestor para a atividade.

@@ -124,8 +124,9 @@ public final class NotificacoesService {
 		int naoLidas;
 		String sql = "select n.ID_NOTIFICACAO, n.TP_NATUREZA, n.TP_SITUACAO, n.DT_ENTREGA, n.DT_VISUALIZACAO, "
 			+ "n.DT_ENCERRAMENTO, n.DS_RESULTADO, n.ID_USUARIO_ATENDEU, e.CD_TIPO, e.DS_TITULO, e.DS_RESUMO, "
-			+ "e.ID_PROCESSO, e.ID_PROCESSO_ETAPA from Notificacoes.NOTIFICACOES n join Notificacoes.EVENTOS e "
-			+ "on e.ID_EVENTO = n.ID_EVENTO where n.ID_USUARIO_DESTINO = ? order by n.DT_ENTREGA desc limit ?";
+			+ "e.ID_PROCESSO, e.ID_PROCESSO_ETAPA, p.CD_NUMERO from Notificacoes.NOTIFICACOES n join Notificacoes.EVENTOS e "
+			+ "on e.ID_EVENTO = n.ID_EVENTO left join Processos.PROCESSOS p on p.ID_PROCESSO = e.ID_PROCESSO "
+			+ "where n.ID_USUARIO_DESTINO = ? order by n.DT_ENTREGA desc limit ?";
 		try ( Conexao conexao = PoolDeConexoes.getConexao(); PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			try ( PreparedStatement contador = conexao.getConnection().prepareStatement(
 				"select count(*) from Notificacoes.NOTIFICACOES where ID_USUARIO_DESTINO = ? and DT_VISUALIZACAO is null" ) ) {
@@ -145,6 +146,7 @@ public final class NotificacoesService {
 						.put( "resultado", linhas.getString( "DS_RESULTADO" ) == null ? "" : linhas.getString( "DS_RESULTADO" ) )
 						.put( "idUsuarioAtendeu", linhas.getString( "ID_USUARIO_ATENDEU" ) == null ? JSONObject.NULL : linhas.getString( "ID_USUARIO_ATENDEU" ) )
 						.put( "idProcesso", linhas.getString( "ID_PROCESSO" ) == null ? JSONObject.NULL : linhas.getString( "ID_PROCESSO" ) )
+						.put( "numeroProcesso", linhas.getString( "CD_NUMERO" ) == null ? JSONObject.NULL : linhas.getString( "CD_NUMERO" ) )
 						.put( "idEtapa", linhas.getString( "ID_PROCESSO_ETAPA" ) == null ? JSONObject.NULL : linhas.getString( "ID_PROCESSO_ETAPA" ) ) );
 				}
 			}

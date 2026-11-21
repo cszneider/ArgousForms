@@ -149,11 +149,15 @@ public final class PreenchimentoEtapaService {
 				Processo processo = ProcessoLocalizador.buscaProcesso( conexao, idProcesso );
 				if( idDestino == null ) {
 					if( possuiOutraEtapaAberta( conexao, idProcesso, idEtapa ) ) throw fluxoAindaNaoExecutavel();
+					String resultadoPadrao = resultadoPadrao( conexao, UUID.fromString( dados.getString( "idProtocoloEtapa" ) ) );
 					if( gestorFinaliza( conexao, UUID.fromString( dados.getString( "idVersao" ) ) ) ) {
 						processo.setTpSituacao( "A" );
+						processo.setTpResultado( resultadoPadrao );
 						new NotificacoesService().aguardaConclusao( conexao, idProcesso, idEtapa, processo.getIdUsuarioGestor(), usuario.idUsuario() );
 					} else {
 						processo.setTpSituacao( "F" );
+						processo.setTpResultado( resultadoPadrao );
+						if( "N".equals( resultadoPadrao ) ) processo.setDsResultado( "Resultado negativo definido pelo Protocolo para esta etapa final." );
 						processo.setDtEncerramento( agora );
 						ForumProcessoService.registrar( conexao, idProcesso, usuario.idUsuario(), "A", "Processo concluído automaticamente após a última etapa.", null );
 						new NotificacoesService().processoConcluido( conexao, idProcesso, usuario.idUsuario() );
@@ -206,6 +210,19 @@ public final class PreenchimentoEtapaService {
 				throw e;
 			} finally {
 				if( mongo != null ) mongo.close();
+			}
+		}
+	}
+
+	private String resultadoPadrao( Conexao conexao, UUID idProtocoloEtapa ) throws Exception {
+
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select TP_RESULTADO_PADRAO from Processos.PROTOCOLOS_ETAPAS where ID_PROTOCOLO_ETAPA = ?" ) ) {
+			consulta.setObject( 1, idProtocoloEtapa );
+			try ( ResultSet linha = consulta.executeQuery() ) {
+				if( !linha.next() || ( !"P".equals( linha.getString( 1 ) ) && !"N".equals( linha.getString( 1 ) ) ) ) {
+					throw new ArgousFormsApiException( 409, "RESULTADO_PADRAO_AUSENTE", "A etapa final não tem um resultado padrão válido." );
+				}
+				return linha.getString( 1 );
 			}
 		}
 	}
@@ -423,7 +440,7 @@ public final class PreenchimentoEtapaService {
 
 		JSONArray campos = new JSONArray();
 		String sql = "select fv.ID_VARIAVEL, fv.TP_ACESSO, fv.SN_OBRIGATORIA, x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
-			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.VL_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
+			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.CD_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
 			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = x.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
@@ -446,7 +463,7 @@ public final class PreenchimentoEtapaService {
 						case "M" -> linha.getString( "CD_MOEDA" );
 						case "V" -> linha.getObject( "CD_VALOR_MONETARIO" );
 						case "B" -> linha.getObject( "VL_BOOLEANO" );
-						case "O" -> linha.getString( "VL_OPCAO" );
+						case "O" -> linha.getString( "CD_OPCAO" );
 						case "D" -> linha.getString( "VL_DATA" );
 						case "H" -> linha.getString( "VL_HORA" );
 						case "T" -> linha.getTimestamp( "VL_DATA_HORA" ) == null ? null : linha.getTimestamp( "VL_DATA_HORA" ).toInstant().toString();
@@ -474,7 +491,7 @@ public final class PreenchimentoEtapaService {
 			valor.setCdMoeda( null );
 			valor.setCdValorMonetario( null );
 			valor.setVlBooleano( null );
-			valor.setVlOpcao( null );
+			valor.setCdOpcao( null );
 			valor.setVlData( null );
 			valor.setVlHora( null );
 			valor.setVlDataHora( null );
@@ -492,7 +509,7 @@ public final class PreenchimentoEtapaService {
 					valor.setCdValorMonetario( new BigDecimal( monetario.get( "valor" ).toString() ) );
 				}
 				case "B" -> valor.setVlBooleano( (Boolean) informado );
-				case "O" -> valor.setVlOpcao( informado.toString() );
+				case "O" -> valor.setCdOpcao( informado.toString() );
 				case "D" -> valor.setVlData( new QtData( LocalDate.parse( informado.toString() ).atStartOfDay( ZoneOffset.UTC ).toInstant().toEpochMilli() ) );
 				case "H" -> valor.setVlHora( OffsetTime.parse( informado.toString() ) );
 				case "T" -> valor.setVlDataHora( new QtData( OffsetDateTime.parse( informado.toString() ).toInstant().toEpochMilli() ) );

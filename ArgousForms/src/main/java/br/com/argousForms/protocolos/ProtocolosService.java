@@ -124,6 +124,9 @@ public final class ProtocolosService {
 				if( !existeSql( conexao, "select 1 from Processos.PROTOCOLOS where ID_PROTOCOLO = ? and ID_PASTA is not null", idProtocolo ) ) {
 					throw new ArgousFormsApiException( 409, "PASTA_OBRIGATORIA", "Escolha a pasta do Protocolo antes de publicar." );
 				}
+				if( !existeSql( conexao, "select 1 from Processos.PROTOCOLOS where ID_PROTOCOLO = ? and CD_PREFIXO is not null", idProtocolo ) ) {
+					throw new ArgousFormsApiException( 409, "PREFIXO_OBRIGATORIO", "Defina o prefixo do número nas configurações antes de publicar." );
+				}
 				if( existeSql( conexao, "select 1 from Processos.PROTOCOLO_VERSAO_DOCUMENTOS x join Processos.PROTOCOLO_DOCUMENTO_VERSOES d on d.ID_PROTOCOLO_DOCUMENTO_VERSAO = x.ID_PROTOCOLO_DOCUMENTO_VERSAO where x.ID_PROTOCOLO_VERSAO = ? and d.TP_MODELO = 'H'", idVersao ) ) {
 					throw new ArgousFormsApiException( 409, "HTML_AINDA_NAO_PUBLICAVEL", "A geração de documentos HTML ainda não está disponível. Retire os modelos HTML deste rascunho antes de publicar." );
 				}
@@ -402,6 +405,7 @@ public final class ProtocolosService {
 				protocolo.setDsDescricao( descricao.isEmpty() ? null : descricao );
 				protocolo.setDtInclusao( agora );
 				protocolo.setSnAtivo( false );
+				protocolo.setTpSequencia( "A" );
 				new ProtocoloNegocio( conexao, protocolo ).insere();
 
 				ProtocoloVersao versao = new ProtocoloVersao();
@@ -664,18 +668,32 @@ public final class ProtocolosService {
 		}
 	}
 
-	public JSONObject salvarDados( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, String tituloInformado, String descricaoInformada, boolean gestorFinaliza ) throws Exception {
+	public JSONObject salvarDados( AutenticacaoLocalService.Usuario usuario, UUID idProtocolo, String tituloInformado, String descricaoInformada, boolean gestorFinaliza, String prefixoInformado, String sequencia ) throws Exception {
 
 		exigirCriador( usuario );
 		String titulo = titulo( tituloInformado );
 		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
+		String prefixo = prefixoInformado == null ? null : prefixoInformado.strip().toUpperCase();
+		if( prefixo != null && !prefixo.isEmpty() && !prefixo.matches( "[A-Z0-9]{2,6}" ) ) throw new ArgousFormsApiException( 400, "PREFIXO_INVALIDO", "Use de 2 a 6 letras maiúsculas ou dígitos no prefixo." );
+		if( sequencia != null && !"A".equals( sequencia ) && !"C".equals( sequencia ) ) throw new ArgousFormsApiException( 400, "SEQUENCIA_INVALIDA", "Escolha numeração anual ou contínua." );
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			conexao.beginTransaction();
 			try {
 				String idVersao = exigirRascunho( conexao, usuario.idUsuario(), idProtocolo );
+				if( prefixo != null && !prefixo.isEmpty() ) {
+					try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select 1 from Processos.PROTOCOLOS where CD_PREFIXO = ? and ID_PROTOCOLO <> ?" ) ) {
+						consulta.setString( 1, prefixo );
+						consulta.setObject( 2, idProtocolo );
+						try ( ResultSet linhas = consulta.executeQuery() ) {
+							if( linhas.next() ) throw new ArgousFormsApiException( 409, "PREFIXO_EM_USO", "Este prefixo já está em uso por outro Protocolo." );
+						}
+					}
+				}
 				Protocolo protocolo = ProtocoloLocalizador.buscaProtocolo( conexao, idProtocolo );
 				protocolo.setDsTitulo( titulo );
 				protocolo.setDsDescricao( descricao.isEmpty() ? null : descricao );
+				if( prefixo != null ) protocolo.setCdPrefixo( prefixo.isEmpty() ? null : prefixo );
+				if( sequencia != null ) protocolo.setTpSequencia( sequencia );
 				new ProtocoloNegocio( conexao, protocolo ).altera();
 
 				ProtocoloVersao versao = ProtocoloVersaoLocalizador.buscaProtocoloVersao( conexao, UUID.fromString( idVersao ) );
@@ -856,7 +874,7 @@ public final class ProtocolosService {
 		JSONObject protocolo = null;
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select p.ID_PROTOCOLO, p.DS_TITULO, p.DS_DESCRICAO, p.DT_INCLUSAO, p.SN_ATIVO, p.ID_PASTA, d.DS_NOME as PASTA_NOME, "
+				query.setSQL( "select p.ID_PROTOCOLO, p.DS_TITULO, p.DS_DESCRICAO, p.CD_PREFIXO, p.TP_SEQUENCIA, p.DT_INCLUSAO, p.SN_ATIVO, p.ID_PASTA, d.DS_NOME as PASTA_NOME, "
 					+ "v.ID_PROTOCOLO_VERSAO, v.ID_USUARIO_RESPONSAVEL, v.DT_ALTERACAO, v.SN_GESTOR_FINALIZA, "
 					+ "(select max(NR_VERSAO) from Processos.PROTOCOLO_VERSOES where ID_PROTOCOLO = p.ID_PROTOCOLO and NR_VERSAO > 0) as NR_PUBLICADA "
 					+ "from Processos.PROTOCOLOS p left join Docs.PASTAS d on d.ID_PASTA = p.ID_PASTA left join Processos.PROTOCOLO_VERSOES v "
@@ -867,6 +885,8 @@ public final class ProtocolosService {
 				query.executeQuery();
 				if( query.isEmpty() ) throw new ArgousFormsApiException( 404, "PROTOCOLO_NAO_ENCONTRADO", "Protocolo não encontrado." );
 				protocolo = new JSONObject().put( "id", query.getString( "ID_PROTOCOLO" ) )
+					.put( "prefixo", query.getString( "CD_PREFIXO" ) == null ? "" : query.getString( "CD_PREFIXO" ) )
+					.put( "sequencia", query.getString( "TP_SEQUENCIA" ) )
 					.put( "titulo", query.getString( "DS_TITULO" ) )
 					.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) )
 					.put( "criadoEm", query.getString( "DT_INCLUSAO" ) )

@@ -1342,7 +1342,7 @@ export default function Workspace() {
                 {view === 'processes' && usuario && <Processos key={pageState.processoNotificacao || 'lista'}
                   idProcessoInicial={pageState.processoNotificacao}
                   aoVoltar={pageState.processoNotificacao ? () => dispatch({ field: 'processoNotificacao', value: null }) : null} />}
-                {view === 'tasks' && usuario && <Tarefas />}
+                {view === 'tasks' && usuario && <Tarefas aoAbrirProcessos={() => navigate('processes')} />}
                 {view === 'notifications' && usuario && <Notificacoes aoVoltar={() => navigate(pageState.notificacoesRetorno || 'home')}
                   aoNotificacoesAlteradas={() => carregarNotificacoes()} aoAbrirProcesso={(idProcesso) => {
                   dispatch({ field: 'processoNotificacao', value: idProcesso }); navigate('processes');
