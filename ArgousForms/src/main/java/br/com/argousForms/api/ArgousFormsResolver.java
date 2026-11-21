@@ -255,7 +255,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 
 		if( "CONCLUIR_PROCESSO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
-			ArgousFormsJson.enviarSucesso( response, 200, processos.concluir( usuario, uuidObrigatorio( dados, "idProcesso" ) ) );
+			ArgousFormsJson.enviarSucesso( response, 200, processos.concluir( usuario, uuidObrigatorio( dados, "idProcesso" ), dados.optString( "resultado", "" ), dados.optString( "motivo", "" ) ) );
 			return;
 		}
 
@@ -351,7 +351,9 @@ public final class ArgousFormsResolver extends HttpServlet {
 		if( "SALVAR_DADOS_PROTOCOLO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarDados( usuario, uuidObrigatorio( dados, "idProtocolo" ),
-				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optBoolean( "gestorFinaliza", true ) ) );
+				dados.optString( "titulo", "" ), dados.optString( "descricao", "" ), dados.optBoolean( "gestorFinaliza", true ),
+				dados.has( "prefixo" ) ? dados.optString( "prefixo", "" ) : null,
+				dados.has( "sequencia" ) ? dados.optString( "sequencia", "A" ) : null ) );
 			return;
 		}
 
@@ -511,7 +513,7 @@ public final class ArgousFormsResolver extends HttpServlet {
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.salvarModeloHtml( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), uuidOpcional( dados, "idModelo" ),
 				dados.optString( "codigo", "" ), dados.optString( "titulo", "" ), dados.optString( "observacoes", "" ),
-				dados.optString( "css", "" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
+				dados.optJSONArray( "estilos" ), dados.optJSONArray( "partes" ), diasVencimento( dados ) ) );
 			return;
 		}
 
@@ -519,6 +521,12 @@ public final class ArgousFormsResolver extends HttpServlet {
 			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
 			ArgousFormsJson.enviarSucesso( response, 200, protocolos.importarCssRemoto( usuario,
 				uuidObrigatorio( dados, "idProtocolo" ), dados.optString( "url", "" ) ) );
+			return;
+		}
+
+		if( "AUTORIZAR_DOMINIO_CSS".equals( operacao ) ) {
+			AutenticacaoLocalService.Usuario usuario = consultarUsuario( request, response );
+			ArgousFormsJson.enviarSucesso( response, 200, instituicao.autorizarDominioCss( usuario, dados.optString( "dominio", "" ) ) );
 			return;
 		}
 

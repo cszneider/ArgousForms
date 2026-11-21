@@ -41,7 +41,7 @@ import {
 } from './protocolos-store.js';
 import SeletorPasta from './seletor-pasta.js';
 import PdfCampos from './pdf-campos.js';
-import ModeloHtmlEditor from './modelo-html-editor.js';
+import ModeloHtmlEditor from './modelo-html-editor-mock.js';
 import VariaveisInstituicao from './variaveis-instituicao.js';
 import Recursos from './recursos.js';
 import GestoresElegiveis from './gestores-elegiveis.js';
@@ -301,7 +301,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
     try {
       await executar('SALVAR_MODELO_HTML', { idProtocolo: protocolo.id, idModelo: dados.id || null,
         codigo: dados.codigo.trim(), titulo: dados.titulo.trim(), observacoes: dados.observacoes || '',
-        css: dados.css || '', partes: dados.partes, diasVencimento });
+        estilos: dados.estilos || [], partes: dados.partes, diasVencimento });
       await atualizarLista(protocolo.id);
       setModeloHtml(null);
     } finally {
@@ -332,7 +332,8 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       return;
     }
     await executarEdicao('SALVAR_DADOS_PROTOCOLO', { idProtocolo: protocolo.id, titulo,
-      descricao: cadastro.descricao, gestorFinaliza: cadastro.gestorFinaliza }, () => setCadastro(null));
+      descricao: cadastro.descricao, gestorFinaliza: cadastro.gestorFinaliza,
+      prefixo: cadastro.prefixo, sequencia: cadastro.sequencia }, () => setCadastro(null));
   }
 
   async function salvarVariavel() {
@@ -627,6 +628,8 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                     titulo: protocolo.titulo,
                     descricao: protocolo.descricao,
                     gestorFinaliza: protocolo.rascunho.gestorFinaliza,
+                    prefixo: protocolo.prefixo || '',
+                    sequencia: protocolo.sequencia || 'A',
                   });
                 }}
               >
@@ -1249,6 +1252,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
 
       {modeloHtml && <ModeloHtmlEditor modelo={modeloHtml} variaveis={protocolo?.rascunho?.variaveis || []}
         idProtocolo={protocolo.id}
+        usuarioPapeis={usuarioPapeis}
         salvando={salvando} aoFechar={() => setModeloHtml(null)} aoSalvar={salvarModeloHtml} />}
 
       <Dialog open={!!modeloPdf} onClose={() => !salvando && setModeloPdf(null)} fullWidth maxWidth="sm">
@@ -1340,6 +1344,17 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
             label={t('Exigir confirmação do gestor para concluir o Processo')}
             control={<Checkbox checked={cadastro?.gestorFinaliza !== false}
               onChange={(evento) => setCadastro({ ...cadastro, gestorFinaliza: evento.target.checked })} />} />}
+          {cadastro?.modo !== 'novo' && <>
+            <TextField label={t('Prefixo do número')} value={cadastro?.prefixo || ''} inputProps={{ maxLength: 6 }}
+              helperText={t('Use de 2 a 6 letras maiúsculas ou dígitos. Obrigatório para publicar.')}
+              error={!!cadastro?.prefixo && !/^[A-Z0-9]{2,6}$/.test(cadastro.prefixo)}
+              onChange={(evento) => setCadastro({ ...cadastro, prefixo: evento.target.value.toUpperCase() })} />
+            <TextField select label={t('Numeração')} value={cadastro?.sequencia || 'A'}
+              onChange={(evento) => setCadastro({ ...cadastro, sequencia: evento.target.value })}>
+              <MenuItem value="A">{t('Anual')}</MenuItem><MenuItem value="C">{t('Contínua')}</MenuItem>
+            </TextField>
+            {cadastro?.prefixo && /^[A-Z0-9]{2,6}$/.test(cadastro.prefixo) && <p>{t('Exemplo de número')}: <code>{cadastro.prefixo}-{cadastro.sequencia === 'C' ? '' : `${new Date().getFullYear()}-`}000001</code></p>}
+          </>}
           <p>{t('Você poderá definir a pasta antes da publicação.')}</p>
         </DialogContent>
         <DialogActions>
@@ -1574,11 +1589,12 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
         <DialogTitle>{t('Publicar Protocolo')}</DialogTitle>
         <DialogContent>
           <p>{t('A versão publicada não poderá mais ser alterada. Confirme que revisou o fluxo, os destinatários e os modelos de documentos.')}</p>
+          {!protocolo?.prefixo && <Alert severity="warning">{t('Defina o prefixo do número em Editar dados antes de publicar.')}</Alert>}
           {erro && <Alert severity="error">{erro}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublicacao(false)}>{t('Voltar')}</Button>
-          <Button variant="contained" disabled={salvando} onClick={publicarProtocolo}>{t('Confirmar publicação')}</Button>
+          <Button variant="contained" disabled={salvando || !protocolo?.prefixo} onClick={publicarProtocolo}>{t('Confirmar publicação')}</Button>
         </DialogActions>
       </Dialog>
     </div>

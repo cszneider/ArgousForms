@@ -1,6 +1,8 @@
 package br.com.argousForms.cadastro;
 
 import java.net.URI;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.zone.ZoneRulesException;
@@ -80,6 +82,39 @@ public final class InstituicaoService {
 				new InstituicaoNegocio( conexao, instituicao ).altera();
 				conexao.commit();
 				return representar( instituicao );
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public JSONObject autorizarDominioCss( AutenticacaoLocalService.Usuario usuario, String dominioInformado ) throws Exception {
+
+		exigirAdministrador( usuario );
+		String dominio = dominiosCss( dominioInformado );
+		if( dominio == null || dominio.contains( "\n" ) || dominio.contains( "\r" ) ) {
+			throw new ArgousFormsApiException( 400, "DOMINIO_CSS_INVALIDO", "Informe um único domínio CSS válido." );
+		}
+
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				try ( PreparedStatement bloqueio = conexao.getConnection().prepareStatement( "select ID_INSTITUICAO from Cadastro.INSTITUICAO where ID_INSTITUICAO = 1 for update" );
+					ResultSet resultado = bloqueio.executeQuery() ) {
+					if( !resultado.next() ) throw new ArgousFormsApiException( 503, "INSTITUICAO_NAO_CONFIGURADA", "A instituição ainda não está configurada." );
+				}
+				Instituicao instituicao = InstituicaoLocalizador.buscaInstituicao( conexao, 1 );
+				String atuais = instituicao.getDsDominiosCssImportacao();
+				boolean presente = atuais != null && atuais.lines().map( String::strip ).anyMatch( dominio::equalsIgnoreCase );
+				if( !presente ) {
+					String novos = atuais == null || atuais.isBlank() ? dominio : atuais.strip() + "\n" + dominio;
+					instituicao.setDsDominiosCssImportacao( dominiosCss( novos ) );
+					instituicao.setDtAlteracao( new QtData( Instant.now().toEpochMilli() ) );
+					new InstituicaoNegocio( conexao, instituicao ).altera();
+				}
+				conexao.commit();
+				return new JSONObject().put( "dominio", dominio );
 			} catch ( Exception e ) {
 				if( conexao.inTransaction() ) conexao.rollback();
 				throw e;

@@ -68,6 +68,8 @@ export default function FluxoPublicado({ fluxo, formularios = [], documentos = [
       <span className="eyebrow">{t('ETAPA SELECIONADA')}</span><h3>{etapa.titulo}</h3>
       {etapa.descricao && <p>{etapa.descricao}</p>}
       <p>{t('Formulário')}: <strong>{formularios.find((item) => item.id === etapa.formularioId)?.titulo || '—'}</strong></p>
+      {etapa.prazo && <p>{t('Prazo')}: <strong>{etapa.prazo} {t(etapa.unidadePrazo === 'U' ? 'Dias úteis' : etapa.unidadePrazo === 'C' ? 'Dias corridos' : 'Horas')}</strong></p>}
+      {etapa.resultadoPadrao && <p>{t('Resultado ao terminar aqui')}: <strong>{t(etapa.resultadoPadrao === 'N' ? 'Negativo' : 'Positivo')}</strong></p>}
       <p>{t('Documentos gerados')}: <strong>{(etapa.documentos || []).map((id) => documentos.find((item) => item.id === id)?.titulo || id).join(', ') || '—'}</strong></p>
       <p>{t('Destinatários')}: <strong>{etapa.destinatarios?.length || 0}</strong></p>
       {etapa.destinatarios?.map((regra, indice) => <p key={indice} className="protocolo-publicado-regra">

@@ -1,6 +1,7 @@
 /.metadata/
 
 /conf
+/Tickets
 /ArgousForms/target/
 /ArgousForms/.classpath
 /ArgousForms/.project

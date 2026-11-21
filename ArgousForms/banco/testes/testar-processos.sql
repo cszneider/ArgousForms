@@ -33,12 +33,14 @@ BEGIN
         RAISE EXCEPTION 'Teste requer um usuário ativo e a pasta RAIZ.';
     END IF;
 
-    INSERT INTO Processos.PROTOCOLOS (ID_PROTOCOLO, ID_USUARIO_CRIADOR, DS_TITULO, DT_INCLUSAO, SN_ATIVO, ID_PASTA)
-    VALUES (protocolo, usuario, 'Teste transacional de Protocolo', now(), true, raiz);
+    INSERT INTO Processos.PROTOCOLOS (ID_PROTOCOLO, ID_USUARIO_CRIADOR, DS_TITULO, DT_INCLUSAO, SN_ATIVO, ID_PASTA, CD_PREFIXO)
+    VALUES (protocolo, usuario, 'Teste transacional de Protocolo', now(), true, raiz, 'T' || upper(substr(md5(protocolo::text), 1, 5)));
     INSERT INTO Processos.PROTOCOLO_VERSOES
         (ID_PROTOCOLO_VERSAO, ID_PROTOCOLO, NR_VERSAO, TP_SITUACAO, ID_USUARIO_ABRIU,
-         ID_USUARIO_RESPONSAVEL, DT_INCLUSAO, DT_ALTERACAO, SN_PERMITE_CONVIDADOS, DS_TITULO)
-    VALUES (versao, protocolo, -1, 'R', usuario, usuario, now(), now(), false, 'Teste transacional');
+         ID_USUARIO_RESPONSAVEL, DT_INCLUSAO, DT_ALTERACAO, SN_PERMITE_CONVIDADOS, DS_TITULO, SN_GESTOR_FINALIZA)
+    VALUES (versao, protocolo, -1, 'R', usuario, usuario, now(), now(), false, 'Teste transacional', false);
+    INSERT INTO Processos.PROTOCOLO_GESTORES_ELEGIVEIS (ID_GESTOR_ELEGIVEL, ID_PROTOCOLO_VERSAO, ID_USUARIO_SISTEMA)
+    VALUES (gen_random_uuid(), versao, usuario);
 
     INSERT INTO Processos.PROTOCOLO_VARIAVEIS
         (ID_VARIAVEL, ID_PROTOCOLO, CD_VARIAVEL, TP_DADO, DT_INCLUSAO)
@@ -55,9 +57,9 @@ BEGIN
     VALUES (formulario, variavel, 'E', 1, false, '1');
 
     INSERT INTO Processos.PROTOCOLOS_ETAPAS
-        (ID_PROTOCOLO_ETAPA, ID_PROTOCOLO_VERSAO, ID_FORMULARIO, DS_TITULO, NR_POSICAO_X, NR_POSICAO_Y)
-    VALUES (etapa_inicial, versao, formulario, 'Início', 0, 0),
-           (etapa_final, versao, formulario, 'Fim', 400, 0);
+        (ID_PROTOCOLO_ETAPA, ID_PROTOCOLO_VERSAO, TP_BLOCO, ID_FORMULARIO, DS_TITULO, NR_POSICAO_X, NR_POSICAO_Y, TP_RESULTADO_PADRAO)
+    VALUES (etapa_inicial, versao, 'E', formulario, 'Início', 0, 0, NULL),
+           (etapa_final, versao, 'E', formulario, 'Fim', 400, 0, 'P');
     INSERT INTO Processos.PROTOCOLO_ETAPA_DESTINATARIOS
         (ID_ETAPA_DESTINATARIO, ID_PROTOCOLO_ETAPA, ID_USUARIO_SISTEMA)
     VALUES (gen_random_uuid(), etapa_inicial, usuario),
@@ -77,8 +79,11 @@ BEGIN
     VALUES (documento_versao, documento, 1, 'H', now()),
            (documento_pdf_versao, documento_pdf, 1, 'P', now());
     INSERT INTO Processos.PROTOCOLO_DOCUMENTO_HTML
-        (ID_PROTOCOLO_DOCUMENTO_VERSAO, TX_HTML, DT_INCLUSAO)
-    VALUES (documento_versao, '<p>{{campo_teste}}</p>', now());
+        (ID_PROTOCOLO_DOCUMENTO_VERSAO, DT_INCLUSAO)
+    VALUES (documento_versao, now());
+    INSERT INTO Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES
+        (ID_DOCUMENTO_HTML_PARTE, ID_PROTOCOLO_DOCUMENTO_VERSAO, TP_PARTE, NR_ORDEM, TX_HTML)
+    VALUES (gen_random_uuid(), documento_versao, 'B', 1, '<p>{{campo_teste}}</p>');
     INSERT INTO Processos.PROTOCOLO_VERSAO_DOCUMENTOS
         (ID_PROTOCOLO_VERSAO, ID_PROTOCOLO_DOCUMENTO, ID_PROTOCOLO_DOCUMENTO_VERSAO)
     VALUES (versao, documento, documento_versao),
@@ -137,7 +142,7 @@ BEGIN
 
     INSERT INTO Processos.PROCESSOS
         (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, ID_USUARIO_GESTOR, TP_SITUACAO, DT_INICIO)
-    VALUES (processo, versao, usuario, usuario, 'I', now());
+    VALUES (processo, versao, usuario, usuario, 'E', now());
     INSERT INTO Processos.PROCESSO_ETAPAS
         (ID_PROCESSO_ETAPA, ID_PROCESSO, ID_PROTOCOLO_ETAPA, NR_PASSAGEM,
          TP_SITUACAO, ID_USUARIO_RESPONSAVEL, DT_DISPONIBILIZACAO)

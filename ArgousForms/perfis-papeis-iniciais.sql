@@ -1,6 +1,6 @@
 -- Carga complementar para instalação que já criou ADMINISTRADOR,
 -- ADMINISTRADOR_USUARIOS, GESTOR_ACESSOS e INSTALADOR.
--- Não executar junto com banco/carga-manual-teste.sql.
+-- Não executar junto com banco/cargas/carga-manual-teste.sql.
 -- Não atribui permissões concretas: PAPEL_PERMISSOES será definido depois.
 BEGIN;
 

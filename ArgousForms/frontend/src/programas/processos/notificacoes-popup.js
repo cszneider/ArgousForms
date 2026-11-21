@@ -24,7 +24,7 @@ export default function NotificacoesPopup({ naoLidas, itens, carregando, erro, a
         sx={{ alignItems: 'flex-start', whiteSpace: 'normal', gap: 1, py: 1.25, bgcolor: item.visualizacao ? undefined : 'action.hover' }}>
         {!item.visualizacao && <Box aria-hidden="true" sx={{ width: 7, height: 7, mt: 0.9, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />}
         <Box sx={{ ml: item.visualizacao ? '15px' : 0, minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={item.visualizacao ? 500 : 700}>{item.titulo}</Typography>
+          <Typography variant="body2" fontWeight={item.visualizacao ? 500 : 700}>{item.titulo}{item.numeroProcesso ? ` · ${item.numeroProcesso}` : ''}</Typography>
           {item.resumo && <Typography variant="caption" color="text.secondary" display="block">{item.resumo}</Typography>}
           <Typography variant="caption" color="text.secondary">{new Date(item.entrega).toLocaleString()}</Typography>
         </Box>

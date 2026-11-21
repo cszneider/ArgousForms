@@ -7,6 +7,10 @@ CREATE OR REPLACE FUNCTION Processos.validar_versao_protocolo() RETURNS trigger 
 DECLARE
     iniciais integer;
     finais integer;
+    no_fluxo record;
+    atual uuid;
+    tipos text[];
+    passos integer;
 BEGIN
     IF TG_OP = 'DELETE' THEN
         IF OLD.NR_VERSAO > 0 THEN RAISE EXCEPTION 'Versão publicada do Protocolo não pode ser excluída.'; END IF;
@@ -27,19 +31,70 @@ BEGIN
             RAISE EXCEPTION 'Versão publicada requer publicador e data de publicação.';
         END IF;
         IF TG_OP = 'INSERT' THEN RAISE EXCEPTION 'Crie o rascunho antes de publicar o Protocolo.'; END IF;
+        IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS WHERE ID_PROTOCOLO = NEW.ID_PROTOCOLO AND CD_PREFIXO IS NULL) THEN
+            RAISE EXCEPTION 'Defina o prefixo do número dos processos antes de publicar o Protocolo.';
+        END IF;
 
+        -- Início: exatamente um nó sem entrada, e ele deve ser uma etapa. Fim: etapas sem encaminhamento.
         SELECT count(*) FILTER (WHERE NOT EXISTS (
                    SELECT 1 FROM Processos.ENCAMINHAMENTOS caminho
                     WHERE caminho.ID_PROTOCOLO_VERSAO = etapa.ID_PROTOCOLO_VERSAO
                       AND caminho.ID_PROXIMA_ETAPA = etapa.ID_PROTOCOLO_ETAPA)),
-               count(*) FILTER (WHERE etapa.ID_ENCAMINHAMENTO IS NULL)
+               count(*) FILTER (WHERE etapa.TP_BLOCO = 'E' AND etapa.ID_ENCAMINHAMENTO IS NULL)
           INTO iniciais, finais FROM Processos.PROTOCOLOS_ETAPAS etapa
          WHERE etapa.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO;
         IF iniciais <> 1 OR finais < 1 THEN
             RAISE EXCEPTION 'Publicação requer uma etapa após o início e pelo menos uma etapa que leve ao fim.';
         END IF;
+
+        -- M-01: regras do concentrador.
+        IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS j
+                    WHERE j.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND j.TP_BLOCO = 'J'
+                      AND (j.ID_ENCAMINHAMENTO IS NULL
+                           OR NOT EXISTS (SELECT 1 FROM Processos.ENCAMINHAMENTOS c
+                                           WHERE c.ID_PROTOCOLO_VERSAO = j.ID_PROTOCOLO_VERSAO
+                                             AND c.ID_PROXIMA_ETAPA = j.ID_PROTOCOLO_ETAPA))) THEN
+            RAISE EXCEPTION 'Concentrador precisa receber ramos e ter um encaminhamento de saída; não pode iniciar nem encerrar o fluxo.';
+        END IF;
+        IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS j
+                     JOIN Processos.PROTOCOLO_ETAPA_DESTINATARIOS d ON d.ID_PROTOCOLO_ETAPA = j.ID_PROTOCOLO_ETAPA
+                    WHERE j.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND j.TP_BLOCO = 'J') THEN
+            RAISE EXCEPTION 'Concentrador não tem destinatários.';
+        END IF;
+
+        -- M-01: resultado padrão obrigatório nas etapas finais e proibido nas demais.
         IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS e
-                    WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO
+                    WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND e.TP_BLOCO = 'E'
+                      AND (e.ID_ENCAMINHAMENTO IS NULL) <> (e.TP_RESULTADO_PADRAO IS NOT NULL)) THEN
+            RAISE EXCEPTION 'Toda etapa final precisa de resultado padrão (P ou N), e só etapas finais o possuem.';
+        END IF;
+
+        -- 4.1: tipos de cadeia permitidos (direta, paralela, paralela condicional, decisão com "caso contrário").
+        FOR no_fluxo IN SELECT ID_PROTOCOLO_ETAPA, DS_TITULO, ID_ENCAMINHAMENTO FROM Processos.PROTOCOLOS_ETAPAS
+                         WHERE ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND ID_ENCAMINHAMENTO IS NOT NULL LOOP
+            tipos := ARRAY[]::text[];
+            atual := no_fluxo.ID_ENCAMINHAMENTO;
+            passos := 0;
+            WHILE atual IS NOT NULL LOOP
+                passos := passos + 1;
+                IF passos > 500 THEN
+                    RAISE EXCEPTION 'Cadeia de encaminhamentos de "%" contém ciclo.', no_fluxo.DS_TITULO;
+                END IF;
+                SELECT tipos || TP_ENCAMINHAMENTO::text, ID_PROXIMO_ENCAMINHAMENTO INTO tipos, atual
+                  FROM Processos.ENCAMINHAMENTOS WHERE ID_ENCAMINHAMENTO = atual;
+            END LOOP;
+            IF 'T' = ANY (tipos) THEN
+                IF array_length(tipos, 1) < 2 OR tipos[array_length(tipos, 1)] <> 'E'
+                   OR EXISTS (SELECT 1 FROM unnest(tipos[1:array_length(tipos, 1) - 1]) t WHERE t <> 'T') THEN
+                    RAISE EXCEPTION 'Decisão em "%" deve ter só testes e terminar em um encaminhamento direto ("caso contrário").', no_fluxo.DS_TITULO;
+                END IF;
+            ELSIF 'C' = ANY (tipos) AND NOT 'E' = ANY (tipos) THEN
+                RAISE EXCEPTION 'Paralelo condicional em "%" precisa de ao menos um ramo direto, que sempre dispara.', no_fluxo.DS_TITULO;
+            END IF;
+        END LOOP;
+
+        IF EXISTS (SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS e
+                    WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND e.TP_BLOCO = 'E'
                       AND NOT EXISTS (SELECT 1 FROM Processos.PROTOCOLO_ETAPA_DESTINATARIOS d
                                       WHERE d.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA)) THEN
             RAISE EXCEPTION 'Cada etapa precisa ter pelo menos uma regra de destinatários.';
@@ -47,7 +102,7 @@ BEGIN
         IF EXISTS (SELECT 1 FROM Cadastro.INSTITUICAO WHERE ID_INSTITUICAO = 1 AND NOT SN_PERMITIR_DESTINATARIOS_UNICOS)
            AND EXISTS (
                SELECT 1 FROM Processos.PROTOCOLOS_ETAPAS e
-                WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO
+                WHERE e.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO AND e.TP_BLOCO = 'E'
                   AND NOT EXISTS (SELECT 1 FROM Processos.PROTOCOLO_ETAPA_DESTINATARIOS d
                                    WHERE d.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
                                      AND (d.ID_GRUPO IS NOT NULL OR d.CD_TAG_GRUPO IS NOT NULL
@@ -124,6 +179,7 @@ CREATE TRIGGER trg_variavel_versoes_publicadas BEFORE INSERT OR UPDATE OR DELETE
 CREATE TRIGGER trg_documento_versoes_publicadas BEFORE UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_VERSOES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_html_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_html_parte_publicada BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML_PARTES FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
+CREATE TRIGGER trg_documento_html_css_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_HTML_CSS FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_pdf_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 CREATE TRIGGER trg_documento_pdf_campo_publicado BEFORE INSERT OR UPDATE OR DELETE ON Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_definicao_publicada('documento');
 
@@ -153,8 +209,10 @@ FOR EACH ROW EXECUTE FUNCTION Processos.bloquear_identidade_publicada('documento
 -- Relações que devem permanecer dentro da mesma versão do Protocolo.
 CREATE OR REPLACE FUNCTION Processos.validar_etapa_formulario() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM Processos.FORMULARIOS WHERE ID_FORMULARIO = NEW.ID_FORMULARIO
-                   AND ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO) THEN
+    -- O concentrador (TP_BLOCO = 'J') não tem formulário; ck_etapa_formulario garante formulário nas etapas.
+    IF NEW.ID_FORMULARIO IS NOT NULL AND NOT EXISTS
+       (SELECT 1 FROM Processos.FORMULARIOS WHERE ID_FORMULARIO = NEW.ID_FORMULARIO
+        AND ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO) THEN
         RAISE EXCEPTION 'Formulário e etapa devem pertencer à mesma versão do Protocolo.';
     END IF;
     IF NEW.ID_ENCAMINHAMENTO IS NOT NULL AND NOT EXISTS
@@ -454,5 +512,83 @@ CREATE CONSTRAINT TRIGGER trg_responsavel_vigente_etapa AFTER INSERT OR UPDATE O
 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION Processos.validar_responsavel_vigente();
 CREATE CONSTRAINT TRIGGER trg_responsavel_vigente_historico AFTER INSERT OR UPDATE OR DELETE ON Processos.PROCESSO_ETAPA_RESPONSAVEIS
 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION Processos.validar_responsavel_vigente();
+
+-- M-03: número do processo. Gerado no INSERT, com incremento atômico por protocolo e ano; imutável.
+CREATE OR REPLACE FUNCTION Processos.numerar_processo() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    protocolo uuid;
+    prefixo text;
+    sequencia char(1);
+    fuso text;
+    ano smallint;
+    numero integer;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.CD_NUMERO IS DISTINCT FROM OLD.CD_NUMERO THEN
+            RAISE EXCEPTION 'O número do processo é imutável.';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW.CD_NUMERO IS NOT NULL THEN RETURN NEW; END IF;
+
+    SELECT p.ID_PROTOCOLO, p.CD_PREFIXO, p.TP_SEQUENCIA INTO protocolo, prefixo, sequencia
+      FROM Processos.PROTOCOLO_VERSOES v JOIN Processos.PROTOCOLOS p USING (ID_PROTOCOLO)
+     WHERE v.ID_PROTOCOLO_VERSAO = NEW.ID_PROTOCOLO_VERSAO;
+    IF prefixo IS NULL THEN
+        RAISE EXCEPTION 'O Protocolo precisa de prefixo para numerar processos.';
+    END IF;
+    SELECT CD_FUSO_HORARIO INTO fuso FROM Cadastro.INSTITUICAO WHERE ID_INSTITUICAO = 1;
+    ano := CASE WHEN sequencia = 'A'
+                THEN extract(year FROM COALESCE(NEW.DT_INICIO, now()) AT TIME ZONE COALESCE(fuso, 'UTC'))::smallint
+                ELSE 0 END;
+
+    INSERT INTO Processos.PROTOCOLO_SEQUENCIAS AS s (ID_PROTOCOLO, NR_ANO, NR_ULTIMO)
+    VALUES (protocolo, ano, 1)
+    ON CONFLICT (ID_PROTOCOLO, NR_ANO) DO UPDATE SET NR_ULTIMO = s.NR_ULTIMO + 1
+    RETURNING NR_ULTIMO INTO numero;
+
+    NEW.CD_NUMERO := prefixo || '-' || CASE WHEN ano > 0 THEN ano::text || '-' ELSE '' END || lpad(numero::text, 6, '0');
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_numerar_processo BEFORE INSERT OR UPDATE OF CD_NUMERO ON Processos.PROCESSOS
+FOR EACH ROW EXECUTE FUNCTION Processos.numerar_processo();
+
+-- M-01 (b): data limite a partir do prazo. U dias úteis (seg-sex, sem feriados) e C corridos vencem no fim do dia; H horas exatas.
+CREATE OR REPLACE FUNCTION Processos.calcular_limite(inicio timestamptz, prazo integer, unidade char) RETURNS timestamptz
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+    fuso text;
+    dia date;
+    contados integer := 0;
+BEGIN
+    IF prazo IS NULL OR unidade IS NULL THEN RETURN NULL; END IF;
+    IF unidade = 'H' THEN RETURN inicio + make_interval(hours => prazo); END IF;
+    SELECT COALESCE(CD_FUSO_HORARIO, 'UTC') INTO fuso FROM Cadastro.INSTITUICAO WHERE ID_INSTITUICAO = 1;
+    fuso := COALESCE(fuso, 'UTC');
+    dia := (inicio AT TIME ZONE fuso)::date;
+    IF unidade = 'C' THEN
+        dia := dia + prazo;
+    ELSE
+        WHILE contados < prazo LOOP
+            dia := dia + 1;
+            IF extract(isodow FROM dia) < 6 THEN contados := contados + 1; END IF;
+        END LOOP;
+    END IF;
+    RETURN ((dia + 1)::timestamp - interval '1 second') AT TIME ZONE fuso;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION Processos.definir_limite_etapa() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.DT_LIMITE IS NULL THEN
+        SELECT Processos.calcular_limite(NEW.DT_DISPONIBILIZACAO, NR_PRAZO, TP_UNIDADE_PRAZO) INTO NEW.DT_LIMITE
+          FROM Processos.PROTOCOLOS_ETAPAS WHERE ID_PROTOCOLO_ETAPA = NEW.ID_PROTOCOLO_ETAPA;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_definir_limite_etapa BEFORE INSERT ON Processos.PROCESSO_ETAPAS
+FOR EACH ROW EXECUTE FUNCTION Processos.definir_limite_etapa();
 
 COMMIT;

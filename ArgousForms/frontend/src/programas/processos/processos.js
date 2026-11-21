@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
+import { Alert, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import { ArrowLeft, ArrowRight, FileText, GitBranch, MessageCircle, RefreshCw, UserRound } from 'lucide-react';
 import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
@@ -9,7 +9,8 @@ import FormularioEtapa from './formulario-etapa.js';
 import { formatarValorExemplo } from '../protocolos/variavel-texto.js';
 import './processos.css';
 
-const situacoes = { I: 'Iniciado', E: 'Em execução', A: 'Aguardando conclusão', F: 'Finalizado', C: 'Cancelado' };
+const situacoes = { E: 'Em execução', A: 'Aguardando conclusão', F: 'Finalizado', C: 'Cancelado' };
+const resultados = { P: 'Positivo', N: 'Negativo', C: 'Cancelado' };
 const situacoesEtapa = { D: 'Disponível', I: 'Iniciada', P: 'Parcialmente salva', S: 'Salva', F: 'Finalizada' };
 
 function dataInicio(valor, locale, comHora = false) {
@@ -38,13 +39,15 @@ function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoCo
     <button type="button" className="processo-central-voltar" onClick={aoVoltar}><ArrowLeft size={16} />{t('Todos os processos')}</button>
     <header className="processo-central-hero">
       <div><span className="eyebrow">{t('CENTRAL DO PROCESSO')}</span><h1>{detalhe.titulo}</h1>
-        <p>{t('Protocolo')} · {t('Versão')} {detalhe.versao} <span>·</span> {t('Processo')} {identificador(detalhe.id)}</p></div>
-      <Chip label={t(situacoes[detalhe.situacao] || detalhe.situacao)} color={detalhe.situacao === 'F' ? 'success' : 'default'} />
+        <p>{t('Protocolo')} · {t('Versão')} {detalhe.versao} <span>·</span> {t('Processo')} <code>{detalhe.numero || identificador(detalhe.id)}</code></p></div>
+      <div><Chip label={t(situacoes[detalhe.situacao] || detalhe.situacao)} color={detalhe.situacao === 'F' ? 'success' : 'default'} />
+        {detalhe.resultado && <Chip sx={{ ml: 1 }} label={t(resultados[detalhe.resultado] || detalhe.resultado)} variant="outlined" />}</div>
     </header>
     <div className="processo-central-metadata">
       <div><span>{t('Iniciado em')}</span><strong>{dataInicio(detalhe.inicio, locale, true)}</strong></div>
       <div><span>{t('Iniciado por')}</span><strong>{detalhe.nomeIniciador || identificador(detalhe.iniciador)}</strong></div>
       <div><span>{t('Gestor do processo')}</span><strong>{detalhe.nomeGestor || identificador(detalhe.gestor)}</strong></div>
+      {detalhe.motivo && <div><span>{t('Motivo do resultado')}</span><strong>{detalhe.motivo}</strong></div>}
     </div>
     {detalhe.situacao === 'A' && <Alert severity="info" sx={{ mb: 2 }} action={detalhe.podeConcluir
       ? <Button color="inherit" size="small" onClick={aoConcluir}>{t('Concluir processo')}</Button> : null}>
@@ -104,7 +107,7 @@ function CentralProcesso({ detalhe, locale, t, aoVoltar, aoAbrirFormulario, aoCo
   </div>;
 }
 
-export default function Processos({ idProcessoInicial = null, aoVoltar = null }) {
+export default function Processos({ idProcessoInicial = null, idEtapaInicial = null, concluirInicial = false, aoVoltar = null }) {
   const { t, locale } = useI18n();
   const [processos, setProcessos] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -115,6 +118,8 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
   const [idEtapaAberta, setIdEtapaAberta] = useState(null);
   const [confirmarConclusao, setConfirmarConclusao] = useState(false);
+  const [resultadoConclusao, setResultadoConclusao] = useState('P');
+  const [motivoConclusao, setMotivoConclusao] = useState('');
   const [concluindo, setConcluindo] = useState(false);
   const [comentario, setComentario] = useState('');
   const [comentando, setComentando] = useState(false);
@@ -132,16 +137,21 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
     if (!idProcessoInicial) return;
     let cancelado = false;
     executar('CONSULTAR_PROCESSO', { idProcesso: idProcessoInicial }).then((dados) => {
-      if (!cancelado) { setDetalhe(dados); setErroDetalhe(''); }
+      if (!cancelado) {
+        setDetalhe(dados);
+        setErroDetalhe('');
+        if (idEtapaInicial) setIdEtapaAberta(idEtapaInicial);
+        if (concluirInicial && dados.podeConcluir) { setResultadoConclusao(dados.resultado || 'P'); setMotivoConclusao(dados.motivo || ''); setConfirmarConclusao(true); }
+      }
     }).catch((falha) => { if (!cancelado) setErroDetalhe(falha.message); });
     return () => { cancelado = true; };
-  }, [idProcessoInicial]);
+  }, [idProcessoInicial, idEtapaInicial, concluirInicial]);
 
   async function concluir() {
     setConcluindo(true);
     setErroDetalhe('');
     try {
-      await executar('CONCLUIR_PROCESSO', { idProcesso: detalhe.id });
+      await executar('CONCLUIR_PROCESSO', { idProcesso: detalhe.id, resultado: resultadoConclusao, motivo: motivoConclusao.trim() });
       setConfirmarConclusao(false);
       await abrir(detalhe.id);
       setRecarregar((valor) => valor + 1);
@@ -170,7 +180,7 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
   }, [recarregar]);
 
   return <div className="processos-pagina">
-    {detalhe ? <CentralProcesso detalhe={detalhe} locale={locale} t={t} aoVoltar={() => aoVoltar ? aoVoltar() : setDetalhe(null)} aoAbrirFormulario={setIdEtapaAberta} aoConcluir={() => setConfirmarConclusao(true)}
+    {detalhe ? <CentralProcesso detalhe={detalhe} locale={locale} t={t} aoVoltar={() => aoVoltar ? aoVoltar() : setDetalhe(null)} aoAbrirFormulario={setIdEtapaAberta} aoConcluir={() => { setResultadoConclusao(detalhe.resultado || 'P'); setMotivoConclusao(detalhe.motivo || ''); setConfirmarConclusao(true); }}
       comentario={comentario} aoMudarComentario={setComentario} aoComentar={comentar} comentando={comentando} /> : <>
     {idProcessoInicial && <Button onClick={aoVoltar} startIcon={<ArrowLeft size={16} />}>{t('Voltar às tarefas')}</Button>}
     <header className="page-heading"><div><span className="eyebrow">{t('SEU HISTÓRICO')}</span>
@@ -181,9 +191,11 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
     {carregando ? <CircularProgress /> : processos.length ? <div className="processos-lista">
       {processos.map((item) => <article className="processos-cartao" key={item.id}>
         <span className="processos-icone"><GitBranch size={20} /></span>
-        <div className="processos-cartao-corpo"><h2>{item.titulo}</h2>
+        <div className="processos-cartao-corpo"><h2>{item.titulo}</h2><code>{item.numero}</code>
           <p>{t('Versão')} {item.versao} · {t('Iniciado em')} {dataInicio(item.inicio, locale)}</p></div>
-        <Chip size="small" label={t(situacoes[item.situacao] || item.situacao)} color={item.situacao === 'F' ? 'success' : 'default'} />
+        <div><Chip size="small" label={t(situacoes[item.situacao] || item.situacao)} color={item.situacao === 'F' ? 'success' : 'default'} />
+          {item.resultado && <Chip size="small" sx={{ ml: 1 }} label={t(resultados[item.resultado] || item.resultado)} variant="outlined" />}</div>
+        {item.motivo && <p>{t('Motivo do resultado')}: {item.motivo}</p>}
         <Button endIcon={<ArrowRight size={16} />} onClick={() => abrir(item.id)}>{t('Abrir')}</Button>
       </article>)}
     </div> : <div className="processos-vazio"><GitBranch size={28} /><h2>{t('Nenhum processo ainda')}</h2>
@@ -194,10 +206,17 @@ export default function Processos({ idProcessoInicial = null, aoVoltar = null })
     <FormularioEtapa idEtapa={idEtapaAberta} aoFechar={() => setIdEtapaAberta(null)} aoSalvar={() => { if (detalhe) abrir(detalhe.id); setRecarregar((valor) => valor + 1); }} />
     {erroDetalhe && detalhe && <Alert severity="error" sx={{ mt: 2 }}>{erroDetalhe}</Alert>}
     <Dialog open={confirmarConclusao} onClose={() => !concluindo && setConfirmarConclusao(false)}>
-      <DialogTitle>{t('Concluir processo?')}</DialogTitle>
-      <DialogContent>{t('O processo será encerrado. Os documentos gerados já estão publicados.')}</DialogContent>
+      <DialogTitle>{t('Concluir processo')}</DialogTitle>
+      <DialogContent sx={{ display: 'grid', gap: 2, minWidth: 360 }}>
+        <p>{t('O processo será encerrado. Os documentos gerados já estão publicados.')}</p>
+        <TextField select fullWidth label={t('Resultado')} value={resultadoConclusao} onChange={(evento) => setResultadoConclusao(evento.target.value)}>
+          <MenuItem value="P">{t('Positivo')}</MenuItem><MenuItem value="N">{t('Negativo')}</MenuItem>
+        </TextField>
+        <TextField fullWidth multiline minRows={2} label={t('Motivo')} required={resultadoConclusao === 'N'} value={motivoConclusao}
+          onChange={(evento) => setMotivoConclusao(evento.target.value)} />
+      </DialogContent>
       <DialogActions><Button disabled={concluindo} onClick={() => setConfirmarConclusao(false)}>{t('Voltar')}</Button>
-        <Button disabled={concluindo} variant="contained" onClick={concluir}>{t('Concluir processo')}</Button></DialogActions>
+        <Button disabled={concluindo || (resultadoConclusao === 'N' && !motivoConclusao.trim())} variant="contained" onClick={concluir}>{t('Concluir processo')}</Button></DialogActions>
     </Dialog>
   </div>;
 }

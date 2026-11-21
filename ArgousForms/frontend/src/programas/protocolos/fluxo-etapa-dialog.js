@@ -63,7 +63,7 @@ function PreviaFormulario({ formulario, variaveis }) {
   </div>;
 }
 
-export default function FluxoEtapaDialog({ etapa, formularios, variaveis, documentos, catalogo, aoSalvar, aoFechar }) {
+export default function FluxoEtapaDialog({ etapa, ehFinal, formularios, variaveis, documentos, catalogo, aoSalvar, aoFechar }) {
   const { t } = useI18n();
   const [aba, setAba] = useState(0);
   const [dados, setDados] = useState(() => ({ ...etapa.data,
@@ -111,6 +111,19 @@ export default function FluxoEtapaDialog({ etapa, formularios, variaveis, docume
               <MenuItem value="">{t('Escolha um formulário')}</MenuItem>
               {formularios.map((item) => <MenuItem key={item.id} value={item.id}>{item.titulo}</MenuItem>)}
             </TextField>
+            <div className="protocolo-etapa-prazo">
+              <TextField type="number" label={t('Prazo (opcional)')} value={dados.prazo || ''} inputProps={{ min: 1, max: 32767 }}
+                onChange={(evento) => alterar('prazo', evento.target.value ? Number(evento.target.value) : null)} />
+              <TextField select label={t('Unidade do prazo')} value={dados.unidadePrazo || ''}
+                onChange={(evento) => alterar('unidadePrazo', evento.target.value)}>
+                <MenuItem value="">{t('Sem prazo')}</MenuItem><MenuItem value="U">{t('Dias úteis')}</MenuItem>
+                <MenuItem value="C">{t('Dias corridos')}</MenuItem><MenuItem value="H">{t('Horas')}</MenuItem>
+              </TextField>
+            </div>
+            {ehFinal && <TextField select fullWidth label={t('Quando o processo termina aqui')} value={dados.resultadoPadrao || 'P'}
+              onChange={(evento) => alterar('resultadoPadrao', evento.target.value)}>
+              <MenuItem value="P">{t('Positivo')}</MenuItem><MenuItem value="N">{t('Negativo')}</MenuItem>
+            </TextField>}
           </>}
           {aba === 1 && <>
             <p>{t('Defina quem poderá assumir esta etapa quando ela ficar disponível.')}</p>

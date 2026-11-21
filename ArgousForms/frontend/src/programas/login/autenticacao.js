@@ -17,7 +17,10 @@ export async function executar(operacao, dados = {}) {
   }
 
   if (!response.ok || resultado?.status !== 'ok') {
-    throw new Error(resultado?.mensagem || 'O serviço não respondeu como esperado.');
+    const erro = new Error(resultado?.mensagem || 'O serviço não respondeu como esperado.');
+    erro.codigo = resultado?.codigoErro;
+    erro.statusCode = response.status;
+    throw erro;
   }
   return resultado.dados;
 }
