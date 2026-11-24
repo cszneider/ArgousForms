@@ -2,8 +2,7 @@
 import { pageReducer } from '../../utils/page-state.js';
 import { lerMenuCompacto, salvarMenuCompacto } from '../../utils/sidebar-preference.js';
 import CadastroPessoaForm from './cadastro-pessoa-form.js';
-import ForcaSenha from '../../components/acesso/forca-senha.js';
-import { avaliarSenha } from '../../programas/login/politica-senha.js';
+import './seguranca-conta.css';
 import {
   sessionRole,
   isEnabled,
@@ -21,6 +20,7 @@ import {
   useRef,
   useCallback,
   lazy,
+  useState,
 } from 'react';
 import {
   Button,
@@ -30,6 +30,7 @@ import {
   MenuItem,
   Menu as MuiMenu,
   Avatar,
+  Divider,
   Chip,
   Dialog,
   DialogTitle,
@@ -69,10 +70,14 @@ import {
   Settings2,
   UserPlus,
   Webhook,
+  UserRound,
+  KeyRound,
+  MonitorSmartphone,
 } from 'lucide-react';
 import { ThemeToggle } from '../../components/theme/theme.js';
 import NotificacoesPopup from '../../programas/processos/notificacoes-popup.js';
 const UserSettings = lazy(() => import('../configuracoes/index.js'));
+const SegurancaConta = lazy(() => import('./seguranca-conta.js'));
 const GestorDocumentos = lazy(() => import('../../programas/gestor-documentos/gestor-documentos.js'));
 const Processos = lazy(() => import('../../programas/processos/processos.js'));
 const Tarefas = lazy(() => import('../../programas/processos/tarefas.js'));
@@ -83,6 +88,7 @@ const Protocolos = lazy(() => import('../../programas/protocolos/protocolos.js')
 const ProtocolosNovo = lazy(() => import('../../programas/protocolos/protocolos-novo.js'));
 const Instituicao = lazy(() => import('../../programas/protocolos/instituicao.js'));
 const Integracao = lazy(() => import('../../programas/integracao/integracao.js'));
+const OrganizacaoAcessos = lazy(() => import('../../programas/organizacao/organizacao-acessos.js'));
 import {
   DocumentView,
   Status,
@@ -135,6 +141,12 @@ const profileSummary = (profiles) => {
   return sorted.length === 1 ? sorted[0] : `${label} + ${sorted.length - 1}`;
 };
 export default function Workspace() {
+  const [fotoVersaoMenu, setFotoVersaoMenu] = useState(0);
+  useEffect(() => {
+    const atualizar = () => setFotoVersaoMenu(Date.now());
+    window.addEventListener('foto-perfil-alterada', atualizar);
+    return () => window.removeEventListener('foto-perfil-alterada', atualizar);
+  }, []);
   const initialState = useMemo(
     () => ({
       telaAtual: 'Workspace',
@@ -151,7 +163,8 @@ export default function Workspace() {
       loadError: '',
       dirty: false,
       actorId: 'admin',
-      view: 'home',
+      view: window.location.pathname.replace(/\/$/, '').endsWith('/conta/seguranca') ? 'security' : 'home',
+      segurancaFoco: '',
       managementSection: 'groups',
       documentId: null,
       editor: null,
@@ -191,24 +204,24 @@ export default function Workspace() {
       personName: '',
       personRole: 'participant',
       menuPessoalAnchor: null,
-      senhaDialog: false,
-      senhaAtual: '',
-      senhaNova: '',
-      senhaConfirmacao: '',
-      senhaSaving: false,
-      senhaError: '',
-      conexoesDialog: false,
-      conexoes: [],
-      conexoesLoading: false,
-      conexoesError: '',
-      conexaoParaEncerrar: null,
-      conexoesSaving: false,
-      conexoesActionError: '',
     }),
     [],
   );
   const initialStateRef = useRef(initialState);
   const [pageState, dispatch] = useReducer(pageReducer, initialState);
+  useEffect(() => {
+    const atualizar = async () => {
+      try { dispatch({ field: 'usuario', value: await sessaoAtual() }); }
+      catch { /* A próxima navegação verificará a sessão. */ }
+    };
+    window.addEventListener('perfil-atualizado', atualizar);
+    return () => window.removeEventListener('perfil-atualizado', atualizar);
+  }, []);
+  useEffect(() => {
+    const restaurarRota = () => dispatch({ field: 'view', value: window.location.pathname.replace(/\/$/, '').endsWith('/conta/seguranca') ? 'security' : 'home' });
+    window.addEventListener('popstate', restaurarRota);
+    return () => window.removeEventListener('popstate', restaurarRota);
+  }, []);
   const {
     state,
     usuario,
@@ -255,19 +268,7 @@ export default function Workspace() {
     personName,
     personRole,
     menuPessoalAnchor,
-    senhaDialog,
-    senhaAtual,
-    senhaNova,
-    senhaConfirmacao,
-    senhaSaving,
-    senhaError,
-    conexoesDialog,
-    conexoes,
-    conexoesLoading,
-    conexoesError,
-    conexaoParaEncerrar,
-    conexoesSaving,
-    conexoesActionError,
+    segurancaFoco,
   } = pageState;
   const updateDirty = useCallback(
     (value) => dispatch({ field: 'dirty', value }),
@@ -300,7 +301,7 @@ export default function Workspace() {
   }, []);
 
   useEffect(() => {
-    if (view === 'organization' && usuario?.papeis?.includes('GESTOR_GRUPOS_TAGS'))
+    if (view === 'organization-legacy' && usuario?.papeis?.includes('GESTOR_GRUPOS_TAGS'))
       carregarOrganizacao();
   }, [view, usuario, carregarOrganizacao]);
 
@@ -317,7 +318,7 @@ export default function Workspace() {
   }, []);
 
   useEffect(() => {
-    if (view === 'organization' && usuario?.papeis?.includes('GESTOR_ACESSOS'))
+    if (view === 'organization-legacy' && usuario?.papeis?.includes('GESTOR_ACESSOS'))
       carregarAcessos();
   }, [view, usuario, carregarAcessos]);
 
@@ -334,7 +335,7 @@ export default function Workspace() {
   }, []);
 
   useEffect(() => {
-    if (view === 'organization' && usuario?.papeis?.includes('ADMINISTRADOR_USUARIOS'))
+    if (view === 'organization-legacy' && usuario?.papeis?.includes('ADMINISTRADOR_USUARIOS'))
       carregarPessoasUsuarios();
   }, [view, usuario, carregarPessoasUsuarios]);
 
@@ -821,13 +822,14 @@ export default function Workspace() {
   const canManageOwnData = hasRole('AUTOGESTAO');
   const canView = (destination) => destination === 'home' ||
     (destination === 'settings' && canManageOwnData) ||
+    (destination === 'security' && canManageOwnData) ||
     (destination === 'documents' && canConsultDocuments) ||
     (destination === 'processes' && Boolean(usuario)) ||
     (destination === 'tasks' && Boolean(usuario)) ||
     (destination === 'notifications' && Boolean(usuario)) ||
     ((destination === 'protocols' || destination === 'protocols-new') && protocolCreator) ||
     (destination === 'templates' && designer) ||
-    (destination === 'organization' && (admin || groupManager || accessManager || institutionManager)) ||
+    ((destination === 'organization' || destination === 'organization-legacy') && (admin || groupManager || accessManager || institutionManager)) ||
     (destination === 'integrations' && (hasRole('DESENVOLVEDOR') || institutionManager));
   const managementAreas = [
     ['groups', 'Grupos e tags', groupManager],
@@ -843,9 +845,16 @@ export default function Workspace() {
     if (!canView(v)) return;
     if (!mayLeave()) return;
     dispatch({ field: 'view', value: v });
+    if (v === 'security') window.history.pushState({}, '', '/ArgousForms/conta/seguranca');
+    else if (window.location.pathname.replace(/\/$/, '').endsWith('/conta/seguranca')) window.history.pushState({}, '', '/ArgousForms/app');
     dispatch({ field: 'documentId', value: null });
     dispatch({ field: 'editor', value: null });
     dispatch({ field: 'mobile', value: false });
+  };
+  const abrirSeguranca = (foco) => {
+    dispatch({ field: 'menuPessoalAnchor', value: null });
+    dispatch({ field: 'segurancaFoco', value: foco });
+    navigate('security');
   };
   const encerrarSessao = async () => {
     if (!mayLeave()) return;
@@ -858,75 +867,6 @@ export default function Workspace() {
       dispatch({ field: 'toast', value: { text: falha.message, error: true } });
     }
   };
-  const fecharTrocaSenha = (forcar = false) => {
-    if (senhaSaving && !forcar) return;
-    dispatch({ field: 'senhaDialog', value: false });
-    dispatch({ field: 'senhaAtual', value: '' });
-    dispatch({ field: 'senhaNova', value: '' });
-    dispatch({ field: 'senhaConfirmacao', value: '' });
-    dispatch({ field: 'senhaError', value: '' });
-  };
-  const trocarSenha = async () => {
-    if (senhaSaving) return;
-    if (!avaliarSenha(senhaNova).valida) {
-      dispatch({ field: 'senhaError', value: 'A senha não atende à política de segurança.' });
-      return;
-    }
-    if (senhaNova !== senhaConfirmacao) {
-      dispatch({ field: 'senhaError', value: 'A confirmação não corresponde à nova senha.' });
-      return;
-    }
-    dispatch({ field: 'senhaSaving', value: true });
-    dispatch({ field: 'senhaError', value: '' });
-    try {
-      await executar('ALTERAR_SENHA', { senhaAtual, senhaNova });
-      dispatch({ field: 'senhaSaving', value: false });
-      fecharTrocaSenha(true);
-      dispatch({ field: 'toast', value: { text: 'Senha alterada. As outras sessões foram encerradas.', error: false } });
-    } catch (falha) {
-      dispatch({ field: 'senhaError', value: falha.message });
-      dispatch({ field: 'senhaSaving', value: false });
-    }
-  };
-  const carregarConexoes = async () => {
-    dispatch({ field: 'conexoesLoading', value: true });
-    dispatch({ field: 'conexoesError', value: '' });
-    try {
-      const dados = await executar('LISTAR_CONEXOES_ATIVAS');
-      dispatch({ field: 'conexoes', value: dados.conexoes || [] });
-    } catch (falha) {
-      dispatch({ field: 'conexoesError', value: falha.message });
-    } finally {
-      dispatch({ field: 'conexoesLoading', value: false });
-    }
-  };
-  const abrirConexoes = () => {
-    dispatch({ field: 'menuPessoalAnchor', value: null });
-    dispatch({ field: 'conexoesDialog', value: true });
-    dispatch({ field: 'conexoes', value: [] });
-    carregarConexoes();
-  };
-  const encerrarConexao = async () => {
-    if (!conexaoParaEncerrar || conexoesSaving) return;
-    dispatch({ field: 'conexoesSaving', value: true });
-    dispatch({ field: 'conexoesActionError', value: '' });
-    try {
-      const resultado = await executar('ENCERRAR_CONEXAO', { idLogin: conexaoParaEncerrar.idLogin });
-      if (resultado.atual) {
-        sessionStorage.removeItem(SESSION_KEY);
-        window.location.href = '/ArgousForms/login';
-        return;
-      }
-      dispatch({ field: 'conexaoParaEncerrar', value: null });
-      dispatch({ field: 'toast', value: { text: 'Conexão encerrada.', error: false } });
-      await carregarConexoes();
-    } catch (falha) {
-      dispatch({ field: 'conexoesActionError', value: falha.message });
-    } finally {
-      dispatch({ field: 'conexoesSaving', value: false });
-    }
-  };
-  const dataConexao = (valor) => valor ? new Date(valor).toLocaleString(locale) : '—';
   const openNew = (templateId) => {
     if (!canEditDocuments) return;
     dispatch({
@@ -1013,6 +953,7 @@ export default function Workspace() {
             }}
           >
             <Avatar
+              src={usuario ? `/ArgousForms/foto-pessoa?v=${fotoVersaoMenu}` : undefined}
               sx={{
                 width: 34,
                 height: 34,
@@ -1028,11 +969,18 @@ export default function Workspace() {
               <small title={usuario?.perfis?.join(', ')}>{usuario ? profileSummary(usuario.perfis) : tr(roleLabel(person))}</small>
             </div>
           </Button>}
-          {canManageOwnData && <MuiMenu anchorEl={menuPessoalAnchor} open={Boolean(menuPessoalAnchor)} onClose={() => dispatch({ field: 'menuPessoalAnchor', value: null })}>
-            <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); navigate('settings'); }}>{tr('Dados cadastrais')}</MenuItem>
-            {usuario && <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); dispatch({ field: 'senhaDialog', value: true }); }}>{tr('Trocar senha')}</MenuItem>}
-            {usuario && <MenuItem onClick={abrirConexoes}>{tr('Conexões ativas')}</MenuItem>}
-            <MenuItem onClick={encerrarSessao}>{tr('Sair')}</MenuItem>
+          {canManageOwnData && <MuiMenu anchorEl={menuPessoalAnchor} open={Boolean(menuPessoalAnchor)} onClose={() => dispatch({ field: 'menuPessoalAnchor', value: null })} MenuListProps={{ 'aria-label': tr('Menu da conta') }}>
+            <div className="menu-conta-cabecalho">
+              <Avatar src={usuario ? `/ArgousForms/foto-pessoa?v=${fotoVersaoMenu}` : undefined}>{initials(usuario?.nome || person.name)}</Avatar>
+              <div><strong>{usuario?.nome || person.name}</strong><small>{usuario?.email}</small></div>
+            </div>
+            <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); navigate('settings'); }}>{tr('Ver meu perfil')}</MenuItem>
+            <Divider />
+            <MenuItem onClick={() => { dispatch({ field: 'menuPessoalAnchor', value: null }); navigate('settings'); }}><UserRound className="menu-conta-icone" size={18} aria-hidden="true" />{tr('Dados cadastrais')}</MenuItem>
+            {usuario && <MenuItem onClick={() => abrirSeguranca('senha')}><KeyRound className="menu-conta-icone" size={18} aria-hidden="true" />{tr('Trocar senha')}</MenuItem>}
+            {usuario && <MenuItem onClick={() => abrirSeguranca('conexoes')}><MonitorSmartphone className="menu-conta-icone" size={18} aria-hidden="true" />{tr('Conexões ativas')}</MenuItem>}
+            <Divider />
+            <MenuItem onClick={encerrarSessao}><LogOut className="menu-conta-icone" size={18} aria-hidden="true" />{tr('Sair')}</MenuItem>
           </MuiMenu>}
           {!canManageOwnData && <IconButton
             aria-label={tr('Sair')}
@@ -1200,6 +1148,7 @@ export default function Workspace() {
                 {tr(
                   view === 'settings'
                     ? 'Configurações do usuário'
+                    : view === 'security' ? 'Segurança da conta'
                     : view === 'notifications' ? 'Notificações' : nav.find((n) => n[0] === view)?.[1] || '',
                 )}
               </strong>
@@ -1262,19 +1211,22 @@ export default function Workspace() {
             ) : (
               <>
                 {view === 'settings' && canManageOwnData && (
-                  <>
-                    <div className="page-heading">
-                      <h1>{tr('Configurações do usuário')}</h1>
-                      <Button
-                        variant="outlined"
-                        onClick={() => navigate('home')}
-                      >
-                        {tr('Visão geral')}
-                      </Button>
-                    </div>
-                    <UserSettings />
-                  </>
+                  <div className="seguranca-conta">
+                    <header className="seguranca-conta-cabecalho">
+                      <div className="seguranca-conta-capa" />
+                      <div className="seguranca-conta-identidade">
+                        <Avatar className="seguranca-conta-avatar">{initials(usuario?.nome || person.name)}</Avatar>
+                        <div><h1>{usuario?.nome || person.name}</h1><p>{usuario?.email || ''}</p></div>
+                      </div>
+                      <nav className="seguranca-conta-abas" aria-label={tr('Seções da conta')}>
+                        <button type="button" aria-current="page">{tr('Perfil')}</button>
+                        <button type="button" onClick={() => navigate('security')}>{tr('Segurança')}</button>
+                      </nav>
+                    </header>
+                    <div className="seguranca-conta-perfil"><UserSettings /></div>
+                  </div>
                 )}
+                {view === 'security' && canManageOwnData && usuario && <SegurancaConta usuario={usuario} foco={segurancaFoco} aoPerfil={() => navigate('settings')} />}
                 {view === 'integrations' && canView('integrations') && <Integracao desenvolvedor={hasRole('DESENVOLVEDOR')} />}
                 {view === 'home' && (
                   <>
@@ -1474,7 +1426,8 @@ export default function Workspace() {
                     </Alert>
                   </>
                 )}
-                {view === 'organization' && canView('organization') && (
+                {view === 'organization' && canView('organization') && <OrganizacaoAcessos podeOrganizar={groupManager} podeAdministrar={admin} abrirConfiguracoes={() => navigate('organization-legacy')} />}
+                {view === 'organization-legacy' && canView('organization-legacy') && (
                   <>
                     <div className="page-heading">
                       <div>
@@ -1844,57 +1797,6 @@ export default function Workspace() {
                 dispatch({ field: 'cadastroEdit', value: null });
               }} />}
           </DialogContent>
-        </Dialog>
-        <Dialog open={senhaDialog && canManageOwnData && Boolean(usuario)} onClose={() => fecharTrocaSenha()} fullWidth maxWidth="sm">
-          <DialogTitle>{tr('Trocar senha')}</DialogTitle>
-          <form onSubmit={(event) => { event.preventDefault(); trocarSenha(); }}>
-            <DialogContent>
-              <div className="dialog-fields">
-                <TextField label={tr('Senha atual')} type="password" autoComplete="current-password" value={senhaAtual} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaAtual', value: event.target.value })} />
-                <TextField label={tr('Nova senha')} type="password" autoComplete="new-password" value={senhaNova} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaNova', value: event.target.value })} slotProps={{ htmlInput: { minLength: 8, maxLength: 1024 } }} />
-                <ForcaSenha senha={senhaNova} />
-                <TextField label={tr('Confirmar nova senha')} type="password" autoComplete="new-password" value={senhaConfirmacao} required disabled={senhaSaving} onChange={(event) => dispatch({ field: 'senhaConfirmacao', value: event.target.value })} />
-                {senhaError && <Alert severity="error">{system(senhaError)}</Alert>}
-              </div>
-            </DialogContent>
-            <DialogActions>
-              <Button type="button" disabled={senhaSaving} onClick={() => fecharTrocaSenha()}>{tr('Cancelar')}</Button>
-              <Button type="submit" variant="contained" disabled={senhaSaving || !senhaAtual || !senhaNova || !senhaConfirmacao}>{tr('Salvar nova senha')}</Button>
-            </DialogActions>
-          </form>
-        </Dialog>
-        <Dialog open={conexoesDialog && canManageOwnData && Boolean(usuario)} onClose={() => dispatch({ field: 'conexoesDialog', value: false })} fullWidth maxWidth="md">
-          <DialogTitle>{tr('Conexões ativas')}</DialogTitle>
-          <DialogContent>
-            {conexoesLoading && <LinearProgress sx={{ mb: 2 }} />}
-            {conexoesError && <Alert severity="error" sx={{ mb: 2 }}>{system(conexoesError)}</Alert>}
-            {!conexoesLoading && !conexoesError && (conexoes.length ? <TableContainer><Table aria-label={tr('Conexões ativas')}>
-              <TableHead><TableRow><TableCell>{tr('INÍCIO')}</TableCell><TableCell>{tr('IP')}</TableCell><TableCell>{tr('DISPOSITIVO')}</TableCell><TableCell>{tr('VALIDADE')}</TableCell><TableCell>{tr('AÇÕES')}</TableCell></TableRow></TableHead>
-              <TableBody>{conexoes.map((conexao) => <TableRow key={conexao.idLogin}>
-                <TableCell>{dataConexao(conexao.inicio)}{conexao.atual && <Chip size="small" sx={{ ml: 1 }} label={tr('Esta conexão')} />}</TableCell>
-                <TableCell>{conexao.enderecoIp}</TableCell>
-                <TableCell sx={{ overflowWrap: 'anywhere', maxWidth: 320 }}>{conexao.agente}</TableCell>
-                <TableCell>{dataConexao(conexao.validade)}</TableCell>
-                <TableCell><Button size="small" color="error" onClick={() => { dispatch({ field: 'conexaoParaEncerrar', value: conexao }); dispatch({ field: 'conexoesActionError', value: '' }); }}>{tr('Encerrar')}</Button></TableCell>
-              </TableRow>)}</TableBody>
-            </Table></TableContainer> : <Alert severity="info">{tr('Nenhuma conexão ativa encontrada.')}</Alert>)}
-          </DialogContent>
-          <DialogActions>
-            <Button disabled={conexoesLoading} onClick={carregarConexoes}>{tr('Atualizar')}</Button>
-            <Button onClick={() => dispatch({ field: 'conexoesDialog', value: false })}>{tr('Fechar')}</Button>
-          </DialogActions>
-        </Dialog>
-        <Dialog open={Boolean(conexaoParaEncerrar)} onClose={() => { if (!conexoesSaving) dispatch({ field: 'conexaoParaEncerrar', value: null }); }} fullWidth maxWidth="xs">
-          <DialogTitle>{tr('Encerrar conexão')}</DialogTitle>
-          <DialogContent>
-            <p>{tr('Deseja encerrar a conexão de')} <strong>{conexaoParaEncerrar?.enderecoIp}</strong>?</p>
-            {conexaoParaEncerrar?.atual && <Alert severity="warning">{tr('Esta é sua conexão atual. Você voltará à tela de login.')}</Alert>}
-            {conexoesActionError && <Alert severity="error" sx={{ mt: 2 }}>{system(conexoesActionError)}</Alert>}
-          </DialogContent>
-          <DialogActions>
-            <Button disabled={conexoesSaving} onClick={() => dispatch({ field: 'conexaoParaEncerrar', value: null })}>{tr('Cancelar')}</Button>
-            <Button color="error" variant="contained" disabled={conexoesSaving} onClick={encerrarConexao}>{tr('Encerrar conexão')}</Button>
-          </DialogActions>
         </Dialog>
         <Dialog
           open={!!groupEdit && groupManager}

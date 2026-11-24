@@ -8,6 +8,7 @@ import './css/editor.css';
 const pages = {
   '/': lazy(() => import('./interface/landing/index.js')),
   '/app': lazy(() => import('./interface/argous/workspace.js')),
+  '/conta/seguranca': lazy(() => import('./interface/argous/workspace.js')),
   '/cadastro': lazy(() => import('./interface/cadastro/index.js')),
   '/convite': lazy(() => import('./interface/convite/index.js')),
   '/inicio': lazy(() => import('./interface/inicio/index.js')),

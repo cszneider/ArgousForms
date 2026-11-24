@@ -70,8 +70,8 @@ public final class ForumProcessoService {
 	public JSONArray listar( Conexao conexao, UUID idProcesso ) throws Exception {
 
 		JSONArray registros = new JSONArray();
-		String sql = "select m.ID_MENSAGEM, m.ID_USUARIO_AUTOR, u.DS_NOME, m.TP_REGISTRO, m.TX_CONTEUDO, m.DT_INCLUSAO "
-			+ "from Processos.PROCESSO_FORUM m left join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = m.ID_USUARIO_AUTOR "
+		String sql = "select m.ID_MENSAGEM, m.ID_USUARIO_AUTOR, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME, m.TP_REGISTRO, m.TX_CONTEUDO, m.DT_INCLUSAO "
+			+ "from Processos.PROCESSO_FORUM m left join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = m.ID_USUARIO_AUTOR left join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA "
 			+ "where m.ID_PROCESSO = ? order by m.DT_INCLUSAO, m.ID_MENSAGEM";
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			consulta.setObject( 1, idProcesso );

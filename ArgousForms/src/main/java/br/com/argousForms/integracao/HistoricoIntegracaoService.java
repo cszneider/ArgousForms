@@ -23,12 +23,12 @@ public final class HistoricoIntegracaoService {
 		String codigoFiltro = codigo == null ? "" : codigo.strip();
 		if( codigoFiltro.length() > 100 ) throw new ArgousFormsApiException( 400, "CODIGO_INVALIDO", "O código da consulta é muito longo." );
 
-		String sql = "select c.ID_REQUISICAO, c.DT_INICIO, c.DT_FIM, c.ID_USUARIO_ORIGEM, u.DS_NOME, "
+		String sql = "select c.ID_REQUISICAO, c.DT_INICIO, c.DT_FIM, c.ID_USUARIO_ORIGEM, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME, "
 			+ "c.ID_PROTOCOLO, c.ID_PROCESSO, c.TP_ORIGEM, c.CD_ACAO, c.CD_CONSULTA, "
 			+ "c.TP_RESULTADO, c.ID_CACHE, c.CD_ERRO, c.DS_ERRO, "
 			+ "(select count(*) from Cadastro.INTEGRACAO_TENTATIVAS t where t.ID_REQUISICAO = c.ID_REQUISICAO) NR_TENTATIVAS "
 			+ "from Cadastro.INTEGRACAO_CONSULTAS c "
-			+ "left join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = c.ID_USUARIO_ORIGEM "
+			+ "left join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = c.ID_USUARIO_ORIGEM left join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA "
 			+ "where (?::uuid is null or c.ID_REQUISICAO = ?) and (? = '' or c.CD_CONSULTA ilike ?) "
 			+ "order by c.DT_INICIO desc, c.ID_REQUISICAO desc limit 51 offset ?";
 		JSONArray itens = new JSONArray();

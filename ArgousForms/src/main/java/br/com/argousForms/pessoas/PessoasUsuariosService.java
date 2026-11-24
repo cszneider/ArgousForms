@@ -13,6 +13,41 @@ import quatro.sql.Query;
 
 public final class PessoasUsuariosService {
 
+	public JSONObject contextoOrganizacao( UUID idUsuario ) throws Exception {
+
+		JSONArray grupos = new JSONArray();
+		try ( Conexao conexao = PoolDeConexoes.getConexao(); Query query = new Query( conexao ) ) {
+			query.setSQL( "select g.ID_GRUPO, g.DS_NOME_GRUPO, t.CD_TAG, coalesce(nullif(btrim(t.DS_NOME_EXIBICAO), ''), t.CD_TAG) as DS_TAG from Cadastro.USUARIO_GRUPOS ug join Cadastro.GRUPOS g on g.ID_GRUPO = ug.ID_GRUPO left join Cadastro.VINCULO_TAGS vt on vt.ID_USUARIO_SISTEMA = ug.ID_USUARIO_SISTEMA and vt.ID_GRUPO = ug.ID_GRUPO and vt.SN_ATIVO = true left join Cadastro.TAGS t on t.CD_TAG = vt.CD_TAG where ug.ID_USUARIO_SISTEMA = :id and ug.SN_ATIVO = true and g.SN_ATIVO = true order by g.DS_NOME_GRUPO, t.CD_TAG" );
+			query.setParameter( "id", idUsuario.toString() );
+			query.executeQuery();
+			Map<Integer, JSONObject> porId = new HashMap<>();
+			if( !query.isEmpty() ) do {
+				int idGrupo = query.getInt( "ID_GRUPO" );
+				JSONObject grupo = porId.get( idGrupo );
+				if( grupo == null ) {
+					grupo = new JSONObject().put( "idGrupo", idGrupo ).put( "nome", query.getString( "DS_NOME_GRUPO" ) ).put( "tags", new JSONArray() ).put( "lotacao", false ).put( "gestores", new JSONArray() );
+					porId.put( idGrupo, grupo );
+					grupos.put( grupo );
+				}
+				if( query.getString( "CD_TAG" ) != null ) grupo.getJSONArray( "tags" ).put( query.getString( "DS_TAG" ) );
+				if( "lotacao".equals( query.getString( "CD_TAG" ) ) ) grupo.put( "lotacao", true );
+			} while ( query.next() );
+		}
+		try ( Conexao conexao = PoolDeConexoes.getConexao(); Query query = new Query( conexao ) ) {
+			query.setSQL( "select g.ID_GRUPO, coalesce(nullif(btrim(p.DS_NOME_SOCIAL), ''), p.DS_NOME_PESSOA) as DS_NOME from Cadastro.USUARIO_GRUPOS ug join Cadastro.GRUPOS g on g.ID_GRUPO = ug.ID_GRUPO join Cadastro.VINCULO_TAGS vt on vt.ID_GRUPO = g.ID_GRUPO and vt.CD_TAG = 'gestor' and vt.SN_ATIVO = true join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = vt.ID_USUARIO_SISTEMA and u.DT_EXCLUSAO is null join Cadastro.PESSOAS p on p.ID_PESSOA = u.ID_PESSOA where ug.ID_USUARIO_SISTEMA = :id and ug.SN_ATIVO = true and g.SN_ATIVO = true" );
+			query.setParameter( "id", idUsuario.toString() );
+			query.executeQuery();
+			if( !query.isEmpty() ) do {
+				int idGrupo = query.getInt( "ID_GRUPO" );
+				for( int i = 0; i < grupos.length(); i++ ) {
+					JSONObject grupo = grupos.getJSONObject( i );
+					if( grupo.getInt( "idGrupo" ) == idGrupo ) grupo.getJSONArray( "gestores" ).put( query.getString( "DS_NOME" ) );
+				}
+			} while ( query.next() );
+		}
+		return new JSONObject().put( "grupos", grupos );
+	}
+
 	public JSONObject catalogo() throws Exception {
 
 		JSONArray paises = new JSONArray();
@@ -51,8 +86,8 @@ public final class PessoasUsuariosService {
 			JSONObject dados;
 			try ( Query query = new Query( conexao ) ) {
 				query.setSQL( idUsuario == null
-					? "select p.*, u.ID_USUARIO_SISTEMA, u.DS_EMAIL, u.DT_EXCLUSAO as DT_EXCLUSAO_USUARIO from Cadastro.PESSOAS p left join Cadastro.USUARIOS_SISTEMA u on u.ID_PESSOA = p.ID_PESSOA where p.ID_PESSOA = :id and p.DT_EXCLUSAO is null"
-					: "select p.*, u.ID_USUARIO_SISTEMA, u.DS_EMAIL, u.DT_EXCLUSAO as DT_EXCLUSAO_USUARIO from Cadastro.PESSOAS p join Cadastro.USUARIOS_SISTEMA u on u.ID_PESSOA = p.ID_PESSOA where u.ID_USUARIO_SISTEMA = :id and u.DT_EXCLUSAO is null" );
+					? "select p.*, u.ID_USUARIO_SISTEMA, u.DS_EMAIL, u.DS_CELULAR, u.SN_EMAIL_INSTITUCIONAL, u.SN_CELULAR_INSTITUCIONAL, u.DT_EXCLUSAO as DT_EXCLUSAO_USUARIO from Cadastro.PESSOAS p left join Cadastro.USUARIOS_SISTEMA u on u.ID_PESSOA = p.ID_PESSOA where p.ID_PESSOA = :id and p.DT_EXCLUSAO is null"
+					: "select p.*, u.ID_USUARIO_SISTEMA, u.DS_EMAIL, u.DS_CELULAR, u.SN_EMAIL_INSTITUCIONAL, u.SN_CELULAR_INSTITUCIONAL, u.DT_EXCLUSAO as DT_EXCLUSAO_USUARIO from Cadastro.PESSOAS p join Cadastro.USUARIOS_SISTEMA u on u.ID_PESSOA = p.ID_PESSOA where u.ID_USUARIO_SISTEMA = :id" );
 				query.setParameter( "id", ( idUsuario == null ? idPessoa : idUsuario ).toString() );
 				query.executeQuery();
 				if( query.isEmpty() ) return null;
@@ -62,12 +97,16 @@ public final class PessoasUsuariosService {
 				dados.put( "contaExcluida", query.getString( "ID_USUARIO_SISTEMA" ) != null && query.getDate( "DT_EXCLUSAO_USUARIO" ) != null );
 				dados.put( "nome", query.getString( "DS_NOME_PESSOA" ) );
 				dados.put( "nomeSocial", query.getString( "DS_NOME_SOCIAL" ) );
+				dados.put( "idFoto", query.getString( "ID_FOTO" ) );
 				dados.put( "sexo", query.getString( "TP_SEXO" ) );
 				String emailPessoa = query.getString( "DS_END_EMAIL" );
 				String emailUsuario = query.getString( "DS_EMAIL" );
 				boolean contaExcluida = dados.getBoolean( "contaExcluida" );
 				dados.put( "email", contaExcluida && emailPessoa != null ? emailPessoa : emailUsuario == null ? emailPessoa : emailUsuario );
 				dados.put( "telefone", query.getString( "DS_TELEFONE" ) );
+				dados.put( "celular", query.getString( "DS_CELULAR" ) );
+				dados.put( "emailInstitucional", query.getString( "ID_USUARIO_SISTEMA" ) != null && query.getBoolean( "SN_EMAIL_INSTITUCIONAL" ) );
+				dados.put( "celularInstitucional", query.getString( "ID_USUARIO_SISTEMA" ) != null && query.getBoolean( "SN_CELULAR_INSTITUCIONAL" ) );
 				dados.put( "nascimento", query.getDate( "DT_NASCIMENTO" ) == null ? JSONObject.NULL : query.getDate( "DT_NASCIMENTO" ).toString() );
 			}
 
@@ -111,7 +150,7 @@ public final class PessoasUsuariosService {
 		Map<String, JSONObject> usuariosPorId = new HashMap<>();
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select p.ID_PESSOA, p.DS_NOME_PESSOA, p.DS_NOME_SOCIAL, p.DS_END_EMAIL, p.DS_TELEFONE, "
+				query.setSQL( "select p.ID_PESSOA, p.DS_NOME_PESSOA, p.DS_NOME_SOCIAL, p.DS_END_EMAIL, p.DS_TELEFONE, (select right(regexp_replace(pi.CD_IDENTIFICACAO, '[^0-9]', '', 'g'), 2) from Cadastro.PESSOA_IDENTIFICACOES pi join Cadastro.TIPOS_IDENTIFICACAO ti on ti.ID_TIPO_IDENTIFICACAO = pi.ID_TIPO_IDENTIFICACAO where pi.ID_PESSOA = p.ID_PESSOA and ti.CD_TIPO = 'CPF' limit 1) as CPF_FINAL, "
 					+ "exists (select 1 from Cadastro.USUARIOS_SISTEMA u where u.ID_PESSOA = p.ID_PESSOA) as CONTA_HISTORICA "
 					+ "from Cadastro.PESSOAS p where p.DT_EXCLUSAO is null "
 					+ "and not exists (select 1 from Cadastro.USUARIOS_SISTEMA u where u.ID_PESSOA = p.ID_PESSOA and u.DT_EXCLUSAO is null) "
@@ -125,14 +164,15 @@ public final class PessoasUsuariosService {
 						pessoa.put( "nomeSocial", query.getString( "DS_NOME_SOCIAL" ) );
 						pessoa.put( "email", query.getString( "DS_END_EMAIL" ) );
 						pessoa.put( "telefone", query.getString( "DS_TELEFONE" ) );
+						pessoa.put( "cpfMascarado", query.getString( "CPF_FINAL" ) == null ? JSONObject.NULL : "***.***.***-" + query.getString( "CPF_FINAL" ) );
 						pessoa.put( "contaHistorica", query.getBoolean( "CONTA_HISTORICA" ) );
 						pessoas.put( pessoa );
 					} while ( query.next() );
 				}
 			}
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select ID_USUARIO_SISTEMA, ID_PESSOA, DS_NOME, DS_EMAIL from Cadastro.USUARIOS_SISTEMA "
-					+ "where DT_EXCLUSAO is null order by DS_NOME, ID_USUARIO_SISTEMA" );
+				query.setSQL( "select u.ID_USUARIO_SISTEMA, u.ID_PESSOA, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME, u.DS_EMAIL, u.DS_CELULAR, u.CD_HASH_SENHA, u.DT_EXCLUSAO, u.SN_EMAIL_INSTITUCIONAL, u.SN_CELULAR_INSTITUCIONAL from Cadastro.USUARIOS_SISTEMA u join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA "
+					+ "order by DS_NOME, u.ID_USUARIO_SISTEMA" );
 				query.executeQuery();
 				if( !query.isEmpty() ) {
 					do {
@@ -142,6 +182,10 @@ public final class PessoasUsuariosService {
 						usuario.put( "idPessoa", query.getString( "ID_PESSOA" ) );
 						usuario.put( "nome", query.getString( "DS_NOME" ) );
 						usuario.put( "email", query.getString( "DS_EMAIL" ) );
+						usuario.put( "celular", query.getString( "DS_CELULAR" ) );
+						usuario.put( "emailInstitucional", query.getBoolean( "SN_EMAIL_INSTITUCIONAL" ) );
+						usuario.put( "celularInstitucional", query.getBoolean( "SN_CELULAR_INSTITUCIONAL" ) );
+						usuario.put( "situacao", query.getDate( "DT_EXCLUSAO" ) != null ? "inativo" : query.getString( "CD_HASH_SENHA" ) == null ? "convidado" : "ativo" );
 						usuario.put( "perfis", new JSONArray() );
 						usuarios.put( usuario );
 						usuariosPorId.put( id, usuario );

@@ -69,6 +69,23 @@ function dataCurta(valor, locale) {
   }).format(data);
 }
 
+function sugerirCodigoOpcao(rotulo) {
+  return rotulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+}
+
+function DetalhesCampo({ campo, salvar, t }) {
+  const [nome, setNome] = useState(campo.nomeAlternativo || '');
+  const [ajuda, setAjuda] = useState(campo.textoAjuda || '');
+  const alterado = nome !== (campo.nomeAlternativo || '') || ajuda !== (campo.textoAjuda || '');
+  return <>
+    <TextField size="small" label={t('Rótulo neste formulário')} value={nome} inputProps={{ maxLength: 255 }}
+      onChange={(evento) => setNome(evento.target.value)} sx={{ minWidth: 180 }} />
+    <TextField size="small" label={t('Texto de ajuda')} value={ajuda} onChange={(evento) => setAjuda(evento.target.value)} sx={{ minWidth: 200 }} />
+    {alterado && <Button size="small" onClick={() => salvar({ nomeAlternativo: nome, textoAjuda: ajuda })}>{t('Salvar detalhes')}</Button>}
+  </>;
+}
+
 function Vazio({ titulo, descricao, acao, aoClicar }) {
   return (
     <div className="protocolos-vazio">
@@ -169,6 +186,8 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
   }, [editandoVariavel]);
 
   const protocolo = protocolos.find((item) => item.id === selecionado);
+  const pendenciasOpcoes = (protocolo?.rascunho?.variaveis || []).filter((item) =>
+    (item.tipo === 'O' || item.tipo === 'C') && !(item.definicao?.opcoes || []).some((opcao) => opcao.ativa !== false));
   const modeloParaExcluir = protocolo?.rascunho?.documentos.find((item) => item.id === modeloExclusao);
   const formulario = protocolo?.rascunho?.formularios.find(
     (item) => item.id === formularioAberto,
@@ -360,6 +379,16 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
       const falha = validarDefinicaoTexto(definicao.texto || {});
       if (falha) { setErro(t(falha)); return; }
     }
+    if (variavelEdicao.tipo === 'O' || variavelEdicao.tipo === 'C') {
+      const codigos = new Set();
+      for (const opcao of definicao.opcoes || []) {
+        if (!/^[A-Za-z0-9_-]{1,40}$/.test(opcao.codigo || '') || !opcao.rotulo?.trim() || codigos.has(opcao.codigo)) {
+          setErro(t('Cada opção precisa de código único e rótulo. Use até 40 letras, dígitos, _ ou - no código.'));
+          return;
+        }
+        codigos.add(opcao.codigo);
+      }
+    }
     if (definicao.valorExemplo !== undefined) {
       const exemplo = normalizarValorExemplo(definicao.valorExemplo, definicao, variavelEdicao.tipo);
       if (exemplo.erro) { setErro(t(exemplo.erro)); return; }
@@ -381,6 +410,10 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
         texto: { ...atual.definicao?.texto, [chave]: valor },
       },
     }));
+  }
+
+  function alterarOpcoes(opcoes) {
+    setVariavelEdicao((atual) => ({ ...atual, definicao: { ...atual.definicao, opcoes } }));
   }
 
   async function salvarFormulario() {
@@ -427,7 +460,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
   }
 
   function alterarCampo(indice, alteracao) {
-    atualizarCampos(
+    return atualizarCampos(
       formulario.campos.map((campo, posicao) =>
         posicao === indice ? { ...campo, ...alteracao } : campo,
       ),
@@ -951,7 +984,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                                 </span>
                                 <div className="protocolos-field-info">
                                   <strong>
-                                    {variavel?.nome ||
+                                    {campo.nomeAlternativo || variavel?.nome ||
                                       t('Variável indisponível')}
                                   </strong>
                                   <small>
@@ -960,6 +993,7 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
                                   </small>
                                 </div>
                                 <div className="protocolos-field-actions">
+                                  <DetalhesCampo campo={campo} salvar={(alteracao) => alterarCampo(indice, alteracao)} t={t} />
                                   <TextField
                                     select
                                     size="small"
@@ -1505,6 +1539,31 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
               onChange={(evento) => alterarRegraTexto('regex', evento.target.value)}
               helperText={t('Valida o valor completo, sem os separadores da máscara.')} />
           </>}
+          {(variavelEdicao?.tipo === 'O' || variavelEdicao?.tipo === 'C') && <>
+            <strong>{t('Opções')}</strong>
+            {(variavelEdicao.definicao?.opcoes || []).map((opcao, indice, todas) => {
+              const publicada = variavelEdicao.publicada && variavelEdicao.codigosPublicados
+                ?.some((anterior) => anterior.codigo === opcao.codigo);
+              const editar = (mudanca) => alterarOpcoes(todas.map((item, posicao) => posicao === indice ? { ...item, ...mudanca } : item));
+              const mover = (direcao) => { const copia = [...todas]; [copia[indice], copia[indice + direcao]] = [copia[indice + direcao], copia[indice]]; alterarOpcoes(copia); };
+              return <div key={indice} className="protocolos-dialog-row">
+                <TextField label={t('Rótulo')} value={opcao.rotulo || ''} fullWidth
+                  onChange={(evento) => { const rotulo = evento.target.value;
+                    editar({ rotulo, ...(!publicada && (!opcao.codigo || opcao.codigo === sugerirCodigoOpcao(opcao.rotulo || ''))
+                      ? { codigo: sugerirCodigoOpcao(rotulo) } : {}) }); }} />
+                <TextField label={t('Código')} value={opcao.codigo || ''} inputProps={{ maxLength: 40 }} disabled={!!publicada}
+                  onChange={(evento) => editar({ codigo: evento.target.value })} sx={{ minWidth: 130 }} />
+                <Button disabled={indice === 0} onClick={() => mover(-1)} aria-label={t('Mover para cima')}>↑</Button>
+                <Button disabled={indice === todas.length - 1} onClick={() => mover(1)} aria-label={t('Mover para baixo')}>↓</Button>
+                {publicada ? <FormControlLabel label={t('Ativa')} control={<Checkbox checked={opcao.ativa !== false}
+                  onChange={(evento) => editar({ ativa: evento.target.checked })} />} /> :
+                  <Button onClick={() => alterarOpcoes(todas.filter((_, posicao) => posicao !== indice))}>{t('Remover')}</Button>}
+              </div>;
+            })}
+            <Button onClick={() => alterarOpcoes([...(variavelEdicao.definicao?.opcoes || []), { codigo: '', rotulo: '', ativa: true }])}>
+              {t('Adicionar opção')}
+            </Button>
+          </>}
           <TextField label={t('Valor exemplo (opcional)')} fullWidth
             value={variavelEdicao?.definicao?.valorExemplo || ''}
             inputProps={{ maxLength: 500 }}
@@ -1590,11 +1649,12 @@ export default function Protocolos({ usuarioId, usuarioPapeis = [] }) {
         <DialogContent>
           <p>{t('A versão publicada não poderá mais ser alterada. Confirme que revisou o fluxo, os destinatários e os modelos de documentos.')}</p>
           {!protocolo?.prefixo && <Alert severity="warning">{t('Defina o prefixo do número em Editar dados antes de publicar.')}</Alert>}
+          {pendenciasOpcoes.map((item) => <Alert key={item.id} severity="warning">{t('Defina as opções do campo')} {item.nome}.</Alert>)}
           {erro && <Alert severity="error">{erro}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublicacao(false)}>{t('Voltar')}</Button>
-          <Button variant="contained" disabled={salvando || !protocolo?.prefixo} onClick={publicarProtocolo}>{t('Confirmar publicação')}</Button>
+          <Button variant="contained" disabled={salvando || !protocolo?.prefixo || pendenciasOpcoes.length > 0} onClick={publicarProtocolo}>{t('Confirmar publicação')}</Button>
         </DialogActions>
       </Dialog>
     </div>

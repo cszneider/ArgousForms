@@ -1,4 +1,5 @@
 -- Testes das regras de fluxo e resultado de 20/11/2026 (modelo-de-dados.md, 4.1 e M-01).
+-- Roda em qualquer cliente (psql, DBeaver): não usa comandos do psql.
 -- Executar como usuário com DML em Cadastro e Processos, com ao menos um usuário cadastrado.
 -- Os dados são temporários: a transação sempre termina em ROLLBACK.
 -- Cada linha do resultado começa com "ok" ou "FALHA".
@@ -82,20 +83,19 @@ CREATE TEMP TABLE v ON COMMIT DROP AS
 SELECT v.ID_PROTOCOLO_VERSAO id, (SELECT ID_USUARIO_SISTEMA FROM Cadastro.USUARIOS_SISTEMA ORDER BY DT_INCLUSAO LIMIT 1) u
   FROM Processos.PROTOCOLO_VERSOES v JOIN Processos.PROTOCOLOS p USING (ID_PROTOCOLO)
  WHERE p.DS_TITULO = 'Teste de fluxo' AND v.NR_VERSAO > 0 LIMIT 1;
-\set ins 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, '
-SELECT pg_temp.tenta('E sem resultado', 'ACEITOU', :'ins' || '''E'', NULL, NULL, now(), NULL FROM v');
-SELECT pg_temp.tenta('E com resultado', 'RECUSOU', :'ins' || '''E'', ''P'', NULL, now(), NULL FROM v');
-SELECT pg_temp.tenta('I não existe mais', 'RECUSOU', :'ins' || '''I'', NULL, NULL, now(), NULL FROM v');
-SELECT pg_temp.tenta('A pré-preenchido N sem motivo', 'ACEITOU', :'ins' || '''A'', ''N'', NULL, now(), NULL FROM v');
-SELECT pg_temp.tenta('A com C', 'RECUSOU', :'ins' || '''A'', ''C'', ''x'', now(), NULL FROM v');
-SELECT pg_temp.tenta('F sem resultado', 'RECUSOU', :'ins' || '''F'', NULL, NULL, now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('F P sem motivo', 'ACEITOU', :'ins' || '''F'', ''P'', NULL, now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('F N com motivo em branco', 'RECUSOU', :'ins' || '''F'', ''N'', ''  '', now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('F N com motivo', 'ACEITOU', :'ins' || '''F'', ''N'', ''reprovado'', now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('F sem data de encerramento', 'RECUSOU', :'ins' || '''F'', ''P'', NULL, now(), NULL FROM v');
-SELECT pg_temp.tenta('C com motivo', 'ACEITOU', :'ins' || '''C'', ''C'', ''desistência'', now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('C sem motivo', 'RECUSOU', :'ins' || '''C'', ''C'', NULL, now(), now() + interval ''1s'' FROM v');
-SELECT pg_temp.tenta('E com data de encerramento', 'RECUSOU', :'ins' || '''E'', NULL, NULL, now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('E sem resultado', 'ACEITOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''E'', NULL, NULL, now(), NULL FROM v');
+SELECT pg_temp.tenta('E com resultado', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''E'', ''P'', NULL, now(), NULL FROM v');
+SELECT pg_temp.tenta('I não existe mais', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''I'', NULL, NULL, now(), NULL FROM v');
+SELECT pg_temp.tenta('A pré-preenchido N sem motivo', 'ACEITOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''A'', ''N'', NULL, now(), NULL FROM v');
+SELECT pg_temp.tenta('A com C', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''A'', ''C'', ''x'', now(), NULL FROM v');
+SELECT pg_temp.tenta('F sem resultado', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''F'', NULL, NULL, now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('F P sem motivo', 'ACEITOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''F'', ''P'', NULL, now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('F N com motivo em branco', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''F'', ''N'', ''  '', now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('F N com motivo', 'ACEITOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''F'', ''N'', ''reprovado'', now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('F sem data de encerramento', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''F'', ''P'', NULL, now(), NULL FROM v');
+SELECT pg_temp.tenta('C com motivo', 'ACEITOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''C'', ''C'', ''desistência'', now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('C sem motivo', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''C'', ''C'', NULL, now(), now() + interval ''1s'' FROM v');
+SELECT pg_temp.tenta('E com data de encerramento', 'RECUSOU', 'INSERT INTO Processos.PROCESSOS (ID_PROCESSO, ID_PROTOCOLO_VERSAO, ID_USUARIO_INICIOU, TP_SITUACAO, TP_RESULTADO, DS_RESULTADO, DT_INICIO, DT_ENCERRAMENTO) SELECT gen_random_uuid(), id, u, ' || '''E'', NULL, NULL, now(), now() + interval ''1s'' FROM v');
 
 -- Restrições de PROTOCOLOS_ETAPAS e ENCAMINHAMENTOS
 SELECT pg_temp.tenta('concentrador com formulário', 'RECUSOU',

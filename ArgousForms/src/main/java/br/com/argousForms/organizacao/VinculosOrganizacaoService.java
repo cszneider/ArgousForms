@@ -1,7 +1,6 @@
 package br.com.argousForms.organizacao;
 
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
 
 import org.json.JSONArray;
@@ -32,7 +31,7 @@ public final class VinculosOrganizacaoService {
 		JSONArray tagsVinculo = new JSONArray();
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select ID_USUARIO_SISTEMA, DS_NOME, DS_EMAIL from Cadastro.USUARIOS_SISTEMA where DT_EXCLUSAO is null order by DS_NOME, ID_USUARIO_SISTEMA" );
+				query.setSQL( "select u.ID_USUARIO_SISTEMA, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME, u.DS_EMAIL from Cadastro.USUARIOS_SISTEMA u join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA where u.DT_EXCLUSAO is null order by DS_NOME, u.ID_USUARIO_SISTEMA" );
 				query.executeQuery();
 				if( !query.isEmpty() ) do {
 					usuarios.put( new JSONObject().put( "idUsuario", query.getString( "ID_USUARIO_SISTEMA" ) ).put( "nome", query.getString( "DS_NOME" ) ).put( "email", query.getString( "DS_EMAIL" ) ) );
@@ -176,6 +175,75 @@ public final class VinculosOrganizacaoService {
 		}
 	}
 
+	public void atribuirTagNoGrupo( UUID idUsuario, int idGrupo, String codigoInformado ) throws Exception {
+
+		String codigo = codigo( codigoInformado );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				exigirUsuario( conexao, idUsuario );
+				exigirGrupo( conexao, idGrupo, true );
+				exigirTag( conexao, codigo, "SN_VINCULO" );
+				QtData agora = new QtData( Instant.now().toEpochMilli() );
+				if( "lotacao".equals( codigo ) ) {
+					try ( Query query = new Query( conexao ) ) {
+						query.setSQL( "select * from Cadastro.VINCULO_TAGS where ID_USUARIO_SISTEMA = :id and CD_TAG = 'lotacao' and SN_ATIVO = true and ID_GRUPO <> :grupo" );
+						query.setParameter( "id", idUsuario.toString() );
+						query.setParameter( "grupo", idGrupo );
+						query.executeQuery();
+						if( !query.isEmpty() ) do {
+							VinculoTag anterior = new VinculoTag();
+							VinculoTagLocalizador.buscaCampos( anterior, query );
+							anterior.setSnAtivo( false );
+							anterior.setDtAlteracao( agora );
+							new VinculoTagNegocioSeguro( conexao, anterior ).altera();
+						} while ( query.next() );
+					}
+				}
+				UsuarioGrupo grupo = localizarVinculo( conexao, idUsuario, idGrupo );
+				if( grupo == null ) {
+					grupo = new UsuarioGrupo();
+					grupo.setIdUsuarioSistema( idUsuario );
+					grupo.setIdGrupo( idGrupo );
+					grupo.setSnAtivo( true );
+					grupo.setDtInclusao( agora );
+					grupo.setDtAlteracao( agora );
+					new UsuarioGrupoNegocio( conexao, grupo ).insere();
+				} else if( !grupo.isSnAtivo() ) {
+					grupo.setSnAtivo( true );
+					grupo.setDtAlteracao( agora );
+					new UsuarioGrupoNegocio( conexao, grupo ).altera();
+				}
+				VinculoTag tag = new VinculoTag();
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.VINCULO_TAGS where ID_USUARIO_SISTEMA = :usuario and ID_GRUPO = :grupo and CD_TAG = :codigo" );
+					query.setParameter( "usuario", idUsuario.toString() );
+					query.setParameter( "grupo", idGrupo );
+					query.setParameter( "codigo", codigo );
+					query.executeQuery();
+					if( !query.isEmpty() ) VinculoTagLocalizador.buscaCampos( tag, query );
+				}
+				if( tag.getCdTag() == null ) {
+					tag.setIdUsuarioSistema( idUsuario );
+					tag.setIdGrupo( idGrupo );
+					tag.setCdTag( codigo );
+					tag.setSnAtivo( true );
+					tag.setDtInclusao( agora );
+					tag.setDtAlteracao( agora );
+					new VinculoTagNegocio( conexao, tag ).insere();
+				} else if( !tag.isSnAtivo() ) {
+					tag.setSnAtivo( true );
+					tag.setDtAlteracao( agora );
+					new VinculoTagNegocioSeguro( conexao, tag ).altera();
+				}
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
 	public void desativarUsuario( Conexao conexao, UUID idUsuario ) throws Exception {
 
 		QtData agora = new QtData( Instant.now().toEpochMilli() );
@@ -281,7 +349,7 @@ public final class VinculosOrganizacaoService {
 
 	private String codigo( String informado ) throws ArgousFormsApiException {
 
-		String codigo = informado == null ? "" : informado.strip().toUpperCase( Locale.ROOT );
+		String codigo = informado == null ? "" : informado.strip();
 		if( codigo.isEmpty() || codigo.length() > 30 ) throw new ArgousFormsApiException( 400, "TAG_INVALIDA", "Informe um código de tag válido." );
 		return codigo;
 	}

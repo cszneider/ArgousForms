@@ -8,6 +8,7 @@ export const TIPOS_DADO = [
   ['V', 'Valor monetário'],
   ['B', 'Booleano'],
   ['O', 'Opção'],
+  ['C', 'Múltipla escolha'],
   ['D', 'Data'],
   ['H', 'Hora'],
   ['T', 'Data e hora'],

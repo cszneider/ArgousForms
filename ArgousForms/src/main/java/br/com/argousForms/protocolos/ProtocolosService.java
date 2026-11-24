@@ -121,6 +121,7 @@ public final class ProtocolosService {
 				}
 				if( numero > Short.MAX_VALUE ) throw new ArgousFormsApiException( 409, "LIMITE_VERSOES", "O Protocolo atingiu o limite de versões." );
 				validarFluxoPublicavel( conexao, idVersao );
+				validarOpcoesPublicaveis( conexao, idVersao );
 				if( !existeSql( conexao, "select 1 from Processos.PROTOCOLOS where ID_PROTOCOLO = ? and ID_PASTA is not null", idProtocolo ) ) {
 					throw new ArgousFormsApiException( 409, "PASTA_OBRIGATORIA", "Escolha a pasta do Protocolo antes de publicar." );
 				}
@@ -170,6 +171,25 @@ public final class ProtocolosService {
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
 			consulta.setObject( 1, id );
 			try ( ResultSet linhas = consulta.executeQuery() ) { return linhas.next(); }
+		}
+	}
+
+	private void validarOpcoesPublicaveis( Conexao conexao, UUID idVersao ) throws Exception {
+
+		String sql = "select v.DS_NOME, v.JS_DEFINICAO from Processos.PROTOCOLO_VERSAO_VARIAVEIS pv "
+			+ "join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = pv.ID_VARIAVEL "
+			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES v on v.ID_VARIAVEL = pv.ID_VARIAVEL and v.NR_VERSAO = pv.NR_VERSAO "
+			+ "where pv.ID_PROTOCOLO_VERSAO = ? and x.TP_DADO in ('O', 'C')";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idVersao );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) {
+					JSONArray opcoes = OpcoesVariavel.lista( new JSONObject( linhas.getString( "JS_DEFINICAO" ) ) );
+					boolean ativa = false;
+					for( int indice = 0; indice < opcoes.length(); indice++ ) ativa |= opcoes.getJSONObject( indice ).optBoolean( "ativa", true );
+					if( !ativa ) throw new ArgousFormsApiException( 409, "OPCOES_OBRIGATORIAS", "Defina as opções do campo " + linhas.getString( "DS_NOME" ) + "." );
+				}
+			}
 		}
 	}
 
@@ -232,7 +252,7 @@ public final class ProtocolosService {
 		String codigo = codigoInformado == null ? "" : codigoInformado.strip();
 		String nome = nomeInformado == null ? "" : nomeInformado.strip();
 		String descricao = descricaoInformada == null ? "" : descricaoInformada.strip();
-		if( codigo.isEmpty() || codigo.length() > 100 || nome.isEmpty() || nome.length() > 255 || tipoInformado == null || !tipoInformado.matches( "[SIRMVBODHT]" ) ) {
+		if( codigo.isEmpty() || codigo.length() > 100 || nome.isEmpty() || nome.length() > 255 || tipoInformado == null || !tipoInformado.matches( "[SIRMVBODHTC]" ) ) {
 			throw new ArgousFormsApiException( 400, "VARIAVEL_INVALIDA", "Informe código, nome e tipo válidos para a variável." );
 		}
 		String definicaoJson = definicaoInformada == null ? null : DefinicaoVariavelTexto.validar( tipoInformado, definicaoInformada ).toString();
@@ -250,6 +270,7 @@ public final class ProtocolosService {
 				ProcotoloVariavelVersao definicao;
 				boolean novaDefinicao = idVariavel == null;
 				if( idVariavel == null ) {
+					if( "O".equals( tipoInformado ) || "C".equals( tipoInformado ) ) OpcoesVariavel.validar( definicaoInformada, null, false );
 					variavel = new ProtocoloVariavel();
 					variavel.setIdProtocolo( idProtocolo );
 					variavel.setDtInclusao( agora );
@@ -270,7 +291,12 @@ public final class ProtocolosService {
 					ProtocoloVersaoVariavel associacao = ProtocoloVersaoVariavelLocalizador.buscaPorProtocoloPorVariavel( conexao, UUID.fromString( idVersao ), idVariavel );
 					if( associacao == null ) throw new ArgousFormsApiException( 404, "VARIAVEL_NAO_ENCONTRADA", "Variável não encontrada neste rascunho." );
 					definicao = ProcotoloVariavelVersaoLocalizador.buscaPorVariaveisPorVersao( conexao, idVariavel, associacao.getNrVersao() );
-					if( variavelPublicada( conexao, idVariavel ) ) {
+					boolean publicada = variavelPublicada( conexao, idVariavel );
+					if( "O".equals( tipoInformado ) || "C".equals( tipoInformado ) ) {
+						OpcoesVariavel.validar( definicaoInformada == null ? new JSONObject( definicao.getJsDefinicao() ) : definicaoInformada,
+							new JSONObject().put( "opcoes", codigosPublicados( conexao, idVariavel ) ), publicada );
+					}
+					if( publicada ) {
 						if( !codigo.equals( variavel.getCdVariavel() ) || !tipoInformado.equals( variavel.getTpDado() ) || !Objects.equals( descricao.isEmpty() ? null : descricao, variavel.getDsDescricao() ) ) {
 							throw new ArgousFormsApiException( 409, "IDENTIDADE_VARIAVEL_IMUTAVEL", "Código, tipo e descrição de uma variável publicada não podem ser alterados." );
 						}
@@ -325,6 +351,29 @@ public final class ProtocolosService {
 				throw e;
 			}
 		}
+	}
+
+	private JSONArray codigosPublicados( Conexao conexao, UUID idVariavel ) throws Exception {
+
+		JSONArray codigos = new JSONArray();
+		Set<String> vistos = new HashSet<>();
+		String sql = "select vv.JS_DEFINICAO from Processos.PROTOCOLO_VERSAO_VARIAVEIS pv "
+			+ "join Processos.PROTOCOLO_VERSOES p on p.ID_PROTOCOLO_VERSAO = pv.ID_PROTOCOLO_VERSAO "
+			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = pv.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
+			+ "where pv.ID_VARIAVEL = ? and p.NR_VERSAO > 0";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idVariavel );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) {
+					JSONArray opcoes = OpcoesVariavel.lista( new JSONObject( linhas.getString( 1 ) ) );
+					for( int indice = 0; indice < opcoes.length(); indice++ ) {
+						String codigo = opcoes.getJSONObject( indice ).optString( "codigo" );
+						if( vistos.add( codigo ) ) codigos.put( new JSONObject().put( "codigo", codigo ) );
+					}
+				}
+			}
+		}
+		return codigos;
 	}
 
 	private boolean variavelPublicada( Conexao conexao, UUID idVariavel ) throws Exception {
@@ -770,6 +819,11 @@ public final class ProtocolosService {
 					vinculo.setTpAcesso( acesso );
 					vinculo.setTpApresentacao( apresentacao );
 					vinculo.setSnObrigatoria( campo.optBoolean( "obrigatorio", false ) );
+				String nomeAlternativo = campo.optString( "nomeAlternativo", "" ).strip();
+				String textoAjuda = campo.optString( "textoAjuda", "" ).strip();
+				if( nomeAlternativo.length() > 255 ) throw new ArgousFormsApiException( 400, "CAMPO_INVALIDO", "O rótulo do campo deve ter até 255 caracteres." );
+				vinculo.setDsNomeAlternativo( nomeAlternativo.isEmpty() ? null : nomeAlternativo );
+				vinculo.setDsTextoAjuda( textoAjuda.isEmpty() ? null : textoAjuda );
 					vinculo.setNrOrdem( indice + 1 );
 					if( FormularioVariavelLocalizador.existe( conexao, formulario.getIdFormulario(), idVariavel ) ) new FormularioVariavelNegocio( conexao, vinculo ).altera();
 					else new FormularioVariavelNegocio( conexao, vinculo ).insere();
@@ -1707,9 +1761,10 @@ public final class ProtocolosService {
 			query.executeQuery();
 			if( !query.isEmpty() ) {
 				do {
-					rascunho.getJSONArray( "variaveis" ).put( new JSONObject().put( "id", query.getString( "ID_VARIAVEL" ) )
+						rascunho.getJSONArray( "variaveis" ).put( new JSONObject().put( "id", query.getString( "ID_VARIAVEL" ) )
 						.put( "codigo", query.getString( "CD_VARIAVEL" ) ).put( "tipo", query.getString( "TP_DADO" ) )
 						.put( "publicada", query.getBoolean( "PUBLICADA" ) )
+						.put( "codigosPublicados", query.getBoolean( "PUBLICADA" ) ? codigosPublicados( conexao, UUID.fromString( query.getString( "ID_VARIAVEL" ) ) ) : new JSONArray() )
 						.put( "nome", query.getString( "DS_NOME" ) ).put( "numeroVersaoVariavel", query.getInt( "NR_VERSAO" ) )
 							.put( "definicao", new JSONObject( query.getString( "JS_DEFINICAO" ) ) )
 						.put( "descricao", query.getString( "DS_DESCRICAO" ) == null ? "" : query.getString( "DS_DESCRICAO" ) ) );
@@ -1741,7 +1796,7 @@ public final class ProtocolosService {
 	private void carregarCampos( Conexao conexao, JSONObject formulario ) throws Exception {
 
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select ID_VARIAVEL, TP_ACESSO, SN_OBRIGATORIA, TP_APRESENTACAO "
+			query.setSQL( "select ID_VARIAVEL, TP_ACESSO, SN_OBRIGATORIA, TP_APRESENTACAO, DS_NOME_ALTERNATIVO, DS_TEXTO_AJUDA "
 				+ "from Processos.FORMULARIO_VARIAVEIS where ID_FORMULARIO = :formulario order by NR_ORDEM" );
 			query.setParameter( "formulario", formulario.getString( "id" ) );
 			query.executeQuery();
@@ -1749,7 +1804,9 @@ public final class ProtocolosService {
 				do {
 					formulario.getJSONArray( "campos" ).put( new JSONObject().put( "idVariavel", query.getString( "ID_VARIAVEL" ) )
 						.put( "acesso", query.getString( "TP_ACESSO" ) ).put( "obrigatorio", query.getBoolean( "SN_OBRIGATORIA" ) )
-						.put( "apresentacao", query.getString( "TP_APRESENTACAO" ) ) );
+						.put( "apresentacao", query.getString( "TP_APRESENTACAO" ) )
+						.put( "nomeAlternativo", query.getString( "DS_NOME_ALTERNATIVO" ) == null ? "" : query.getString( "DS_NOME_ALTERNATIVO" ) )
+						.put( "textoAjuda", query.getString( "DS_TEXTO_AJUDA" ) == null ? "" : query.getString( "DS_TEXTO_AJUDA" ) ) );
 				} while ( query.next() );
 			}
 		}

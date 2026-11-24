@@ -39,7 +39,7 @@ public final class FluxoProtocolosService {
 		exigirCriador( usuario );
 		JSONObject catalogo = new JSONObject().put( "usuarios", new JSONArray() ).put( "grupos", new JSONArray() ).put( "tags", new JSONArray() );
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
-			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA, DS_NOME, DS_EMAIL from Cadastro.USUARIOS_SISTEMA where DT_EXCLUSAO is null order by DS_NOME" ); ResultSet linhas = consulta.executeQuery() ) {
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select u.ID_USUARIO_SISTEMA, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME, u.DS_EMAIL from Cadastro.USUARIOS_SISTEMA u join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA where u.DT_EXCLUSAO is null order by DS_NOME" ); ResultSet linhas = consulta.executeQuery() ) {
 				while( linhas.next() ) catalogo.getJSONArray( "usuarios" ).put( new JSONObject().put( "id", linhas.getString( 1 ) ).put( "nome", linhas.getString( 2 ) ).put( "email", linhas.getString( 3 ) ) );
 			}
 			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_GRUPO, DS_NOME_GRUPO from Cadastro.GRUPOS where SN_ATIVO = true order by DS_NOME_GRUPO" ); ResultSet linhas = consulta.executeQuery() ) {

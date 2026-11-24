@@ -6,11 +6,13 @@ import { executar } from '../../programas/login/autenticacao.js';
 import { identificacaoCorresponde } from '../../programas/pessoas/regex-identificacao.js';
 
 const vazio = () => ({
-  idPessoa: null, idUsuario: null, nome: '', nomeSocial: '', email: '', telefone: '', nascimento: '', sexo: '',
+  idPessoa: null, idUsuario: null, nome: '', nomeSocial: '', email: '', telefone: '', celular: '', emailInstitucional: true, celularInstitucional: false, nascimento: '', sexo: '',
   nacionalidades: [], identificacoes: [], perfis: [], divergenciasRevisadas: false,
 });
 
 export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved, onCancel }) {
+  const conviteNovo = modo === 'usuario' && !idPessoa && !idUsuario;
+  const [completarConvite, setCompletarConvite] = useState(false);
   const [catalogo, setCatalogo] = useState(null);
   const [dados, setDados] = useState(vazio);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,9 @@ export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved,
   return <Box component="form" onSubmit={salvar} sx={{ display: 'grid', gap: 2, pt: 1 }}>
     {erro && <Alert severity="error">{erro}</Alert>}
     {aviso && <Alert severity="info">{aviso}</Alert>}
-    {modo === 'usuario' && !dados.idUsuario && !dados.idPessoa && <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+    {conviteNovo && <Typography variant="body2" color="text.secondary">Informe o nome e o e-mail para enviar o convite. Os demais dados podem ser completados depois.</Typography>}
+    {conviteNovo && <Button type="button" onClick={() => setCompletarConvite((valor) => !valor)}>{completarConvite ? 'Ocultar dados opcionais' : 'Completar agora (opcional)'}</Button>}
+    {conviteNovo && completarConvite && <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
       <TextField select label="País da identificação" value={buscaPais} onChange={(e) => setBuscaPais(e.target.value)} sx={{ minWidth: 200 }}>
         {catalogo.paises.map((pais) => <MenuItem key={pais.idPais} value={pais.idPais}>{pais.nome}</MenuItem>)}
       </TextField>
@@ -117,24 +121,30 @@ export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved,
     </Box>}
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
       <TextField label="Nome completo" required value={dados.nome} onChange={(e) => alterar('nome', e.target.value)} />
-      <TextField label="Nome social" value={dados.nomeSocial} onChange={(e) => alterar('nomeSocial', e.target.value)} />
-      <TextField label="E-mail" type="email" required={modo !== 'pessoa'} value={dados.email} onChange={(e) => alterar('email', e.target.value)} />
-      <TextField label="Telefone" type="tel" value={dados.telefone} onChange={(e) => alterar('telefone', e.target.value)} />
-      <TextField label="Nascimento" type="date" value={dados.nascimento} onChange={(e) => alterar('nascimento', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-      <TextField select label="Sexo" value={dados.sexo} onChange={(e) => alterar('sexo', e.target.value)}>
+      {(!conviteNovo || completarConvite) && <TextField label="Nome social" value={dados.nomeSocial} onChange={(e) => alterar('nomeSocial', e.target.value)} />}
+      <TextField label="E-mail" type="email" required={modo !== 'pessoa'} value={dados.email} disabled={modo === 'proprio' && dados.emailInstitucional} onChange={(e) => alterar('email', e.target.value)} />
+      {(!conviteNovo || completarConvite) && <TextField label="Telefone" type="tel" value={dados.telefone} onChange={(e) => alterar('telefone', e.target.value)} />}
+      {modo !== 'pessoa' && (!conviteNovo || completarConvite) && <TextField label="Celular" type="tel" value={dados.celular || ''} disabled={modo === 'proprio' && dados.celularInstitucional} onChange={(e) => alterar('celular', e.target.value)} />}
+      {(!conviteNovo || completarConvite) && <TextField label="Nascimento" type="date" value={dados.nascimento} onChange={(e) => alterar('nascimento', e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />}
+      {(!conviteNovo || completarConvite) && <TextField select label="Sexo" value={dados.sexo} onChange={(e) => alterar('sexo', e.target.value)}>
         <MenuItem value="">Não informado</MenuItem><MenuItem value="F">Feminino</MenuItem>
         <MenuItem value="M">Masculino</MenuItem><MenuItem value="O">Outro</MenuItem>
         <MenuItem value="P">Prefiro não informar</MenuItem>
-      </TextField>
+      </TextField>}
     </Box>
-    <Autocomplete multiple filterSelectedOptions options={catalogo.paises}
+    {modo === 'usuario' && <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      <FormControlLabel control={<Checkbox checked={Boolean(dados.emailInstitucional)} onChange={(e) => alterar('emailInstitucional', e.target.checked)} />} label="E-mail institucional" />
+      {(!conviteNovo || completarConvite) && <FormControlLabel control={<Checkbox checked={Boolean(dados.celularInstitucional)} onChange={(e) => alterar('celularInstitucional', e.target.checked)} />} label="Celular institucional" />}
+    </Box>}
+    {modo === 'proprio' && (dados.emailInstitucional || dados.celularInstitucional) && <Alert severity="info">Os contatos institucionais são alterados pelo administrador.</Alert>}
+    {(!conviteNovo || completarConvite) && <Autocomplete multiple filterSelectedOptions options={catalogo.paises}
       value={catalogo.paises.filter((pais) => dados.nacionalidades.includes(Number(pais.idPais)))}
       getOptionLabel={(pais) => pais.nome}
       isOptionEqualToValue={(opcao, valor) => opcao.idPais === valor.idPais}
       onChange={(_, paises) => alterar('nacionalidades', paises.map((pais) => Number(pais.idPais)))}
-      renderInput={(parametros) => <TextField {...parametros} label="Nacionalidades" helperText="Você pode selecionar mais de um país." />} />
-    <Typography variant="subtitle1">Identificações por país</Typography>
-    {dados.identificacoes.map((item, indice) => <Box key={indice} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+      renderInput={(parametros) => <TextField {...parametros} label="Nacionalidades" helperText="Você pode selecionar mais de um país." />} />}
+    {(!conviteNovo || completarConvite) && <Typography variant="subtitle1">Identificações por país</Typography>}
+    {(!conviteNovo || completarConvite) && dados.identificacoes.map((item, indice) => <Box key={indice} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
       <TextField select label="País" value={item.idPais} onChange={(e) => alterar('identificacoes', dados.identificacoes.map((atual, posicao) => posicao === indice ? { idPais: Number(e.target.value), idTipo: '', numero: '' } : atual))} sx={{ minWidth: 180 }}>
         {catalogo.paises.map((pais) => <MenuItem key={pais.idPais} value={pais.idPais}>{pais.nome}</MenuItem>)}
       </TextField>
@@ -144,10 +154,10 @@ export default function CadastroPessoaForm({ modo, idPessoa, idUsuario, onSaved,
       <TextField label="Número sem formatação" value={item.numero} onChange={(e) => alterar('identificacoes', dados.identificacoes.map((atual, posicao) => posicao === indice ? { ...atual, numero: e.target.value } : atual))} />
       <Button type="button" onClick={() => alterar('identificacoes', dados.identificacoes.filter((_, posicao) => posicao !== indice))}>Remover</Button>
     </Box>)}
-    <Button type="button" onClick={() => alterar('identificacoes', [...dados.identificacoes, { idPais: '', idTipo: '', numero: '' }])}>Adicionar identificação</Button>
+    {(!conviteNovo || completarConvite) && <Button type="button" onClick={() => alterar('identificacoes', [...dados.identificacoes, { idPais: '', idTipo: '', numero: '' }])}>Adicionar identificação</Button>}
     {modo === 'usuario' && <>
-      <Typography variant="subtitle1">Perfis do usuário</Typography>
-      {catalogo.perfis.map((perfil) => <FormControlLabel key={perfil.idPerfil}
+      {(!conviteNovo || completarConvite) && <Typography variant="subtitle1">Perfis do usuário</Typography>}
+      {(!conviteNovo || completarConvite) && catalogo.perfis.map((perfil) => <FormControlLabel key={perfil.idPerfil}
         control={<Checkbox checked={perfil.codigo === 'ESSENCIAL' || dados.perfis.includes(perfil.idPerfil)}
           disabled={perfil.codigo === 'ESSENCIAL' || dados.contaExcluida && perfil.codigo !== 'PARTICIPANTE'} onChange={(e) => alterar('perfis', e.target.checked
             ? [...dados.perfis, perfil.idPerfil] : dados.perfis.filter((id) => id !== perfil.idPerfil))} />}

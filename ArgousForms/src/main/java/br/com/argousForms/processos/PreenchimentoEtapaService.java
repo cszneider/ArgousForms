@@ -10,9 +10,11 @@ import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -30,6 +32,7 @@ import br.com.argousForms.model.negocio.processos.ProcessoEtapaEncaminhamentoNeg
 import br.com.argousForms.model.negocio.processos.ProcessoEtapaResponsavelNegocio;
 import br.com.argousForms.model.negocio.processos.ProcessoNegocio;
 import br.com.argousForms.model.negocio.processos.ProcessoVariavelAtualNegocio;
+import br.com.argousForms.model.negocio.processos.ProcessoVariavelOpcaoNegocio;
 import br.com.argousForms.model.negocio.processos.ProcessoVariavelValorNegocio;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapa;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapaEncaminhamento;
@@ -39,9 +42,11 @@ import br.com.argousForms.model.persistencia.processos.ProcessoEtapaResponsavelL
 import br.com.argousForms.model.persistencia.processos.Processo;
 import br.com.argousForms.model.persistencia.processos.ProcessoLocalizador;
 import br.com.argousForms.model.persistencia.processos.ProcessoVariavelAtual;
+import br.com.argousForms.model.persistencia.processos.ProcessoVariavelOpcao;
 import br.com.argousForms.model.persistencia.processos.ProcessoVariavelValor;
 import br.com.argousForms.model.persistencia.processos.ProcessoVariavelValorLocalizador;
 import br.com.argousForms.protocolos.DefinicaoVariavelTexto;
+import br.com.argousForms.protocolos.OpcoesVariavel;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
@@ -366,6 +371,9 @@ public final class PreenchimentoEtapaService {
 						valor.setIdVariavel( idVariavel );
 					}
 					Object informado = valores.opt( chave );
+					if( "O".equals( campo.getString( "tipo" ) ) || "C".equals( campo.getString( "tipo" ) ) ) {
+						validarOpcoes( conexao, idEtapa, idVariavel, campo, informado, valor );
+					}
 					if( completo && "S".equals( campo.getString( "tipo" ) ) && informado instanceof String texto && !texto.isEmpty() ) {
 						informado = DefinicaoVariavelTexto.normalizarValor( texto, campo.getJSONObject( "definicao" ) );
 					}
@@ -374,6 +382,7 @@ public final class PreenchimentoEtapaService {
 					valor.setIdUsuarioUltimaGravacao( usuario.idUsuario() );
 					if( novo ) new ProcessoVariavelValorNegocio( conexao, valor ).insere();
 					else new ProcessoVariavelValorNegocio( conexao, valor ).altera();
+					if( "C".equals( campo.getString( "tipo" ) ) ) gravarOpcoes( conexao, idEtapa, idVariavel, (JSONArray) informado );
 
 					ProcessoVariavelAtual atual = new ProcessoVariavelAtual();
 					atual.setIdProcesso( UUID.fromString( dados.getString( "idProcesso" ) ) );
@@ -408,10 +417,61 @@ public final class PreenchimentoEtapaService {
 			if( !campo.getBoolean( "obrigatorio" ) || !"E".equals( campo.getString( "acesso" ) ) ) continue;
 			Object informado = valores.opt( campo.getString( "id" ) );
 			if( informado == null || JSONObject.NULL.equals( informado ) || informado instanceof String texto && texto.isBlank()
+				|| "C".equals( campo.getString( "tipo" ) ) && informado instanceof JSONArray selecao && selecao.length() == 0
 				|| "V".equals( campo.getString( "tipo" ) ) && ( !(informado instanceof JSONObject monetario)
 					|| monetario.optString( "moeda", "" ).isBlank() || monetario.optString( "valor", "" ).isBlank() ) ) {
 				throw new ArgousFormsApiException( 400, "CAMPO_OBRIGATORIO", "Preencha o campo obrigatório: " + campo.getString( "nome" ) + "." );
 			}
+		}
+	}
+
+	private void validarOpcoes( Conexao conexao, UUID idEtapa, UUID idVariavel, JSONObject campo, Object informado, ProcessoVariavelValor anterior ) throws Exception {
+
+		JSONObject definicao = campo.getJSONObject( "definicao" );
+		if( "O".equals( campo.getString( "tipo" ) ) ) {
+			if( informado == null || JSONObject.NULL.equals( informado ) || "".equals( informado ) ) return;
+			if( !(informado instanceof String codigo) || !OpcoesVariavel.ativa( definicao, codigo ) && !codigo.equals( anterior.getCdOpcao() ) ) {
+				throw new ArgousFormsApiException( 400, "VALOR_INVALIDO", "A opção selecionada não está disponível." );
+			}
+			return;
+		}
+		if( !(informado instanceof JSONArray selecao) ) throw new ArgousFormsApiException( 400, "VALOR_INVALIDO", "Envie a múltipla escolha como lista de códigos." );
+		Set<String> anteriores = new HashSet<>();
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select CD_OPCAO from Processos.PROCESSO_VARIAVEL_OPCOES where ID_PROCESSO_ETAPA = ? and ID_VARIAVEL = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			consulta.setObject( 2, idVariavel );
+			try ( ResultSet linhas = consulta.executeQuery() ) { while( linhas.next() ) anteriores.add( linhas.getString( 1 ) ); }
+		}
+		Set<String> codigos = new HashSet<>();
+		for( int indice = 0; indice < selecao.length(); indice++ ) {
+			Object item = selecao.get( indice );
+			if( !(item instanceof String codigo) || !codigos.add( codigo ) || !OpcoesVariavel.ativa( definicao, codigo ) && !anteriores.contains( codigo ) ) {
+				throw new ArgousFormsApiException( 400, "VALOR_INVALIDO", "Uma opção da múltipla escolha não está disponível ou foi repetida." );
+			}
+		}
+	}
+
+	private void gravarOpcoes( Conexao conexao, UUID idEtapa, UUID idVariavel, JSONArray selecao ) throws Exception {
+
+		List<String> anteriores = new ArrayList<>();
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select CD_OPCAO from Processos.PROCESSO_VARIAVEL_OPCOES where ID_PROCESSO_ETAPA = ? and ID_VARIAVEL = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			consulta.setObject( 2, idVariavel );
+			try ( ResultSet linhas = consulta.executeQuery() ) { while( linhas.next() ) anteriores.add( linhas.getString( 1 ) ); }
+		}
+		for( String codigo : anteriores ) {
+			ProcessoVariavelOpcao opcao = new ProcessoVariavelOpcao();
+			opcao.setIdProcessoEtapa( idEtapa );
+			opcao.setIdVariavel( idVariavel );
+			opcao.setCdOpcao( codigo );
+			new ProcessoVariavelOpcaoNegocio( conexao, opcao ).exclui();
+		}
+		for( int indice = 0; indice < selecao.length(); indice++ ) {
+			ProcessoVariavelOpcao opcao = new ProcessoVariavelOpcao();
+			opcao.setIdProcessoEtapa( idEtapa );
+			opcao.setIdVariavel( idVariavel );
+			opcao.setCdOpcao( selecao.getString( indice ) );
+			new ProcessoVariavelOpcaoNegocio( conexao, opcao ).insere();
 		}
 	}
 
@@ -439,7 +499,8 @@ public final class PreenchimentoEtapaService {
 	private JSONArray campos( Conexao conexao, UUID idEtapa, UUID idProcesso, UUID idFormulario, UUID idVersao ) throws Exception {
 
 		JSONArray campos = new JSONArray();
-		String sql = "select fv.ID_VARIAVEL, fv.TP_ACESSO, fv.SN_OBRIGATORIA, x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
+		Map<String, JSONArray> opcoes = opcoesDoFormulario( conexao, idEtapa, idProcesso, idFormulario );
+		String sql = "select fv.ID_VARIAVEL, fv.TP_ACESSO, fv.SN_OBRIGATORIA, fv.DS_NOME_ALTERNATIVO, fv.DS_TEXTO_AJUDA, x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
 			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.CD_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
 			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
@@ -464,13 +525,16 @@ public final class PreenchimentoEtapaService {
 						case "V" -> linha.getObject( "CD_VALOR_MONETARIO" );
 						case "B" -> linha.getObject( "VL_BOOLEANO" );
 						case "O" -> linha.getString( "CD_OPCAO" );
+						case "C" -> opcoes.getOrDefault( linha.getString( "ID_VARIAVEL" ), new JSONArray() );
 						case "D" -> linha.getString( "VL_DATA" );
 						case "H" -> linha.getString( "VL_HORA" );
 						case "T" -> linha.getTimestamp( "VL_DATA_HORA" ) == null ? null : linha.getTimestamp( "VL_DATA_HORA" ).toInstant().toString();
 						default -> null;
 					};
 					campos.put( new JSONObject().put( "id", linha.getString( "ID_VARIAVEL" ) ).put( "codigo", linha.getString( "CD_VARIAVEL" ) )
-						.put( "nome", linha.getString( "DS_NOME" ) ).put( "tipo", tipo ).put( "acesso", linha.getString( "TP_ACESSO" ) )
+						.put( "nome", linha.getString( "DS_NOME_ALTERNATIVO" ) == null ? linha.getString( "DS_NOME" ) : linha.getString( "DS_NOME_ALTERNATIVO" ) )
+						.put( "textoAjuda", linha.getString( "DS_TEXTO_AJUDA" ) == null ? "" : linha.getString( "DS_TEXTO_AJUDA" ) )
+						.put( "tipo", tipo ).put( "acesso", linha.getString( "TP_ACESSO" ) )
 						.put( "obrigatorio", linha.getBoolean( "SN_OBRIGATORIA" ) )
 						.put( "definicao", new JSONObject( linha.getString( "JS_DEFINICAO" ) ) ).put( "valor", valor == null ? JSONObject.NULL : valor )
 						.put( "moeda", linha.getString( "CD_MOEDA" ) == null ? "" : linha.getString( "CD_MOEDA" ) ) );
@@ -478,6 +542,25 @@ public final class PreenchimentoEtapaService {
 			}
 		}
 		return campos;
+	}
+
+	private Map<String, JSONArray> opcoesDoFormulario( Conexao conexao, UUID idEtapa, UUID idProcesso, UUID idFormulario ) throws Exception {
+
+		Map<String, JSONArray> resultado = new HashMap<>();
+		String sql = "select o.ID_VARIAVEL, o.CD_OPCAO from Processos.FORMULARIO_VARIAVEIS fv "
+			+ "left join Processos.PROCESSO_VARIAVEL_VALORES localv on localv.ID_PROCESSO_ETAPA = ? and localv.ID_VARIAVEL = fv.ID_VARIAVEL "
+			+ "left join Processos.PROCESSO_VARIAVEIS_ATUAIS atual on atual.ID_PROCESSO = ? and atual.ID_VARIAVEL = fv.ID_VARIAVEL "
+			+ "join Processos.PROCESSO_VARIAVEL_OPCOES o on o.ID_PROCESSO_ETAPA = coalesce(localv.ID_PROCESSO_ETAPA, atual.ID_PROCESSO_ETAPA) and o.ID_VARIAVEL = fv.ID_VARIAVEL "
+			+ "where fv.ID_FORMULARIO = ?";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sql ) ) {
+			consulta.setObject( 1, idEtapa );
+			consulta.setObject( 2, idProcesso );
+			consulta.setObject( 3, idFormulario );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) resultado.computeIfAbsent( linhas.getString( 1 ), chave -> new JSONArray() ).put( linhas.getString( 2 ) );
+			}
+		}
+		return resultado;
 	}
 
 	private void preencher( ProcessoVariavelValor valor, String tipo, Object informado ) throws Exception {
@@ -510,6 +593,7 @@ public final class PreenchimentoEtapaService {
 				}
 				case "B" -> valor.setVlBooleano( (Boolean) informado );
 				case "O" -> valor.setCdOpcao( informado.toString() );
+				case "C" -> valor.setCdOpcao( null );
 				case "D" -> valor.setVlData( new QtData( LocalDate.parse( informado.toString() ).atStartOfDay( ZoneOffset.UTC ).toInstant().toEpochMilli() ) );
 				case "H" -> valor.setVlHora( OffsetTime.parse( informado.toString() ) );
 				case "T" -> valor.setVlDataHora( new QtData( OffsetDateTime.parse( informado.toString() ).toInstant().toEpochMilli() ) );

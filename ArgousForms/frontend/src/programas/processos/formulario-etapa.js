@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Switch, TextField } from '@mui/material';
+import { Alert, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, FormGroup, FormHelperText, InputLabel, MenuItem, Radio, RadioGroup, Select, Switch, TextField } from '@mui/material';
 import { executar } from '../login/autenticacao.js';
 import { useI18n } from '../../components/i18n/i18n.js';
 import { formatarValorExemplo, normalizarValorTexto } from '../protocolos/variavel-texto.js';
 
 function valorInicial(campo) {
+  if (campo.tipo === 'C') return Array.isArray(campo.valor) ? campo.valor : [];
   if (campo.tipo === 'V') return campo.valor == null ? { moeda: campo.moeda || '', valor: '' } : { moeda: campo.moeda || '', valor: String(campo.valor) };
   return campo.valor == null ? '' : campo.valor;
 }
@@ -66,7 +67,7 @@ export default function FormularioEtapa({ idEtapa, aoFechar, aoSalvar }) {
       for (const campo of etapa.campos || []) {
         if (campo.acesso !== 'E') continue;
         let valor = valores[campo.id];
-        if (completo && campo.obrigatorio && (valor == null || valor === '' || campo.tipo === 'V' && (!valor.moeda || !valor.valor))) {
+        if (completo && campo.obrigatorio && (valor == null || valor === '' || campo.tipo === 'C' && !valor.length || campo.tipo === 'V' && (!valor.moeda || !valor.valor))) {
           novosErros[campo.id] = t('Campo obrigatório.');
         }
         if (campo.tipo === 'S' && valor && (completo || !errosCampos[campo.id])) {
@@ -106,10 +107,47 @@ export default function FormularioEtapa({ idEtapa, aoFechar, aoSalvar }) {
       setValores((anteriores) => ({ ...anteriores, [campo.id]: novo }));
       setErrosCampos((anteriores) => ({ ...anteriores, [campo.id]: '' }));
     };
-    if (campo.tipo === 'B') return <FormControlLabel key={campo.id} control={<Switch checked={valor === true} disabled={!editavel} onChange={(evento) => alterar(evento.target.checked)} />} label={campo.nome} />;
+    const ajuda = errosCampos[campo.id] || campo.textoAjuda || (campo.acesso === 'L' ? t('Somente leitura') : '');
+    if (campo.tipo === 'O' || campo.tipo === 'C') {
+      const opcoesDefinidas = campo.definicao?.opcoes || [];
+      const codigosAnteriores = campo.tipo === 'O' ? [valor] : Array.isArray(valor) ? valor : [];
+      const opcoes = [...opcoesDefinidas, ...codigosAnteriores.filter((codigo) => codigo && !opcoesDefinidas.some((opcao) => opcao.codigo === codigo))
+        .map((codigo) => ({ codigo, rotulo: codigo, ativa: false }))].filter((opcao) => opcao.ativa !== false ||
+        (campo.tipo === 'O' ? valor === opcao.codigo : Array.isArray(valor) && valor.includes(opcao.codigo)));
+      const multiplas = Array.isArray(valor) ? valor : [];
+      return <fieldset key={campo.id} style={{ border: '1px solid #ccd5dc', borderRadius: 8, padding: '8px 16px', margin: 0 }}>
+        <legend>{campo.nome}{campo.obrigatorio ? ' *' : ''}</legend>
+        {campo.tipo === 'O' && opcoes.filter((opcao) => opcao.ativa !== false).length > 5 ?
+          <FormControl fullWidth size="small" error={Boolean(errosCampos[campo.id])}>
+            <InputLabel id={`opcao-${campo.id}`}>{t('Escolha uma opção')}</InputLabel>
+            <Select labelId={`opcao-${campo.id}`} label={t('Escolha uma opção')} value={valor || ''} disabled={!editavel}
+              onChange={(evento) => alterar(evento.target.value)}>
+              {!campo.obrigatorio && <MenuItem value="">{t('Nenhuma opção')}</MenuItem>}
+              {opcoes.map((opcao) => <MenuItem key={opcao.codigo} value={opcao.codigo} disabled={opcao.ativa === false}>{opcao.rotulo}</MenuItem>)}
+            </Select>
+          </FormControl> : campo.tipo === 'O' ? <>
+            <RadioGroup value={valor || ''} onChange={(evento) => alterar(evento.target.value)}>
+              {!campo.obrigatorio && <FormControlLabel value="" control={<Radio disabled={!editavel} />} label={t('Nenhuma opção')} />}
+              {opcoes.map((opcao) => <FormControlLabel key={opcao.codigo} value={opcao.codigo}
+                control={<Radio disabled={!editavel || opcao.ativa === false} />} label={opcao.rotulo} />)}
+            </RadioGroup>
+          </> : <FormGroup>
+            {opcoes.map((opcao) => <FormControlLabel key={opcao.codigo}
+              control={<Checkbox checked={multiplas.includes(opcao.codigo)} disabled={!editavel}
+                onChange={(evento) => alterar(evento.target.checked ? [...multiplas, opcao.codigo] : multiplas.filter((codigo) => codigo !== opcao.codigo))} />}
+              label={opcao.rotulo} />)}
+          </FormGroup>}
+        {ajuda && <FormHelperText error={Boolean(errosCampos[campo.id])}>{ajuda}</FormHelperText>}
+      </fieldset>;
+    }
+    if (campo.tipo === 'B') return <div key={campo.id}>
+      <FormControlLabel control={<Switch checked={valor === true} disabled={!editavel} onChange={(evento) => alterar(evento.target.checked)} />} label={campo.nome} />
+      {ajuda && <FormHelperText error={Boolean(errosCampos[campo.id])}>{ajuda}</FormHelperText>}
+    </div>;
     if (campo.tipo === 'V') return <div key={campo.id} style={{ display: 'flex', gap: 12 }}>
       <TextField label={`${campo.nome} · ${t('Moeda')}`} value={valor?.moeda || ''} disabled={!editavel} onChange={(evento) => alterar({ ...valor, moeda: evento.target.value.toUpperCase() })} inputProps={{ maxLength: 3 }} sx={{ width: 120 }} />
-      <TextField label={t('Valor')} value={valor?.valor || ''} disabled={!editavel} onChange={(evento) => alterar({ ...valor, valor: evento.target.value })} fullWidth />
+      <TextField label={t('Valor')} value={valor?.valor || ''} disabled={!editavel} onChange={(evento) => alterar({ ...valor, valor: evento.target.value })}
+        helperText={ajuda} error={Boolean(errosCampos[campo.id])} fullWidth />
     </div>;
     const tipoHtml = { I: 'number', R: 'number', D: 'date' }[campo.tipo] || 'text';
     const mascara = campo.tipo === 'S' ? campo.definicao?.texto?.mascara || '' : '';
@@ -126,7 +164,7 @@ export default function FormularioEtapa({ idEtapa, aoFechar, aoSalvar }) {
       }}
       inputProps={campo.tipo === 'R' ? { step: 'any' } : undefined}
       error={Boolean(errosCampos[campo.id])}
-      helperText={errosCampos[campo.id] || (campo.acesso === 'L' ? t('Somente leitura') : campo.tipo === 'H' ? 'HH:mm:ss-03:00' : campo.tipo === 'T' ? 'AAAA-MM-DDTHH:mm:ss-03:00' : undefined)} />;
+      helperText={ajuda || (campo.tipo === 'H' ? 'HH:mm:ss-03:00' : campo.tipo === 'T' ? 'AAAA-MM-DDTHH:mm:ss-03:00' : undefined)} />;
   }
 
   return <Dialog open={Boolean(idEtapa)} onClose={aoFechar} fullWidth maxWidth="md">

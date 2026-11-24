@@ -45,6 +45,19 @@ public final class EmailService {
 			+ apresentado + "\n\nO código é válido por 10 minutos. Se não solicitou a alteração, ignore esta mensagem." );
 	}
 
+	public void enviarAvisoEmailAlterado( String destinatario ) throws EmailException {
+
+		enviar( destinatario, "E-mail da conta alterado no ArgousForms", "O e-mail de acesso da sua conta no ArgousForms foi alterado.\n\nSe você não solicitou esta mudança, contate o administrador da instituição imediatamente." );
+	}
+
+	public void enviarTrocaCelular( String destinatario, String codigo ) throws EmailException {
+
+		validarCodigo( codigo );
+		String apresentado = codigo.substring( 0, 4 ) + "-" + codigo.substring( 4 );
+		enviar( destinatario, "Confirme o novo celular no ArgousForms", "Confirme a alteração do celular da sua conta com o código: "
+			+ apresentado + "\n\nO código é válido por 10 minutos. Se não solicitou a alteração, ignore esta mensagem." );
+	}
+
 	private static void validarCodigo( String codigo ) throws EmailException {
 
 		if( codigo == null || !codigo.matches( "[0-9]{8}" ) ) throw new EmailException( "O código deve conter oito dígitos." );
