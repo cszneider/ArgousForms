@@ -640,6 +640,12 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
+		if( "ENCERRAR_OUTRAS_CONEXOES".equals( operacao ) ) {
+			int quantidade = autenticacao.encerrarOutrasConexoes( tokenSessao( request ) );
+			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "conexoesEncerradas", quantidade ) );
+			return;
+		}
+
 		if( "SAIR".equals( operacao ) ) {
 			autenticacao.sair( tokenSessao( request ) );
 			definirCookieSessao( request, response, "", 0 );
@@ -673,19 +679,27 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
-		if( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao )
+		if( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao ) || "MEU_CONTEXTO_ORGANIZACAO".equals( operacao )
 			|| "LOCALIZAR_PESSOA".equals( operacao ) || "SALVAR_PESSOA".equals( operacao ) || "SALVAR_USUARIO".equals( operacao )
 			|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao )
-			|| "REMOVER_USUARIO".equals( operacao ) || "REMOVER_PESSOA".equals( operacao ) ) {
+			|| "ATUALIZAR_MEUS_DADOS_PESSOAIS".equals( operacao ) || "ATUALIZAR_MEUS_DOCUMENTOS".equals( operacao ) || "SOLICITAR_TROCA_MEU_EMAIL".equals( operacao )
+			|| "SOLICITAR_TROCA_MEU_CELULAR".equals( operacao ) || "CONFIRMAR_TROCA_MEU_CELULAR".equals( operacao )
+			|| "REMOVER_USUARIO".equals( operacao ) || "REMOVER_PESSOA".equals( operacao ) || "REENVIAR_CONVITE_USUARIO".equals( operacao ) ) {
 			AutenticacaoLocalService.Usuario autenticado = consultarUsuario( request, response );
 			boolean administrador = autenticado.papeis().contains( "ADMINISTRADOR_USUARIOS" );
 			boolean autogestao = autenticado.papeis().contains( "AUTOGESTAO" );
-			if( !administrador && !( autogestao && ( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao )
-				|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao ) ) ) ) {
+			if( !administrador && !( autogestao && ( "CATALOGO_CADASTRAL".equals( operacao ) || "CONSULTAR_CADASTRO".equals( operacao ) || "MEU_CONTEXTO_ORGANIZACAO".equals( operacao )
+				|| "SALVAR_MEUS_DADOS".equals( operacao ) || "CONFIRMAR_TROCA_EMAIL".equals( operacao )
+				|| "ATUALIZAR_MEUS_DADOS_PESSOAIS".equals( operacao ) || "ATUALIZAR_MEUS_DOCUMENTOS".equals( operacao ) || "SOLICITAR_TROCA_MEU_EMAIL".equals( operacao )
+				|| "SOLICITAR_TROCA_MEU_CELULAR".equals( operacao ) || "CONFIRMAR_TROCA_MEU_CELULAR".equals( operacao ) ) ) ) {
 				throw new ArgousFormsApiException( 403, "ACESSO_NEGADO", "Você não pode executar esta operação." );
 			}
 			if( "CATALOGO_CADASTRAL".equals( operacao ) ) {
 				ArgousFormsJson.enviarSucesso( response, 200, pessoasUsuarios.catalogo() );
+				return;
+			}
+			if( "MEU_CONTEXTO_ORGANIZACAO".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, pessoasUsuarios.contextoOrganizacao( autenticado.idUsuario() ) );
 				return;
 			}
 			if( "CONSULTAR_CADASTRO".equals( operacao ) ) {
@@ -705,9 +719,32 @@ public final class ArgousFormsResolver extends HttpServlet {
 				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "idPessoa", manutencaoUsuarios.salvarPessoa( dados ).toString() ) );
 				return;
 			}
+			if( "ATUALIZAR_MEUS_DADOS_PESSOAIS".equals( operacao ) || "ATUALIZAR_MEUS_DOCUMENTOS".equals( operacao ) ) {
+				if( "ATUALIZAR_MEUS_DADOS_PESSOAIS".equals( operacao ) ) manutencaoUsuarios.atualizarDadosPessoais( autenticado.idUsuario(), dados );
+				else manutencaoUsuarios.atualizarDocumentos( autenticado.idUsuario(), dados );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "salvo", true ) );
+				return;
+			}
+			if( "SOLICITAR_TROCA_MEU_EMAIL".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "emailEnviado", manutencaoUsuarios.solicitarTrocaEmail( autenticado.idUsuario(), ArgousFormsJson.getStringObrigatoria( dados, "email", true ), getServletContext() ) ) );
+				return;
+			}
+			if( "SOLICITAR_TROCA_MEU_CELULAR".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "emailEnviado", manutencaoUsuarios.solicitarTrocaCelular( autenticado.idUsuario(), ArgousFormsJson.getStringObrigatoria( dados, "celular", true ), getServletContext() ) ) );
+				return;
+			}
+			if( "CONFIRMAR_TROCA_MEU_CELULAR".equals( operacao ) ) {
+				manutencaoUsuarios.confirmarTrocaCelular( autenticado.idUsuario(), ArgousFormsJson.getStringObrigatoria( dados, "celular", true ), ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ), getServletContext() );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "celularConfirmado", true ) );
+				return;
+			}
 			if( "REMOVER_USUARIO".equals( operacao ) ) {
 				manutencaoUsuarios.excluirUsuario( uuidObrigatorio( dados, "idUsuario" ), autenticado.idUsuario() );
 				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "removido", true ) );
+				return;
+			}
+			if( "REENVIAR_CONVITE_USUARIO".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "emailEnviado", manutencaoUsuarios.reenviarConvite( uuidObrigatorio( dados, "idUsuario" ), getServletContext() ) ) );
 				return;
 			}
 			if( "REMOVER_PESSOA".equals( operacao ) ) {
@@ -765,11 +802,15 @@ public final class ArgousFormsResolver extends HttpServlet {
 			return;
 		}
 
-		if( "LISTAR_ORGANIZACAO".equals( operacao ) || "SALVAR_GRUPO".equals( operacao ) || "CRIAR_TAG".equals( operacao ) || "ALTERAR_TAG".equals( operacao )
+		if( "LISTAR_ORGANIZACAO".equals( operacao ) || "LISTAR_PENDENCIAS_ORGANIZACAO".equals( operacao ) || "SALVAR_GRUPO".equals( operacao ) || "CRIAR_TAG".equals( operacao ) || "ALTERAR_TAG".equals( operacao )
 			|| "REMOVER_GRUPO".equals( operacao ) || "REMOVER_TAG".equals( operacao )
 			|| "LISTAR_VINCULOS_ORGANIZACAO".equals( operacao ) || "SALVAR_VINCULO_GRUPO".equals( operacao )
-			|| "SALVAR_TAG_USUARIO".equals( operacao ) || "SALVAR_TAG_VINCULO".equals( operacao ) ) {
+			|| "SALVAR_TAG_USUARIO".equals( operacao ) || "SALVAR_TAG_VINCULO".equals( operacao ) || "ATRIBUIR_TAG_NO_GRUPO".equals( operacao ) ) {
 			exigirGestorGruposTags( request );
+			if( "LISTAR_PENDENCIAS_ORGANIZACAO".equals( operacao ) ) {
+				ArgousFormsJson.enviarSucesso( response, 200, organizacao.pendencias() );
+				return;
+			}
 			if( "LISTAR_VINCULOS_ORGANIZACAO".equals( operacao ) ) {
 				ArgousFormsJson.enviarSucesso( response, 200, vinculosOrganizacao.listar() );
 				return;
@@ -782,6 +823,13 @@ public final class ArgousFormsResolver extends HttpServlet {
 			}
 			if( "REMOVER_TAG".equals( operacao ) ) {
 				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "acao", organizacao.removerTag( ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ) ) ) );
+				return;
+			}
+			if( "ATRIBUIR_TAG_NO_GRUPO".equals( operacao ) ) {
+				int idGrupo = dados.optInt( "idGrupo", -1 );
+				if( idGrupo <= 0 ) throw new ArgousFormsApiException( 400, "GRUPO_INVALIDO", "Informe um grupo válido." );
+				vinculosOrganizacao.atribuirTagNoGrupo( uuidObrigatorio( dados, "idUsuario" ), idGrupo, ArgousFormsJson.getStringObrigatoria( dados, "codigo", true ) );
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject().put( "salvo", true ) );
 				return;
 			}
 			if( "SALVAR_VINCULO_GRUPO".equals( operacao ) || "SALVAR_TAG_USUARIO".equals( operacao ) || "SALVAR_TAG_VINCULO".equals( operacao ) ) {
@@ -818,7 +866,13 @@ public final class ArgousFormsResolver extends HttpServlet {
 					if( !( tags.get( indice ) instanceof String codigoTag ) ) throw new ArgousFormsApiException( 400, "TAGS_GRUPO_INVALIDAS", "Informe códigos válidos para as tags do grupo." );
 					codigosTags.add( codigoTag );
 				}
-				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "idGrupo", organizacao.salvarGrupo( idGrupo, nome, (Boolean) ativo, codigosTags ) ) ) );
+				Integer idGrupoSuperior = null;
+				if( dados.has( "idGrupoSuperior" ) && !dados.isNull( "idGrupoSuperior" ) ) {
+					Object valorSuperior = dados.get( "idGrupoSuperior" );
+					if( !( valorSuperior instanceof Integer superior ) || superior <= 0 ) throw new ArgousFormsApiException( 400, "GRUPO_SUPERIOR_INVALIDO", "Informe um departamento superior válido." );
+					idGrupoSuperior = superior;
+				}
+				ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "idGrupo", organizacao.salvarGrupo( idGrupo, nome, (Boolean) ativo, codigosTags, idGrupoSuperior ) ) ) );
 				return;
 			}
 			String codigo = ArgousFormsJson.getStringObrigatoria( dados, "codigo", true );
@@ -829,13 +883,16 @@ public final class ArgousFormsResolver extends HttpServlet {
 				throw new ArgousFormsApiException( 400, "TIPO_TAG_INVALIDO", "Informe as três aplicações da tag como verdadeiro ou falso." );
 			}
 			String descricao = dados.optString( "descricao", "" );
+			String nomeExibicao = dados.optString( "nomeExibicao", "" );
+			Object valorRestrita = dados.opt( "restrita" );
+			boolean restrita = valorRestrita instanceof Boolean valor && valor;
 			String codigoSalvo;
 			if( "ALTERAR_TAG".equals( operacao ) ) {
 				Object ativa = dados.opt( "ativa" );
 				if( !( ativa instanceof Boolean ) ) throw new ArgousFormsApiException( 400, "TAG_INVALIDA", "Informe se a tag está ativa." );
-				codigoSalvo = organizacao.alterarTag( codigo, descricao, (Boolean) grupo, (Boolean) usuario, (Boolean) vinculo, (Boolean) ativa );
+				codigoSalvo = organizacao.alterarTag( codigo, descricao, (Boolean) grupo, (Boolean) usuario, (Boolean) vinculo, (Boolean) ativa, nomeExibicao, restrita );
 			} else {
-				codigoSalvo = organizacao.criarTag( codigo, descricao, (Boolean) grupo, (Boolean) usuario, (Boolean) vinculo );
+				codigoSalvo = organizacao.criarTag( codigo, descricao, (Boolean) grupo, (Boolean) usuario, (Boolean) vinculo, nomeExibicao, restrita );
 			}
 			ArgousFormsJson.enviarSucesso( response, 200, new JSONObject( Map.of( "codigo", codigoSalvo ) ) );
 			return;

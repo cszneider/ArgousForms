@@ -554,6 +554,23 @@ $$;
 CREATE TRIGGER trg_numerar_processo BEFORE INSERT OR UPDATE OF CD_NUMERO ON Processos.PROCESSOS
 FOR EACH ROW EXECUTE FUNCTION Processos.numerar_processo();
 
+-- M-06: grupo de origem = lotação de quem iniciou, gravada no INSERT e imutável.
+-- O valor enviado pela aplicação é ignorado; numa alteração, o valor anterior é mantido.
+CREATE OR REPLACE FUNCTION Processos.definir_grupo_origem() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    NEW.ID_GRUPO_ORIGEM := OLD.ID_GRUPO_ORIGEM;
+    RETURN NEW;
+  END IF;
+  SELECT vt.ID_GRUPO INTO NEW.ID_GRUPO_ORIGEM
+    FROM Cadastro.VINCULO_TAGS vt
+   WHERE vt.ID_USUARIO_SISTEMA = NEW.ID_USUARIO_INICIOU AND vt.CD_TAG = 'lotacao' AND vt.SN_ATIVO;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_definir_grupo_origem ON Processos.PROCESSOS;
+CREATE TRIGGER trg_definir_grupo_origem BEFORE INSERT OR UPDATE OF ID_GRUPO_ORIGEM ON Processos.PROCESSOS
+FOR EACH ROW EXECUTE FUNCTION Processos.definir_grupo_origem();
+
 -- M-01 (b): data limite a partir do prazo. U dias úteis (seg-sex, sem feriados) e C corridos vencem no fim do dia; H horas exatas.
 CREATE OR REPLACE FUNCTION Processos.calcular_limite(inicio timestamptz, prazo integer, unidade char) RETURNS timestamptz
 LANGUAGE plpgsql STABLE AS $$
@@ -590,5 +607,34 @@ END;
 $$;
 CREATE TRIGGER trg_definir_limite_etapa BEFORE INSERT ON Processos.PROCESSO_ETAPAS
 FOR EACH ROW EXECUTE FUNCTION Processos.definir_limite_etapa();
+
+-- Opção única (O) usa PROCESSO_VARIAVEL_VALORES.CD_OPCAO; múltipla escolha (C) usa PROCESSO_VARIAVEL_OPCOES.
+CREATE OR REPLACE FUNCTION Processos.validar_valor_opcao() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    tipo char(1);
+BEGIN
+    IF NEW.CD_OPCAO IS NULL THEN RETURN NEW; END IF;
+    SELECT TP_DADO INTO tipo FROM Processos.PROTOCOLO_VARIAVEIS WHERE ID_VARIAVEL = NEW.ID_VARIAVEL;
+    IF tipo IS DISTINCT FROM 'O' THEN
+        RAISE EXCEPTION 'CD_OPCAO só é usado em campo de opção única (tipo O); múltipla escolha grava em PROCESSO_VARIAVEL_OPCOES.';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_validar_valor_opcao ON Processos.PROCESSO_VARIAVEL_VALORES;
+CREATE TRIGGER trg_validar_valor_opcao BEFORE INSERT OR UPDATE OF CD_OPCAO, ID_VARIAVEL ON Processos.PROCESSO_VARIAVEL_VALORES
+FOR EACH ROW EXECUTE FUNCTION Processos.validar_valor_opcao();
+
+CREATE OR REPLACE FUNCTION Processos.validar_opcao_multipla() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Processos.PROTOCOLO_VARIAVEIS WHERE ID_VARIAVEL = NEW.ID_VARIAVEL AND TP_DADO = 'C') THEN
+        RAISE EXCEPTION 'PROCESSO_VARIAVEL_OPCOES só aceita campos de múltipla escolha (tipo C).';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_validar_opcao_multipla ON Processos.PROCESSO_VARIAVEL_OPCOES;
+CREATE TRIGGER trg_validar_opcao_multipla BEFORE INSERT OR UPDATE ON Processos.PROCESSO_VARIAVEL_OPCOES
+FOR EACH ROW EXECUTE FUNCTION Processos.validar_opcao_multipla();
 
 COMMIT;

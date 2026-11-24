@@ -74,8 +74,13 @@ CREATE TABLE Processos.FORMULARIOS
 	DS_TITULO Varchar(255) NOT NULL,
 	DS_DESCRICAO Text NULL ,
 	DT_INCLUSAO Timestamp NOT NULL,
+	TX_SCRIPT_AO_ABRIR Text NULL ,
+	TX_SCRIPT_AO_FECHAR Text NULL ,
  primary key (ID_FORMULARIO)
 );
+
+COMMENT ON COLUMN Processos.FORMULARIOS.TX_SCRIPT_AO_ABRIR IS 'Script executado a cada abertura do formulário (distinto do script de inicialização da etapa, que roda uma vez por passagem).';
+COMMENT ON COLUMN Processos.FORMULARIOS.TX_SCRIPT_AO_FECHAR IS 'Script executado a cada fechamento do formulário.';
 
 CREATE TABLE Processos.PROTOCOLOS_ETAPAS
 (
@@ -144,8 +149,16 @@ CREATE TABLE Processos.FORMULARIO_VARIAVEIS
 	NR_ORDEM Smallint NOT NULL,
 	SN_OBRIGATORIA Boolean NOT NULL,
 	TP_APRESENTACAO Char(1) NOT NULL,
+	TX_SCRIPT_ON_FOCUS Text NULL ,
+	TX_SCRIPT_ON_CHANGE Text NULL ,
+	TX_SCRIPT_ON_BLUR Text NULL ,
+	DS_NOME_ALTERNATIVO Varchar(255) NULL ,
+	DS_TEXTO_AJUDA Text NULL ,
  primary key (ID_FORMULARIO,ID_VARIAVEL)
 );
+
+COMMENT ON COLUMN Processos.FORMULARIO_VARIAVEIS.TX_SCRIPT_ON_CHANGE IS 'Script do campo neste formulário ao mudar o valor; pode controlar visibilidade e obrigatoriedade de outros campos. O backend reproduz o estado efetivo antes de aceitar os dados.';
+COMMENT ON COLUMN Processos.FORMULARIO_VARIAVEIS.DS_NOME_ALTERNATIVO IS 'Rótulo do campo neste formulário, quando diferente do nome da variável.';
 
 CREATE TABLE Processos.ENCAMINHAMENTOS
 (
@@ -283,6 +296,7 @@ CREATE TABLE Processos.PROTOCOLO_DOCUMENTO_PDF_CAMPOS
 CREATE TABLE Processos.PROCESSOS
 (
 	ID_PROCESSO UUID   NOT NULL,
+	ID_GRUPO_ORIGEM Integer NULL ,
 	CD_NUMERO Varchar(30) NOT NULL,
 	ID_PROTOCOLO_VERSAO UUID   NOT NULL,
 	ID_USUARIO_INICIOU UUID   NOT NULL,
@@ -304,6 +318,7 @@ CREATE TABLE Processos.PROCESSOS
 	CONSTRAINT ck_processo_encerramento CHECK ((TP_SITUACAO IN ('F', 'C')) = (DT_ENCERRAMENTO IS NOT NULL))
 );
 
+COMMENT ON COLUMN Processos.PROCESSOS.ID_GRUPO_ORIGEM IS 'M-06: lotação de quem iniciou, gravada pelo banco no INSERT (Processos.definir_grupo_origem); imutável. Nula se a pessoa não tinha lotação.';
 COMMENT ON COLUMN Processos.PROCESSOS.CD_NUMERO IS 'Número do processo, gerado pelo banco no INSERT (Processos.numerar_processo); imutável e nunca reutilizado.';
 COMMENT ON COLUMN Processos.PROCESSOS.TP_SITUACAO IS 'E: em execução; A: aguardando finalização pelo gestor; F: finalizado; C: cancelado.';
 COMMENT ON COLUMN Processos.PROCESSOS.TP_RESULTADO IS 'P positivo; N negativo; C cancelado. Nulo em execução; em A pode vir pré-preenchido pelo resultado padrão da etapa final.';
@@ -350,7 +365,6 @@ CREATE TABLE Processos.PROCESSO_VARIAVEL_VALORES
 	CD_MOEDA Char(3) NULL ,
 	CD_VALOR_MONETARIO Numeric(20,2) NULL ,
 	VL_BOOLEANO Boolean NULL ,
-	VL_OPCAO Text NULL ,
 	CD_OPCAO Text NULL ,
 	VL_DATA Date NULL ,
 	VL_HORA Time with time zone NULL ,
@@ -360,8 +374,17 @@ CREATE TABLE Processos.PROCESSO_VARIAVEL_VALORES
  primary key (ID_PROCESSO_ETAPA,ID_VARIAVEL)
 );
 
-COMMENT ON COLUMN Processos.PROCESSO_VARIAVEL_VALORES.CD_OPCAO IS 'Chave da opção escolhida (campo do tipo O). Substitui VL_OPCAO.';
-COMMENT ON COLUMN Processos.PROCESSO_VARIAVEL_VALORES.VL_OPCAO IS 'OBSOLETO: mantido temporariamente por compatibilidade; usar CD_OPCAO. Será removido.';
+COMMENT ON COLUMN Processos.PROCESSO_VARIAVEL_VALORES.CD_OPCAO IS 'Chave da opção escolhida, só em campo de opção única (TP_DADO = O). Nulo nos demais tipos, inclusive múltipla escolha (C), cujas opções ficam em PROCESSO_VARIAVEL_OPCOES.';
+
+-- Opções marcadas de um campo de múltipla escolha (TP_DADO = 'C'): uma linha por opção. A linha em PROCESSO_VARIAVEL_VALORES
+-- registra a gravação (com CD_OPCAO nulo); seleção vazia = linha em VALORES sem linhas aqui.
+CREATE TABLE Processos.PROCESSO_VARIAVEL_OPCOES
+(
+	ID_PROCESSO_ETAPA UUID NOT NULL,
+	ID_VARIAVEL UUID NOT NULL,
+	CD_OPCAO Text NOT NULL Check (BTRIM(CD_OPCAO) <> ''),
+ primary key (ID_PROCESSO_ETAPA,ID_VARIAVEL,CD_OPCAO)
+);
 
 CREATE TABLE Processos.PROCESSO_VARIAVEIS_ATUAIS
 (
@@ -526,6 +549,7 @@ ALTER TABLE Processos.PROTOCOLO_ETAPA_DESTINATARIOS add  foreign key (ID_USUARIO
 
 ALTER TABLE Processos.PROTOCOLO_GESTORES_ELEGIVEIS add  foreign key (ID_USUARIO_SISTEMA) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
 
+ALTER TABLE Processos.PROCESSOS add  foreign key (ID_GRUPO_ORIGEM) REFERENCES Cadastro.GRUPOS (ID_GRUPO)  on update restrict  on delete restrict ;
 ALTER TABLE Processos.PROCESSOS add  foreign key (ID_USUARIO_INICIOU) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
 
 ALTER TABLE Processos.PROCESSOS add  foreign key (ID_USUARIO_GESTOR) REFERENCES Cadastro.USUARIOS_SISTEMA (ID_USUARIO_SISTEMA)  on update restrict  on delete restrict ;
@@ -678,6 +702,8 @@ ALTER TABLE Processos.PROCESSO_ETAPA_ENCAMINHAMENTOS add  foreign key (ID_PROCES
 
 ALTER TABLE Processos.PROCESSO_ETAPA_ENCAMINHAMENTOS add  foreign key (ID_PROCESSO_ETAPA) REFERENCES Processos.PROCESSO_ETAPAS (ID_PROCESSO_ETAPA)  on update restrict  on delete restrict ;
 
+ALTER TABLE Processos.PROCESSO_VARIAVEL_OPCOES add foreign key (ID_PROCESSO_ETAPA,ID_VARIAVEL) REFERENCES Processos.PROCESSO_VARIAVEL_VALORES (ID_PROCESSO_ETAPA,ID_VARIAVEL) on update restrict on delete restrict;
+
 ALTER TABLE Processos.PROCESSO_VARIAVEL_VALORES add  foreign key (ID_PROCESSO_ETAPA) REFERENCES Processos.PROCESSO_ETAPAS (ID_PROCESSO_ETAPA)  on update restrict  on delete restrict ;
 
 ALTER TABLE Processos.PROCESSO_VARIAVEIS_ATUAIS add  foreign key (ID_PROCESSO_ETAPA) REFERENCES Processos.PROCESSO_ETAPAS (ID_PROCESSO_ETAPA)  on update restrict  on delete restrict ;
@@ -708,7 +734,7 @@ ALTER TABLE Processos.PROCESSO_ETAPA_ENCAMINHAMENTOS ADD CONSTRAINT fk_pe_caminh
 ALTER TABLE Processos.PROCESSO_CONSULTAS ADD CONSTRAINT fk_pc_etapa_processo FOREIGN KEY (ID_PROCESSO_ETAPA, ID_PROCESSO) REFERENCES Processos.PROCESSO_ETAPAS (ID_PROCESSO_ETAPA, ID_PROCESSO) ON UPDATE RESTRICT ON DELETE RESTRICT;
 
 -- Domínios fechados já definidos na modelagem funcional.
-ALTER TABLE Processos.PROTOCOLO_VARIAVEIS ADD CONSTRAINT ck_protocolo_variavel_dado CHECK (TP_DADO IN ('S', 'I', 'R', 'M', 'V', 'B', 'O', 'D', 'H', 'T'));
+ALTER TABLE Processos.PROTOCOLO_VARIAVEIS ADD CONSTRAINT ck_protocolo_variavel_dado CHECK (TP_DADO IN ('S', 'I', 'R', 'M', 'V', 'B', 'O', 'C', 'D', 'H', 'T'));
 ALTER TABLE Processos.FORMULARIO_VARIAVEIS ADD CONSTRAINT ck_formulario_apresentacao CHECK (TP_APRESENTACAO IN ('1', '2', '3', '4', '5', '6'));
 ALTER TABLE Processos.ENCAMINHAMENTOS ADD CONSTRAINT ck_encaminhamento_tipo CHECK (TP_ENCAMINHAMENTO IN ('E', 'T', 'C'));
 ALTER TABLE Processos.PROTOCOLO_VERSOES ADD CONSTRAINT ck_protocolo_versao_numero CHECK (NR_VERSAO = -1 OR NR_VERSAO > 0);

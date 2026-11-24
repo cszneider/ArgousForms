@@ -58,6 +58,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       entries: ['index.html'],
+      include: ['@xyflow/react'],
       rolldownOptions: { plugins: [jsxInJs] },
     },
     css: { postcss: { plugins: [tailwindcss()] } },

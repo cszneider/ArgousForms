@@ -99,7 +99,6 @@ public final class CadastroService {
 				UsuarioSistema usuario = new UsuarioSistema();
 				usuario.setIdUsuarioSistema( UUID.randomUUID() );
 				usuario.setIdPessoa( pessoa.getIdPessoa() );
-				usuario.setDsNome( nome.strip() );
 				usuario.setDsEmail( email );
 				usuario.setCdHashSenha( hashSenha );
 				usuario.setDtInclusao( data( agora ) );
@@ -200,7 +199,7 @@ public final class CadastroService {
 				}
 
 				Instant agora = relogio.instant();
-				if( !email.equals( confirmacao.getDsEmail() ) ) {
+				if( !email.equals( confirmacao.getDsDestino() ) ) {
 					throw codigoInvalido();
 				}
 				if( confirmacao.getDtConfirmacao() != null ) {
@@ -247,7 +246,8 @@ public final class CadastroService {
 
 		ConfirmacaoEmail confirmacao = new ConfirmacaoEmail();
 		confirmacao.setIdUsuarioSistema( usuario.getIdUsuarioSistema() );
-		confirmacao.setDsEmail( usuario.getDsEmail() );
+		confirmacao.setDsDestino( usuario.getDsEmail() );
+		confirmacao.setTpCanal( "E" );
 		confirmacao.setCdHashToken( ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO );
 		confirmacao.setDtInclusao( data( agora ) );
 		confirmacao.setDtValidade( data( agora.plusSeconds( 600 ) ) );
@@ -260,7 +260,7 @@ public final class CadastroService {
 		tx.inserir( confirmacao );
 		if( confirmacao.getIdConfirmacaoEmail() == null ) throw new IllegalStateException( "A inclusão não retornou o identificador da confirmação." );
 
-		confirmacao.setCdHashToken( codigos.hash( confirmacao.getIdConfirmacaoEmail(), confirmacao.getIdUsuarioSistema(), confirmacao.getDsEmail(), codigo ) );
+		confirmacao.setCdHashToken( codigos.hash( confirmacao.getIdConfirmacaoEmail(), confirmacao.getIdUsuarioSistema(), confirmacao.getDsDestino(), codigo ) );
 		tx.alterar( confirmacao );
 	}
 
@@ -282,7 +282,7 @@ public final class CadastroService {
 	private Resultado enviar( ConfirmacaoEmail confirmacao, String codigo ) {
 
 		try {
-			envio.enviar( confirmacao.getDsEmail(), codigo );
+			envio.enviar( confirmacao.getDsDestino(), codigo );
 			return new Resultado( confirmacao.getIdConfirmacaoEmail(), true );
 		} catch ( EmailException e ) {
 			return new Resultado( confirmacao.getIdConfirmacaoEmail(), false );

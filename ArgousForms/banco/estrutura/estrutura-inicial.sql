@@ -1,6 +1,6 @@
 /*
 Created		01/07/2026
-Modified		13/10/2026
+Modified		23/11/2026
 Project		
 Model		
 Company		
@@ -59,14 +59,21 @@ Create table  Cadastro.USUARIOS_SISTEMA
 (
 	ID_USUARIO_SISTEMA UUID NOT NULL,
 	ID_PESSOA UUID NOT NULL UNIQUE ,
-	DS_NOME Varchar(200) NOT NULL,
 	DS_EMAIL Varchar(120) NOT NULL UNIQUE ,
 	CD_HASH_SENHA Varchar(255) NULL ,
-	DT_NASCIMENTO Timestamp NULL ,
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_EXCLUSAO Timestamp NULL ,
+	DS_CELULAR Varchar(30) NULL Constraint uk_usuarios_celular UNIQUE ,
+	SN_EMAIL_INSTITUCIONAL Boolean NOT NULL Default true,
+	SN_CELULAR_INSTITUCIONAL Boolean NOT NULL Default false,
  primary key (ID_USUARIO_SISTEMA)
 );
+
+-- M-16: o usuário guarda só o acesso; nome, nascimento e demais dados pessoais ficam em PESSOAS.
+COMMENT ON COLUMN Cadastro.USUARIOS_SISTEMA.DS_EMAIL IS 'E-mail de login (obrigatório e único).';
+COMMENT ON COLUMN Cadastro.USUARIOS_SISTEMA.DS_CELULAR IS 'Celular para convite e códigos; único quando preenchido.';
+COMMENT ON COLUMN Cadastro.USUARIOS_SISTEMA.SN_EMAIL_INSTITUCIONAL IS 'Verdadeiro: só a empresa altera o e-mail. Falso: o usuário altera, com confirmação por código.';
+COMMENT ON COLUMN Cadastro.USUARIOS_SISTEMA.SN_CELULAR_INSTITUCIONAL IS 'Verdadeiro: só a empresa altera o celular. Falso: o usuário altera, com confirmação por código.';
 
 Create table  Cadastro.HISTORICO_LOGINS
 (
@@ -74,7 +81,7 @@ Create table  Cadastro.HISTORICO_LOGINS
 	ID_USUARIO_ORIGEM_LOGIN UUID NOT NULL,
 	CD_BEARER_SHA256 Varchar(64) NOT NULL Constraint uk_historico_logins_bearer UNIQUE ,
 	DT_LOGIN Timestamp NOT NULL Default CURRENT_TIMESTAMP,
-	DT_VALIDADE Timestamp NOT NULL,
+	DT_VALIDADE Timestamp NOT NULL Default CURRENT_TIMESTAMP + INTERVAL '7 days',
 	DT_ULTIMO_ACESSO Timestamp NULL ,
 	DT_REVOGACAO Timestamp NULL ,
 	DS_ENDERECO_IP Varchar(45) NOT NULL,
@@ -333,15 +340,18 @@ Create table  Cadastro.CONFIRMACOES_EMAIL
 (
 	ID_CONFIRMACAO_EMAIL UUID NOT NULL,
 	ID_USUARIO_SISTEMA UUID NOT NULL,
-	DS_EMAIL Varchar(120) NOT NULL,
+	DS_DESTINO Varchar(120) NOT NULL,
 	CD_HASH_TOKEN Varchar(64) NOT NULL,
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_VALIDADE Timestamp NOT NULL,
 	DT_CONFIRMACAO Timestamp NULL ,
 	DT_REVOGACAO Timestamp NULL ,
 	NR_TENTATIVAS_INVALIDAS Smallint NOT NULL Default 0,
+	TP_CANAL Char(1) NOT NULL Default 'E' Constraint ck_confirmacoes_canal Check (TP_CANAL IN ('E', 'C')),
  primary key (ID_CONFIRMACAO_EMAIL)
 );
+
+COMMENT ON COLUMN Cadastro.CONFIRMACOES_EMAIL.DS_DESTINO IS 'E-mail (TP_CANAL E) ou celular (TP_CANAL C) que recebe o código.';
 
 Create table  Cadastro.PESSOAS
 (
@@ -351,11 +361,14 @@ Create table  Cadastro.PESSOAS
 	TP_SEXO Char(1) NULL ,
 	DS_END_EMAIL Varchar(120) NULL ,
 	DS_TELEFONE Varchar(30) NULL ,
-	DT_NASCIMENTO Timestamp NULL ,
-	DT_INCLUSAO Timestamp NOT NULL,
-	DT_EXCLUSAO Timestamp NULL ,
+	DT_NASCIMENTO Date NULL ,
+	DT_INCLUSAO Timestamp with time zone NOT NULL,
+	DT_EXCLUSAO Timestamp with time zone NULL ,
+	ID_FOTO UUID NULL ,
  primary key (ID_PESSOA)
 );
+
+COMMENT ON COLUMN Cadastro.PESSOAS.ID_FOTO IS 'Foto: _id da imagem no armazenamento de arquivos (GridFS), fora da árvore de Documentos. Sem FK; a aplicação cuida da integridade.';
 
 Create table  Cadastro.PAISES
 (
@@ -408,6 +421,7 @@ Create table  Cadastro.PESSOA_IDENTIFICACOES
 Create table  Cadastro.GRUPOS
 (
 	ID_GRUPO Serial NOT NULL,
+	ID_GRUPO_SUPERIOR Integer NULL Constraint ck_grupo_superior Check (ID_GRUPO_SUPERIOR IS NULL OR ID_GRUPO_SUPERIOR <> ID_GRUPO),
 	DS_NOME_GRUPO Varchar(50) NOT NULL,
 	SN_ATIVO Boolean NOT NULL,
 	DT_INCLUSAO Timestamp NOT NULL,
@@ -435,8 +449,16 @@ Create table  Cadastro.TAGS
 	SN_ATIVA Boolean NOT NULL,
 	DT_INCLUSAO Timestamp NOT NULL,
 	DT_ALTERACAO Timestamp NOT NULL,
+	SN_SISTEMA Boolean NOT NULL Default false,
+	DS_NOME_EXIBICAO Varchar(60) NULL ,
+	SN_RESTRITA Boolean NOT NULL Default false,
  primary key (CD_TAG)
 );
+
+COMMENT ON COLUMN Cadastro.GRUPOS.ID_GRUPO_SUPERIOR IS 'M-06: só em grupo departamento, e o superior também é departamento; sem ciclos (regras/validar-organizacao.sql).';
+COMMENT ON COLUMN Cadastro.TAGS.SN_SISTEMA IS 'Tag usada pelo sistema (cargas/carga-tags-sistema.sql): não se exclui nem desativa; só DS_NOME_EXIBICAO muda.';
+COMMENT ON COLUMN Cadastro.TAGS.DS_NOME_EXIBICAO IS 'Nome mostrado nas telas, no vocabulário da empresa (ex.: Coordenador para gestor).';
+COMMENT ON COLUMN Cadastro.TAGS.SN_RESTRITA IS 'Aviso de dado sensível (LGPD) nas telas que aplicam ou mostram a tag; sem controle de visibilidade na v1.';
 
 Create table  Cadastro.GRUPO_TAGS
 (
@@ -469,7 +491,9 @@ Create table  Cadastro.VINCULO_TAGS
  primary key (ID_USUARIO_SISTEMA,ID_GRUPO,CD_TAG)
 );
 
-Create unique index porEmail on Cadastro.USUARIOS_SISTEMA (DS_EMAIL);
+
+-- M-06: no máximo uma lotação ativa por usuário.
+Create unique index LotacaoUnicaPorUsuario on Cadastro.VINCULO_TAGS (ID_USUARIO_SISTEMA) WHERE CD_TAG = 'lotacao' AND SN_ATIVO;
 
 Create unique index PorPapelPermissao on Cadastro.PAPEL_PERMISSOES (ID_PAPEL,ID_PERMISSAO);
 
@@ -509,6 +533,7 @@ Alter table Cadastro.PESSOA_NACIONALIDADES add  foreign key (ID_PAIS) references
 Alter table Cadastro.TIPOS_IDENTIFICACAO add  foreign key (ID_PAIS) references Cadastro.PAISES (ID_PAIS)  on update restrict  on delete restrict ;
 Alter table Cadastro.PESSOA_IDENTIFICACOES add  foreign key (ID_PAIS) references Cadastro.PAISES (ID_PAIS)  on update restrict  on delete restrict ;
 Alter table Cadastro.PESSOA_IDENTIFICACOES add  foreign key (ID_TIPO_IDENTIFICACAO) references Cadastro.TIPOS_IDENTIFICACAO (ID_TIPO_IDENTIFICACAO)  on update restrict  on delete restrict ;
+Alter table Cadastro.GRUPOS add  foreign key (ID_GRUPO_SUPERIOR) references Cadastro.GRUPOS (ID_GRUPO)  on update restrict  on delete restrict ;
 Alter table Cadastro.USUARIO_GRUPOS add  foreign key (ID_GRUPO) references Cadastro.GRUPOS (ID_GRUPO)  on update restrict  on delete restrict ;
 Alter table Cadastro.GRUPO_TAGS add  foreign key (ID_GRUPO) references Cadastro.GRUPOS (ID_GRUPO)  on update restrict  on delete restrict ;
 Alter table Cadastro.VINCULO_TAGS add  foreign key (ID_USUARIO_SISTEMA,ID_GRUPO) references Cadastro.USUARIO_GRUPOS (ID_USUARIO_SISTEMA,ID_GRUPO)  on update restrict  on delete restrict ;

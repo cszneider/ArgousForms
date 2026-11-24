@@ -9,7 +9,7 @@ import FluxoPublicado from './fluxo-publicado.js';
 import ModeloHtmlPublicado from './modelo-html-publicado.js';
 import { formatarValorExemplo } from './variavel-texto.js';
 
-const tiposVariavel = { S: 'Texto', I: 'Inteiro', R: 'Decimal', M: 'Moeda', V: 'Valor monetário', B: 'Booleano', O: 'Opção', D: 'Data', H: 'Hora', T: 'Data e hora' };
+const tiposVariavel = { S: 'Texto', I: 'Inteiro', R: 'Decimal', M: 'Moeda', V: 'Valor monetário', B: 'Booleano', O: 'Opção', C: 'Múltipla escolha', D: 'Data', H: 'Hora', T: 'Data e hora' };
 const origensVariavel = { MANUAL: 'Manual', SISTEMA: 'Sistema', INSTITUICAO: 'Instituição', INTEGRACAO: 'Integração' };
 
 const secoes = [
@@ -140,6 +140,10 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
                 </div>
                 <div className="protocolo-publicado-variavel-faixa"><span>{t('Expressão regular')}</span><code>{variavel.definicao?.texto?.regex || t('Não definida')}</code></div>
               </>}
+              {(variavel.tipo === 'O' || variavel.tipo === 'C') && <div className="protocolo-publicado-variavel-faixa">
+                <span>{t('Opções')}</span>
+                <strong>{(variavel.definicao?.opcoes || []).map((opcao) => `${opcao.rotulo} (${opcao.codigo})${opcao.ativa === false ? ` · ${t('Inativa')}` : ''}`).join(' · ')}</strong>
+              </div>}
               {variavel.definicao?.valorExemplo && <div className="protocolo-publicado-variavel-exemplo">
                 <span>{t('Valor exemplo')}</span><strong>{variavel.tipo === 'S' ? formatarValorExemplo(variavel.definicao.valorExemplo, variavel.definicao?.texto?.mascara) : variavel.definicao.valorExemplo}</strong>
               </div>}
@@ -165,8 +169,9 @@ export default function ProtocoloPublicado({ idProtocolo, numeroInicial, aoVolta
               {formulario.campos?.map((campo, indice) => {
                 const variavel = variaveis.find((item) => item.id === campo.idVariavel);
                 return <div key={`${campo.idVariavel}-${indice}`} className="protocolo-publicado-campo">
-                  <span>{variavel?.nome || campo.idVariavel}{campo.obrigatorio ? ' *' : ''}</span>
+                  <span>{campo.nomeAlternativo || variavel?.nome || campo.idVariavel}{campo.obrigatorio ? ' *' : ''}</span>
                   <small>{variavel?.codigo || ''} · {campo.acesso === 'L' ? t('Somente leitura') : t('Preenchimento')}</small>
+                  {campo.textoAjuda && <small>{campo.textoAjuda}</small>}
                 </div>;
               })}
             </div>}

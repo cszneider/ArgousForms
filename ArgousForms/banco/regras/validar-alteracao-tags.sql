@@ -10,6 +10,15 @@ BEGIN
         RAISE EXCEPTION 'O código da tag não pode ser alterado.';
     END IF;
 
+    -- M-06: tag de sistema só muda o nome exibido (e a descrição).
+    IF OLD.SN_SISTEMA AND (NEW.SN_SISTEMA IS DISTINCT FROM OLD.SN_SISTEMA
+        OR NEW.SN_ATIVA IS DISTINCT FROM OLD.SN_ATIVA
+        OR NEW.SN_GRUPO IS DISTINCT FROM OLD.SN_GRUPO
+        OR NEW.SN_USUARIO IS DISTINCT FROM OLD.SN_USUARIO
+        OR NEW.SN_VINCULO IS DISTINCT FROM OLD.SN_VINCULO) THEN
+        RAISE EXCEPTION 'A tag "%" é do sistema: só o nome exibido pode ser alterado.', OLD.CD_TAG;
+    END IF;
+
     IF OLD.SN_GRUPO AND NOT NEW.SN_GRUPO
        AND EXISTS (SELECT 1 FROM Cadastro.GRUPO_TAGS WHERE CD_TAG = OLD.CD_TAG AND SN_ATIVA = true) THEN
         RAISE EXCEPTION 'Remova os vínculos com grupos antes de desmarcar essa aplicação.';
@@ -33,6 +42,23 @@ DROP TRIGGER IF EXISTS TRG_VALIDAR_ALTERACAO_TAG ON Cadastro.TAGS;
 CREATE TRIGGER TRG_VALIDAR_ALTERACAO_TAG
 BEFORE UPDATE ON Cadastro.TAGS
 FOR EACH ROW EXECUTE FUNCTION Cadastro.validar_alteracao_tag();
+
+CREATE OR REPLACE FUNCTION Cadastro.impedir_exclusao_tag_sistema()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.SN_SISTEMA THEN
+        RAISE EXCEPTION 'A tag "%" é do sistema e não pode ser excluída.', OLD.CD_TAG;
+    END IF;
+    RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS TRG_IMPEDIR_EXCLUSAO_TAG_SISTEMA ON Cadastro.TAGS;
+CREATE TRIGGER TRG_IMPEDIR_EXCLUSAO_TAG_SISTEMA
+BEFORE DELETE ON Cadastro.TAGS
+FOR EACH ROW EXECUTE FUNCTION Cadastro.impedir_exclusao_tag_sistema();
 
 CREATE OR REPLACE FUNCTION Cadastro.validar_vinculo_grupo_tag()
 RETURNS trigger

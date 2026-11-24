@@ -109,7 +109,7 @@ public final class DocumentoPdfProcessoService {
 
 	private String valorVariavel( Conexao conexao, UUID idProcesso, UUID idVersao, UUID idVariavel ) throws Exception {
 
-		String sql = "select x.TP_DADO, vv.JS_DEFINICAO, valor.VL_TEXTO, valor.VL_INTEIRO, valor.VL_DECIMAL, "
+		String sql = "select x.TP_DADO, vv.JS_DEFINICAO, atual.ID_PROCESSO_ETAPA, valor.VL_TEXTO, valor.VL_INTEIRO, valor.VL_DECIMAL, "
 			+ "valor.CD_MOEDA, valor.CD_VALOR_MONETARIO, valor.VL_BOOLEANO, valor.CD_OPCAO, valor.VL_DATA, valor.VL_HORA, valor.VL_DATA_HORA "
 			+ "from Processos.PROTOCOLO_VARIAVEIS x join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv "
 			+ "on pv.ID_VARIAVEL = x.ID_VARIAVEL and pv.ID_PROTOCOLO_VERSAO = ? "
@@ -131,7 +131,10 @@ public final class DocumentoPdfProcessoService {
 					case "M" -> linha.getString( "CD_MOEDA" );
 					case "V" -> linha.getString( "CD_MOEDA" ) == null ? null : linha.getString( "CD_MOEDA" ) + " " + linha.getString( "CD_VALOR_MONETARIO" );
 					case "B" -> linha.getObject( "VL_BOOLEANO" ) == null ? null : linha.getBoolean( "VL_BOOLEANO" ) ? "Sim" : "Não";
-					case "O" -> linha.getString( "CD_OPCAO" );
+					case "O" -> linha.getString( "CD_OPCAO" ) == null ? null :
+						br.com.argousForms.protocolos.OpcoesVariavel.rotulo( new JSONObject( linha.getString( "JS_DEFINICAO" ) ), linha.getString( "CD_OPCAO" ) );
+					case "C" -> br.com.argousForms.protocolos.OpcoesVariavel.rotulos( new JSONObject( linha.getString( "JS_DEFINICAO" ) ),
+						opcoesVariavel( conexao, linha.getObject( "ID_PROCESSO_ETAPA", UUID.class ), idVariavel ) );
 					case "D" -> linha.getString( "VL_DATA" );
 					case "H" -> linha.getString( "VL_HORA" );
 					case "T" -> linha.getString( "VL_DATA_HORA" );
@@ -145,6 +148,18 @@ public final class DocumentoPdfProcessoService {
 				return valor;
 			}
 		}
+	}
+
+	private List<String> opcoesVariavel( Conexao conexao, UUID idEtapa, UUID idVariavel ) throws Exception {
+
+		List<String> opcoes = new ArrayList<>();
+		if( idEtapa == null ) return opcoes;
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select CD_OPCAO from Processos.PROCESSO_VARIAVEL_OPCOES where ID_PROCESSO_ETAPA = ? and ID_VARIAVEL = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			consulta.setObject( 2, idVariavel );
+			try ( ResultSet linhas = consulta.executeQuery() ) { while( linhas.next() ) opcoes.add( linhas.getString( 1 ) ); }
+		}
+		return opcoes;
 	}
 
 	private String formatarMascara( String valor, JSONObject texto ) {

@@ -11,6 +11,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.mail.internet.InternetAddress;
 import jakarta.servlet.ServletContext;
@@ -59,6 +61,8 @@ import quatro.util.QtData;
 
 public final class ManutencaoUsuarioService {
 
+	private static final Logger LOG = Logger.getLogger( ManutencaoUsuarioService.class.getName() );
+
 	public record Resultado( UUID idUsuario, UUID idConfirmacao, boolean emailEnviado, boolean confirmacaoPendente ) {}
 	private record Emissao( UUID idConfirmacao, String codigo, String email, boolean convite ) {}
 
@@ -70,6 +74,7 @@ public final class ManutencaoUsuarioService {
 		String email = normalizarEmail( dados.optString( "email", "" ) );
 		String nomeSocial = texto( dados, "nomeSocial", 255, false );
 		String telefone = texto( dados, "telefone", 30, false );
+		String celular = texto( dados, "celular", 30, false );
 		String sexo = texto( dados, "sexo", 1, false );
 		if( sexo != null && !Set.of( "M", "F", "O", "P" ).contains( sexo ) ) throw invalido( "Sexo inválido." );
 		QtData nascimento = nascimento( dados.optString( "nascimento", "" ) );
@@ -86,6 +91,10 @@ public final class ManutencaoUsuarioService {
 				UsuarioSistema usuario = idUsuario == null ? null : usuario( conexao, idUsuario );
 				if( idUsuario != null && ( usuario == null || proprio && usuario.getDtExclusao() != null ) ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado." );
 				if( usuario != null && idPessoa != null && !idPessoa.equals( usuario.getIdPessoa() ) ) throw invalido( "A Pessoa não corresponde ao usuário." );
+				if( proprio && usuario != null ) {
+					if( Boolean.TRUE.equals( usuario.isSnEmailInstitucional() ) && !email.equals( usuario.getDsEmail() ) ) throw new ArgousFormsApiException( 403, "EMAIL_INSTITUCIONAL", "O e-mail institucional deve ser alterado pelo administrador." );
+					if( !java.util.Objects.equals( celular, usuario.getDsCelular() ) ) throw new ArgousFormsApiException( 409, "CELULAR_REQUER_CODIGO", "Use a confirmação por código para alterar o celular." );
+				}
 				Pessoa pessoa = usuario != null ? pessoa( conexao, usuario.getIdPessoa() ) : idPessoa == null ? null : pessoa( conexao, idPessoa );
 				if( idPessoa != null && pessoa == null ) throw invalido( "Pessoa selecionada não encontrada." );
 				UUID pessoaPorDocumento = localizarPessoaPorDocumento( conexao, identificacoes );
@@ -122,15 +131,20 @@ public final class ManutencaoUsuarioService {
 					usuario.setIdUsuarioSistema( UUID.randomUUID() );
 					usuario.setIdPessoa( pessoa.getIdPessoa() );
 					usuario.setDtInclusao( agora() );
+					usuario.setSnEmailInstitucional( true );
+					usuario.setSnCelularInstitucional( false );
 				} else if( convite ) {
 					usuario.setDtExclusao( null );
 					usuario.setCdHashSenha( null );
 					revogarSessoes( conexao, usuario.getIdUsuarioSistema() );
 					revogarPerfis( conexao, usuario.getIdUsuarioSistema() );
 				}
+				if( !proprio ) {
+					usuario.setSnEmailInstitucional( dados.optBoolean( "emailInstitucional", Boolean.TRUE.equals( usuario.isSnEmailInstitucional() ) ) );
+					usuario.setSnCelularInstitucional( dados.optBoolean( "celularInstitucional", Boolean.TRUE.equals( usuario.isSnCelularInstitucional() ) ) );
+				}
+				usuario.setDsCelular( celular );
 				boolean mudouEmail = !novoUsuario && !convite && !email.equals( usuario.getDsEmail() );
-				usuario.setDsNome( nome );
-				usuario.setDtNascimento( nascimento );
 				if( !mudouEmail ) {
 					usuario.setDsEmail( email );
 					pessoa.setDsEndEmail( email );
@@ -229,6 +243,181 @@ public final class ManutencaoUsuarioService {
 		}
 	}
 
+	public boolean reenviarConvite( UUID idUsuario, ServletContext contexto ) throws Exception {
+
+		Emissao emissao;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null || usuario.getCdHashSenha() != null ) {
+					throw new ArgousFormsApiException( 409, "CONVITE_INDISPONIVEL", "O usuário não possui convite pendente." );
+				}
+				revogarConfirmacoes( conexao, idUsuario );
+				emissao = emitirCodigo( conexao, idUsuario, usuario.getDsEmail(), true, contexto );
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return enviar( emissao );
+	}
+
+	public void atualizarDadosPessoais( UUID idUsuario, JSONObject dados ) throws Exception {
+
+		String nome = texto( dados, "nome", 200, true );
+		String nomeSocial = texto( dados, "nomeSocial", 255, false );
+		String sexo = texto( dados, "sexo", 1, false );
+		if( sexo != null && !Set.of( "M", "F", "O", "P" ).contains( sexo ) ) throw invalido( "Sexo inválido." );
+		QtData nascimento = nascimento( dados.optString( "nascimento", "" ) );
+		JSONArray nacionalidades = dados.optJSONArray( "nacionalidades" );
+		if( nacionalidades == null ) throw invalido( "Informe as nacionalidades." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado." );
+				Pessoa pessoa = pessoa( conexao, usuario.getIdPessoa() );
+				pessoa.setDsNomePessoa( nome );
+				pessoa.setDsNomeSocial( nomeSocial );
+				pessoa.setTpSexo( sexo );
+				pessoa.setDtNascimento( nascimento );
+				new PessoaNegocio( conexao, pessoa ).altera();
+				atualizarNacionalidades( conexao, pessoa.getIdPessoa(), nacionalidades );
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public void atualizarDocumentos( UUID idUsuario, JSONObject dados ) throws Exception {
+
+		JSONArray identificacoes = dados.optJSONArray( "identificacoes" );
+		if( identificacoes == null ) throw invalido( "Informe as identificações." );
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado." );
+				atualizarIdentificacoes( conexao, usuario.getIdPessoa(), identificacoes );
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+	}
+
+	public boolean solicitarTrocaEmail( UUID idUsuario, String emailInformado, ServletContext contexto ) throws Exception {
+
+		String email = normalizarEmail( emailInformado );
+		Emissao emissao;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado." );
+				if( Boolean.TRUE.equals( usuario.isSnEmailInstitucional() ) ) throw new ArgousFormsApiException( 403, "EMAIL_INSTITUCIONAL", "O e-mail institucional deve ser alterado pelo administrador." );
+				if( email.equals( usuario.getDsEmail() ) ) throw invalido( "Informe um e-mail diferente do atual." );
+				bloquearEmail( conexao, email );
+				verificarEmailLivre( conexao, email, idUsuario );
+				emissao = emitirCodigo( conexao, idUsuario, email, false, contexto );
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		return enviar( emissao );
+	}
+
+	public boolean solicitarTrocaCelular( UUID idUsuario, String celularInformado, ServletContext contexto ) throws Exception {
+
+		String celular = celularInformado == null ? "" : celularInformado.strip();
+		if( !celular.matches( "[+0-9() .-]{8,30}" ) ) throw invalido( "Informe um celular válido, com 8 a 30 caracteres." );
+		Emissao emissao;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null ) throw new ArgousFormsApiException( 404, "USUARIO_NAO_ENCONTRADO", "Usuário não encontrado." );
+				if( Boolean.TRUE.equals( usuario.isSnCelularInstitucional() ) ) throw new ArgousFormsApiException( 403, "CELULAR_INSTITUCIONAL", "O celular institucional deve ser alterado pelo administrador." );
+				if( celular.equals( usuario.getDsCelular() ) ) throw invalido( "Informe um celular diferente do atual." );
+				emissao = emitirCodigo( conexao, idUsuario, usuario.getDsEmail(), false, contexto );
+				ConfirmacaoEmail confirmacao = confirmacao( conexao, emissao.idConfirmacao() );
+				confirmacao.setCdHashToken( CadastroConfiguracao.codigos( contexto ).hash( emissao.idConfirmacao(), idUsuario, usuario.getDsEmail() + "|" + celular, emissao.codigo() ) );
+				new ConfirmacaoEmailNegocio( conexao, confirmacao ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		try {
+			new EmailService().enviarTrocaCelular( emissao.email(), emissao.codigo() );
+			return true;
+		} catch ( EmailException e ) { return false; }
+	}
+
+	public void confirmarTrocaCelular( UUID idUsuario, String celularInformado, String codigoInformado, ServletContext contexto ) throws Exception {
+
+		String celular = celularInformado == null ? "" : celularInformado.strip();
+		if( !celular.matches( "[+0-9() .-]{8,30}" ) || codigoInformado == null || !codigoInformado.replace( "-", "" ).matches( "[0-9]{8}" ) ) throw codigoInvalido();
+		ArgousFormsApiException rejeicao = null;
+		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
+			conexao.beginTransaction();
+			try {
+				UsuarioSistema usuario = usuario( conexao, idUsuario );
+				if( usuario == null || usuario.getDtExclusao() != null || Boolean.TRUE.equals( usuario.isSnCelularInstitucional() ) ) throw codigoInvalido();
+				ConfirmacaoEmail confirmacao;
+				try ( Query query = new Query( conexao ) ) {
+					query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :id and TP_CANAL = 'E' and DS_DESTINO = :email and DT_CONFIRMACAO is null and DT_REVOGACAO is null order by DT_INCLUSAO desc" );
+					query.setParameter( "id", idUsuario.toString() );
+					query.setParameter( "email", usuario.getDsEmail() );
+					query.executeQuery();
+					if( query.isEmpty() ) throw codigoInvalido();
+					confirmacao = new ConfirmacaoEmail();
+					ConfirmacaoEmailLocalizador.buscaCampos( confirmacao, query );
+				}
+				if( confirmacao.getDtValidade() == null || confirmacao.getDtValidade().getTimeInMillis() <= System.currentTimeMillis() ) throw codigoInvalido();
+				int tentativas = confirmacao.getNrTentativasInvalidas() == null ? 0 : confirmacao.getNrTentativasInvalidas();
+				if( tentativas >= 5 ) throw codigoInvalido();
+				boolean correto = CadastroConfiguracao.codigos( contexto ).confere( confirmacao.getIdConfirmacaoEmail(), idUsuario, usuario.getDsEmail() + "|" + celular, codigoInformado.replace( "-", "" ), confirmacao.getCdHashToken() );
+				if( !correto ) {
+					confirmacao.setNrTentativasInvalidas( tentativas + 1 );
+					if( tentativas + 1 >= 5 ) confirmacao.setDtRevogacao( agora() );
+					rejeicao = codigoInvalido();
+				} else {
+					confirmacao.setDtConfirmacao( agora() );
+					usuario.setDsCelular( celular );
+					new UsuarioSistemaNegocio( conexao, usuario ).altera();
+				}
+				new ConfirmacaoEmailNegocio( conexao, confirmacao ).altera();
+				conexao.commit();
+			} catch ( Exception e ) {
+				if( conexao.inTransaction() ) conexao.rollback();
+				throw e;
+			}
+		}
+		if( rejeicao != null ) throw rejeicao;
+	}
+
+	private ConfirmacaoEmail confirmacao( Conexao conexao, UUID idConfirmacao ) throws Exception {
+
+		try ( Query query = new Query( conexao ) ) {
+			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_CONFIRMACAO_EMAIL = :id" );
+			query.setParameter( "id", idConfirmacao.toString() );
+			query.executeQuery();
+			if( query.isEmpty() ) throw codigoInvalido();
+			ConfirmacaoEmail confirmacao = new ConfirmacaoEmail();
+			ConfirmacaoEmailLocalizador.buscaCampos( confirmacao, query );
+			return confirmacao;
+		}
+	}
+
 	public void excluirPessoa( UUID idPessoa ) throws Exception {
 
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
@@ -292,7 +481,7 @@ public final class ManutencaoUsuarioService {
 	private static void revogarConfirmacoes( Conexao conexao, UUID idUsuario ) throws Exception {
 
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :id and DT_CONFIRMACAO is null and DT_REVOGACAO is null" );
+			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where TP_CANAL = 'E' and ID_USUARIO_SISTEMA = :id and DT_CONFIRMACAO is null and DT_REVOGACAO is null" );
 			query.setParameter( "id", idUsuario.toString() );
 			query.executeQuery();
 			if( !query.isEmpty() ) do {
@@ -514,7 +703,7 @@ public final class ManutencaoUsuarioService {
 			}
 		}
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select ID_USUARIO_SISTEMA from Cadastro.CONFIRMACOES_EMAIL where DS_EMAIL = :email and DT_CONFIRMACAO is null and DT_REVOGACAO is null and DT_VALIDADE > CURRENT_TIMESTAMP" );
+			query.setSQL( "select ID_USUARIO_SISTEMA from Cadastro.CONFIRMACOES_EMAIL where TP_CANAL = 'E' and DS_DESTINO = :email and DT_CONFIRMACAO is null and DT_REVOGACAO is null and DT_VALIDADE > CURRENT_TIMESTAMP" );
 			query.setParameter( "email", email );
 			query.executeQuery();
 			if( !query.isEmpty() ) do {
@@ -655,7 +844,7 @@ public final class ManutencaoUsuarioService {
 		CodigoConfirmacao codigos = CadastroConfiguracao.codigos( contexto );
 		int enviosNaHora = 0;
 		try ( Query query = new Query( conexao ) ) {
-			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :id" );
+			query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where TP_CANAL = 'E' and ID_USUARIO_SISTEMA = :id" );
 			query.setParameter( "id", idUsuario.toString() );
 			query.executeQuery();
 			if( !query.isEmpty() ) do {
@@ -675,7 +864,8 @@ public final class ManutencaoUsuarioService {
 		String codigo = codigos.gerar();
 		ConfirmacaoEmail confirmacao = new ConfirmacaoEmail();
 		confirmacao.setIdUsuarioSistema( idUsuario );
-		confirmacao.setDsEmail( email );
+		confirmacao.setDsDestino( email );
+		confirmacao.setTpCanal( "E" );
 		confirmacao.setCdHashToken( ConfirmacaoEmailNegocioEspecifico.HASH_AGUARDANDO );
 		confirmacao.setDtInclusao( agora() );
 		confirmacao.setDtValidade( new QtData( Instant.now().plusSeconds( 600 ).toEpochMilli() ) );
@@ -716,13 +906,14 @@ public final class ManutencaoUsuarioService {
 		if( codigo == null || !codigo.replace( "-", "" ).matches( "[0-9]{8}" ) ) throw codigoInvalido();
 		String normalizado = codigo.replace( "-", "" );
 		ArgousFormsApiException rejeicao = null;
+		String emailAntigo = null;
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			conexao.beginTransaction();
 			try {
 				bloquearEmail( conexao, email );
 				ConfirmacaoEmail confirmacao;
 				try ( Query query = new Query( conexao ) ) {
-					query.setSQL( "select c.* from Cadastro.CONFIRMACOES_EMAIL c join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = c.ID_USUARIO_SISTEMA where c.DS_EMAIL = :email and c.DT_CONFIRMACAO is null and c.DT_REVOGACAO is null"
+					query.setSQL( "select c.* from Cadastro.CONFIRMACOES_EMAIL c join Cadastro.USUARIOS_SISTEMA u on u.ID_USUARIO_SISTEMA = c.ID_USUARIO_SISTEMA where c.TP_CANAL = 'E' and c.DS_DESTINO = :email and c.DT_CONFIRMACAO is null and c.DT_REVOGACAO is null"
 						+ ( credencial instanceof UUID ? " and c.ID_USUARIO_SISTEMA = :usuario" : " and u.CD_HASH_SENHA is null" ) + " order by c.DT_INCLUSAO desc" );
 					query.setParameter( "email", email );
 					if( credencial instanceof UUID idUsuario ) query.setParameter( "usuario", idUsuario.toString() );
@@ -734,11 +925,12 @@ public final class ManutencaoUsuarioService {
 				UUID idConfirmacao = confirmacao.getIdConfirmacaoEmail();
 				UsuarioSistema usuario = usuario( conexao, confirmacao.getIdUsuarioSistema() );
 				boolean convite = credencial instanceof String;
-				if( usuario == null || usuario.getDtExclusao() != null || !email.equals( confirmacao.getDsEmail() )
+				if( usuario == null || usuario.getDtExclusao() != null || !email.equals( confirmacao.getDsDestino() )
 					|| confirmacao.getDtConfirmacao() != null || confirmacao.getDtRevogacao() != null
 					|| confirmacao.getDtValidade() == null || confirmacao.getDtValidade().getTimeInMillis() <= System.currentTimeMillis()
 					|| convite && usuario.getCdHashSenha() != null
 					|| !convite && ( !usuario.getIdUsuarioSistema().equals( credencial ) || usuario.getCdHashSenha() == null || email.equals( usuario.getDsEmail() ) ) ) throw codigoInvalido();
+				if( !convite && Boolean.TRUE.equals( usuario.isSnEmailInstitucional() ) ) throw new ArgousFormsApiException( 403, "EMAIL_INSTITUCIONAL", "O e-mail institucional deve ser alterado pelo administrador." );
 				int tentativas = confirmacao.getNrTentativasInvalidas() == null ? 0 : confirmacao.getNrTentativasInvalidas();
 				if( tentativas >= 5 ) throw codigoInvalido();
 				if( !CadastroConfiguracao.codigos( contexto ).confere( idConfirmacao, usuario.getIdUsuarioSistema(), email, normalizado, confirmacao.getCdHashToken() ) ) {
@@ -752,6 +944,7 @@ public final class ManutencaoUsuarioService {
 					if( convite ) usuario.setCdHashSenha( SenhaSegura.gerarHash( (String) credencial ) );
 					else {
 						verificarEmailLivre( conexao, email, usuario.getIdUsuarioSistema() );
+						emailAntigo = usuario.getDsEmail();
 						usuario.setDsEmail( email );
 					}
 					new UsuarioSistemaNegocio( conexao, usuario ).altera();
@@ -770,6 +963,10 @@ public final class ManutencaoUsuarioService {
 			}
 		}
 		if( rejeicao != null ) throw rejeicao;
+		if( emailAntigo != null ) {
+			try { new EmailService().enviarAvisoEmailAlterado( emailAntigo ); }
+			catch ( EmailException e ) { LOG.log( Level.WARNING, "E-mail de aviso da troca de endereço não pôde ser entregue." ); }
+		}
 	}
 
 	private static void confirmarVinculoLocal( Conexao conexao, UUID idUsuario, String email ) throws Exception {

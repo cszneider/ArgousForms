@@ -135,7 +135,7 @@ final class CadastroRepositorioQuatro implements CadastroRepositorio {
 
 			List<ConfirmacaoEmail> resultado = new ArrayList<>();
 			try ( Query query = new Query( conexao ) ) {
-				query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where ID_USUARIO_SISTEMA = :usuario order by DT_INCLUSAO desc" );
+				query.setSQL( "select * from Cadastro.CONFIRMACOES_EMAIL where TP_CANAL = 'E' and ID_USUARIO_SISTEMA = :usuario order by DT_INCLUSAO desc" );
 				query.setParameter( "usuario", usuario.toString() );
 				query.executeQuery();
 				if( !query.isEmpty() ) {

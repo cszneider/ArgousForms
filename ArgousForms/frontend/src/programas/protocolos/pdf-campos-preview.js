@@ -33,8 +33,12 @@ export async function gerarPreviaPdf(bytes, documentoLido, campos, variaveis) {
       throw new Error('Um campo está associado a uma página inexistente.');
 
     const exemplo = variavel.valorInstituicao ?? variavel.definicao?.valorExemplo;
+    const opcoes = variavel.definicao?.opcoes || [];
+    const rotulo = (codigo) => opcoes.find((opcao) => opcao.codigo === codigo)?.rotulo || codigo;
     const valor = exemplo
-      ? variavel.tipo === 'S' ? formatarValorExemplo(exemplo, variavel.definicao?.texto?.mascara) : exemplo
+      ? variavel.tipo === 'S' ? formatarValorExemplo(exemplo, variavel.definicao?.texto?.mascara)
+        : variavel.tipo === 'O' ? rotulo(exemplo)
+        : variavel.tipo === 'C' ? (Array.isArray(exemplo) ? exemplo : [exemplo]).map(rotulo).join(', ') : exemplo
       : `{{${variavel.codigo}}}`;
     const paginaLida = await documentoLido.getPage(campo.pagina);
     const viewport = paginaLida.getViewport({ scale: 1 });

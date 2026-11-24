@@ -16,8 +16,13 @@ export default function ModeloHtmlPublicado({ documento, variaveis }) {
         FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'link', 'meta', 'base', 'style'],
         FORBID_ATTR: ['src', 'onerror', 'onclick'],
       }).replace(/\{\{([A-Za-z][A-Za-z0-9_.-]*)\}\}/g, (marcador, codigo) => {
-        const exemplo = variaveis.find((item) => item.codigo === codigo)?.definicao?.valorExemplo;
-        return escapar(exemplo || marcador);
+        const variavel = variaveis.find((item) => item.codigo === codigo);
+        const exemplo = variavel?.definicao?.valorExemplo;
+        const opcoes = variavel?.definicao?.opcoes || [];
+        const rotulo = (chave) => opcoes.find((opcao) => opcao.codigo === chave)?.rotulo || chave;
+        const exibido = variavel?.tipo === 'O' ? rotulo(exemplo) : variavel?.tipo === 'C' && exemplo
+          ? (Array.isArray(exemplo) ? exemplo : [exemplo]).map(rotulo).join(', ') : exemplo;
+        return escapar(exibido || marcador);
       });
       const secao = (tipo) => (documento.partes || []).filter((item) => item.tipo === tipo).map((item) => limpar(item.html)).join('');
       const css = (documento.estilos || []).map((estilo) => estilo.conteudo || '').join('\n').replace(/@import\b|url\s*\(/gi, '/* recurso externo bloqueado */');

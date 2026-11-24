@@ -3,6 +3,10 @@ package br.com.argousForms.processos;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.json.JSONArray;
@@ -17,6 +21,7 @@ import br.com.argousForms.model.persistencia.processos.Processo;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapa;
 import br.com.argousForms.model.persistencia.processos.ProcessoEtapaEncaminhamento;
 import br.com.argousForms.model.persistencia.processos.ProcessoLocalizador;
+import br.com.argousForms.protocolos.OpcoesVariavel;
 import quatro.sql.Conexao;
 import quatro.sql.PoolDeConexoes;
 import quatro.util.QtData;
@@ -172,7 +177,7 @@ public final class ProcessosService {
 		JSONArray gestores = new JSONArray();
 		try ( Conexao conexao = PoolDeConexoes.getConexao() ) {
 			exigirInicioElegivel( conexao, idVersao, usuario.idUsuario() );
-			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA, DS_NOME from Cadastro.USUARIOS_SISTEMA where DT_EXCLUSAO is null order by DS_NOME" ); ResultSet linhas = consulta.executeQuery() ) {
+			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select u.ID_USUARIO_SISTEMA, coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) as DS_NOME from Cadastro.USUARIOS_SISTEMA u join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA where u.DT_EXCLUSAO is null order by DS_NOME" ); ResultSet linhas = consulta.executeQuery() ) {
 				while( linhas.next() ) {
 					UUID idUsuario = linhas.getObject( 1, UUID.class );
 					if( elegivel( conexao, "Processos.PROTOCOLO_GESTORES_ELEGIVEIS", "ID_PROTOCOLO_VERSAO", idVersao, idUsuario ) ) {
@@ -207,7 +212,7 @@ public final class ProcessosService {
 	private JSONArray camposFormulario( Conexao conexao, UUID idFormulario, UUID idVersao ) throws Exception {
 
 		JSONArray campos = new JSONArray();
-		String sql = "select fv.ID_VARIAVEL, vv.DS_NOME, x.CD_VARIAVEL, x.TP_DADO, fv.TP_ACESSO, fv.SN_OBRIGATORIA, fv.TP_APRESENTACAO "
+		String sql = "select fv.ID_VARIAVEL, vv.DS_NOME, x.CD_VARIAVEL, x.TP_DADO, fv.TP_ACESSO, fv.SN_OBRIGATORIA, fv.TP_APRESENTACAO, fv.DS_NOME_ALTERNATIVO, fv.DS_TEXTO_AJUDA "
 			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VARIAVEL_VERSOES vv on vv.ID_VARIAVEL = x.ID_VARIAVEL and vv.NR_VERSAO = pv.NR_VERSAO "
@@ -217,7 +222,8 @@ public final class ProcessosService {
 			consulta.setObject( 2, idFormulario );
 			try ( ResultSet linhas = consulta.executeQuery() ) {
 				while( linhas.next() ) campos.put( new JSONObject().put( "id", linhas.getString( "ID_VARIAVEL" ) )
-					.put( "nome", linhas.getString( "DS_NOME" ) ).put( "codigo", linhas.getString( "CD_VARIAVEL" ) )
+					.put( "nome", linhas.getString( "DS_NOME_ALTERNATIVO" ) == null ? linhas.getString( "DS_NOME" ) : linhas.getString( "DS_NOME_ALTERNATIVO" ) )
+					.put( "textoAjuda", linhas.getString( "DS_TEXTO_AJUDA" ) == null ? "" : linhas.getString( "DS_TEXTO_AJUDA" ) )
 					.put( "tipo", linhas.getString( "TP_DADO" ) ).put( "acesso", linhas.getString( "TP_ACESSO" ) )
 					.put( "obrigatorio", linhas.getBoolean( "SN_OBRIGATORIA" ) ).put( "apresentacao", linhas.getString( "TP_APRESENTACAO" ) ) );
 			}
@@ -263,10 +269,10 @@ public final class ProcessosService {
 			JSONObject processo;
 			UUID idVersaoProtocolo;
 			String sqlProcesso = "select p.ID_PROTOCOLO_VERSAO, p.CD_NUMERO, p.TP_SITUACAO, p.TP_RESULTADO, p.DS_RESULTADO, p.DT_INICIO, p.DT_ENCERRAMENTO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR, "
-				+ "v.DS_TITULO, v.NR_VERSAO, iniciador.DS_NOME as NOME_INICIADOR, gestor.DS_NOME as NOME_GESTOR "
+				+ "v.DS_TITULO, v.NR_VERSAO, coalesce(nullif(btrim(pessoaIniciador.DS_NOME_SOCIAL), ''), pessoaIniciador.DS_NOME_PESSOA) as NOME_INICIADOR, coalesce(nullif(btrim(pessoaGestor.DS_NOME_SOCIAL), ''), pessoaGestor.DS_NOME_PESSOA) as NOME_GESTOR "
 				+ "from Processos.PROCESSOS p join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO "
-				+ "left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU "
-				+ "left join Cadastro.USUARIOS_SISTEMA gestor on gestor.ID_USUARIO_SISTEMA = p.ID_USUARIO_GESTOR where p.ID_PROCESSO = ?";
+				+ "left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU left join Cadastro.PESSOAS pessoaIniciador on pessoaIniciador.ID_PESSOA = iniciador.ID_PESSOA "
+				+ "left join Cadastro.USUARIOS_SISTEMA gestor on gestor.ID_USUARIO_SISTEMA = p.ID_USUARIO_GESTOR left join Cadastro.PESSOAS pessoaGestor on pessoaGestor.ID_PESSOA = gestor.ID_PESSOA where p.ID_PROCESSO = ?";
 			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlProcesso ) ) {
 				consulta.setObject( 1, idProcesso );
 				try ( ResultSet linha = consulta.executeQuery() ) {
@@ -286,9 +292,9 @@ public final class ProcessosService {
 			}
 			JSONArray etapas = new JSONArray();
 			String sqlEtapas = "select e.ID_PROCESSO_ETAPA, e.ID_PROTOCOLO_ETAPA, pe.ID_FORMULARIO, pe.DS_TITULO, e.NR_PASSAGEM, e.TP_SITUACAO, "
-				+ "e.ID_USUARIO_RESPONSAVEL, responsavel.DS_NOME as NOME_RESPONSAVEL, e.DT_DISPONIBILIZACAO, e.DT_ASSUMIU, e.DT_FINALIZACAO "
+				+ "e.ID_USUARIO_RESPONSAVEL, coalesce(nullif(btrim(pessoaResponsavel.DS_NOME_SOCIAL), ''), pessoaResponsavel.DS_NOME_PESSOA) as NOME_RESPONSAVEL, e.DT_DISPONIBILIZACAO, e.DT_ASSUMIU, e.DT_FINALIZACAO "
 				+ "from Processos.PROCESSO_ETAPAS e join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA "
-				+ "left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL "
+				+ "left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL left join Cadastro.PESSOAS pessoaResponsavel on pessoaResponsavel.ID_PESSOA = responsavel.ID_PESSOA "
 				+ "where e.ID_PROCESSO = ? order by e.DT_DISPONIBILIZACAO, e.NR_PASSAGEM";
 			try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( sqlEtapas ) ) {
 				consulta.setObject( 1, idProcesso );
@@ -337,7 +343,14 @@ public final class ProcessosService {
 	private JSONArray valoresFinalizados( Conexao conexao, UUID idEtapa, UUID idFormulario, UUID idVersao ) throws Exception {
 
 		JSONArray campos = new JSONArray();
-		String sql = "select x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, "
+		Map<String, List<String>> escolhas = new HashMap<>();
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_VARIAVEL, CD_OPCAO from Processos.PROCESSO_VARIAVEL_OPCOES where ID_PROCESSO_ETAPA = ?" ) ) {
+			consulta.setObject( 1, idEtapa );
+			try ( ResultSet linhas = consulta.executeQuery() ) {
+				while( linhas.next() ) escolhas.computeIfAbsent( linhas.getString( 1 ), chave -> new ArrayList<>() ).add( linhas.getString( 2 ) );
+			}
+		}
+		String sql = "select x.ID_VARIAVEL, x.CD_VARIAVEL, x.TP_DADO, vv.DS_NOME, vv.JS_DEFINICAO, fv.DS_NOME_ALTERNATIVO, "
 			+ "v.VL_TEXTO, v.VL_INTEIRO, v.VL_DECIMAL, v.CD_MOEDA, v.CD_VALOR_MONETARIO, v.VL_BOOLEANO, v.CD_OPCAO, v.VL_DATA, v.VL_HORA, v.VL_DATA_HORA "
 			+ "from Processos.FORMULARIO_VARIAVEIS fv join Processos.PROTOCOLO_VARIAVEIS x on x.ID_VARIAVEL = fv.ID_VARIAVEL "
 			+ "join Processos.PROTOCOLO_VERSAO_VARIAVEIS pv on pv.ID_PROTOCOLO_VERSAO = ? and pv.ID_VARIAVEL = x.ID_VARIAVEL "
@@ -358,13 +371,17 @@ public final class ProcessosService {
 						case "M" -> linhas.getString( "CD_MOEDA" );
 						case "V" -> linhas.getString( "CD_VALOR_MONETARIO" ) == null ? null : linhas.getString( "CD_MOEDA" ) + " " + linhas.getString( "CD_VALOR_MONETARIO" );
 						case "B" -> linhas.getObject( "VL_BOOLEANO" ) == null ? null : linhas.getBoolean( "VL_BOOLEANO" ) ? "Sim" : "Não";
-						case "O" -> linhas.getString( "CD_OPCAO" );
+						case "O" -> linhas.getString( "CD_OPCAO" ) == null ? null :
+							OpcoesVariavel.rotulo( new JSONObject( linhas.getString( "JS_DEFINICAO" ) ), linhas.getString( "CD_OPCAO" ) );
+						case "C" -> OpcoesVariavel.rotulos( new JSONObject( linhas.getString( "JS_DEFINICAO" ) ),
+							escolhas.getOrDefault( linhas.getString( "ID_VARIAVEL" ), List.of() ) );
 						case "D" -> linhas.getString( "VL_DATA" );
 						case "H" -> linhas.getString( "VL_HORA" );
 						case "T" -> linhas.getTimestamp( "VL_DATA_HORA" ) == null ? null : linhas.getTimestamp( "VL_DATA_HORA" ).toInstant().toString();
 						default -> null;
 					};
-					campos.put( new JSONObject().put( "codigo", linhas.getString( "CD_VARIAVEL" ) ).put( "nome", linhas.getString( "DS_NOME" ) )
+					campos.put( new JSONObject().put( "codigo", linhas.getString( "CD_VARIAVEL" ) )
+						.put( "nome", linhas.getString( "DS_NOME_ALTERNATIVO" ) == null ? linhas.getString( "DS_NOME" ) : linhas.getString( "DS_NOME_ALTERNATIVO" ) )
 						.put( "tipo", tipo ).put( "valor", valor == null ? JSONObject.NULL : valor )
 						.put( "definicao", new JSONObject( linhas.getString( "JS_DEFINICAO" ) ) ) );
 				}
@@ -379,17 +396,17 @@ public final class ProcessosService {
 			with usuario(id) as (values (?::uuid)), base as not materialized (
 			  select p.ID_PROCESSO, p.CD_NUMERO, p.ID_USUARIO_INICIOU, p.ID_USUARIO_GESTOR,
 			         p.TP_SITUACAO, p.TP_RESULTADO, p.DT_INICIO, p.DT_ENCERRAMENTO,
-			         v.DS_TITULO, v.ID_PROTOCOLO, iniciador.DS_NOME as NOME_INICIADOR, i.CD_FUSO_HORARIO
+			         v.DS_TITULO, v.ID_PROTOCOLO, coalesce(nullif(btrim(pessoaIniciador.DS_NOME_SOCIAL), ''), pessoaIniciador.DS_NOME_PESSOA) as NOME_INICIADOR, i.CD_FUSO_HORARIO
 			    from Processos.PROCESSOS p
 			    join Processos.PROTOCOLO_VERSOES v on v.ID_PROTOCOLO_VERSAO = p.ID_PROTOCOLO_VERSAO
-			    left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU
+			    left join Cadastro.USUARIOS_SISTEMA iniciador on iniciador.ID_USUARIO_SISTEMA = p.ID_USUARIO_INICIOU left join Cadastro.PESSOAS pessoaIniciador on pessoaIniciador.ID_PESSOA = iniciador.ID_PESSOA
 			    cross join Cadastro.INSTITUICAO i
 			), cartoes as (
 		  select b.*, e.ID_PROCESSO_ETAPA, pe.DS_TITULO as ETAPA, pe.TP_UNIDADE_PRAZO, e.DT_LIMITE, e.DT_DISPONIBILIZACAO,
-			         responsavel.DS_NOME as NOME_RESPONSAVEL, 'paraFazer' as COLUNA
+			         coalesce(nullif(btrim(pessoaResponsavel.DS_NOME_SOCIAL), ''), pessoaResponsavel.DS_NOME_PESSOA) as NOME_RESPONSAVEL, 'paraFazer' as COLUNA
 			    from base b join Processos.PROCESSO_ETAPAS e on e.ID_PROCESSO = b.ID_PROCESSO
 			    join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
-			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL
+			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL left join Cadastro.PESSOAS pessoaResponsavel on pessoaResponsavel.ID_PESSOA = responsavel.ID_PESSOA
 			    cross join usuario u
 			   where b.TP_SITUACAO in ('E','A') and e.TP_SITUACAO <> 'F' and e.ID_USUARIO_RESPONSAVEL = u.id
 			  union all
@@ -412,11 +429,11 @@ public final class ProcessosService {
 			                    and (d.CD_TAG_VINCULO is null or exists (select 1 from Cadastro.VINCULO_TAGS vt join Cadastro.USUARIO_GRUPOS ug on ug.ID_USUARIO_SISTEMA = vt.ID_USUARIO_SISTEMA and ug.ID_GRUPO = vt.ID_GRUPO join Cadastro.TAGS t on t.CD_TAG = vt.CD_TAG where vt.ID_USUARIO_SISTEMA = u.id and (d.ID_GRUPO is null or d.ID_GRUPO = vt.ID_GRUPO) and vt.CD_TAG = d.CD_TAG_VINCULO and vt.SN_ATIVO and ug.SN_ATIVO and t.SN_ATIVA and t.SN_VINCULO)))
 			  union all
 		  select b.*, e.ID_PROCESSO_ETAPA, pe.DS_TITULO, pe.TP_UNIDADE_PRAZO, e.DT_LIMITE, e.DT_DISPONIBILIZACAO,
-			         responsavel.DS_NOME, 'acompanhando'
+			         coalesce(nullif(btrim(pessoaResponsavel.DS_NOME_SOCIAL), ''), pessoaResponsavel.DS_NOME_PESSOA), 'acompanhando'
 			    from base b cross join usuario u
 			    left join lateral (select x.* from Processos.PROCESSO_ETAPAS x where x.ID_PROCESSO = b.ID_PROCESSO and x.TP_SITUACAO <> 'F' order by x.DT_LIMITE nulls last, x.DT_DISPONIBILIZACAO limit 1) e on true
 			    left join Processos.PROTOCOLOS_ETAPAS pe on pe.ID_PROTOCOLO_ETAPA = e.ID_PROTOCOLO_ETAPA
-			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL
+			    left join Cadastro.USUARIOS_SISTEMA responsavel on responsavel.ID_USUARIO_SISTEMA = e.ID_USUARIO_RESPONSAVEL left join Cadastro.PESSOAS pessoaResponsavel on pessoaResponsavel.ID_PESSOA = responsavel.ID_PESSOA
 			   where b.TP_SITUACAO in ('E','A') and (b.ID_USUARIO_INICIOU = u.id or b.ID_USUARIO_GESTOR = u.id)
 			     and not exists (select 1 from Processos.PROCESSO_ETAPAS x where x.ID_PROCESSO = b.ID_PROCESSO and x.TP_SITUACAO <> 'F' and x.ID_USUARIO_RESPONSAVEL = u.id)
 			     and not (b.TP_SITUACAO = 'A' and b.ID_USUARIO_GESTOR = u.id)
@@ -474,6 +491,16 @@ public final class ProcessosService {
 	boolean elegivelEtapa( Conexao conexao, UUID idEtapa, UUID idUsuario ) throws Exception {
 
 		return elegivel( conexao, idEtapa, idUsuario );
+	}
+
+	public boolean regraTemElegivel( Conexao conexao, UUID idRegra, boolean gestor ) throws Exception {
+
+		String tabela = gestor ? "Processos.PROTOCOLO_GESTORES_ELEGIVEIS" : "Processos.PROTOCOLO_ETAPA_DESTINATARIOS";
+		String coluna = gestor ? "ID_GESTOR_ELEGIVEL" : "ID_ETAPA_DESTINATARIO";
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_USUARIO_SISTEMA from Cadastro.USUARIOS_SISTEMA where DT_EXCLUSAO is null" ); ResultSet usuarios = consulta.executeQuery() ) {
+			while( usuarios.next() ) if( elegivel( conexao, tabela, coluna, idRegra, usuarios.getObject( 1, UUID.class ) ) ) return true;
+		}
+		return false;
 	}
 
 	private boolean elegivel( Conexao conexao, UUID idEtapa, UUID idUsuario ) throws Exception {

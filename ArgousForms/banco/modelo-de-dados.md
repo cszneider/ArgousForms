@@ -1,10 +1,12 @@
 # ArgousDocs — Modelo de dados: avaliação e plano de evolução
 
-**Versão 1.3.2 · 20/11/2026**
+**Versão 1.6 · 23/11/2026**
 **Base analisada:** `estrutura-inicial.sql` (Cadastro), `estrutura-docs.sql` (Docs), `estrutura-processos.sql` (Processos), `estrutura-notificacoes.sql` (Notificacoes) e os scripts de validação listados em `tabela.txt`.
 Também analisado: `ajuste-instituicao-processos-2026-10-29.sql` (recebido na versão 1.1).
 
 Documento vivo: cada nova decisão de produto atualiza a seção 5 e o registro de mudanças (seção 8). Os tickets citam os itens pelo código (ex.: **M-07**).
+
+> **Diretriz de desenvolvimento — KISS (Carlos, 23/11/2026):** manter simples. Entre duas soluções que atendem, escolher a mais simples de entender, usar e manter. Não criar opção, tabela, configuração ou automatismo para um caso que ainda não existe; quando houver dúvida, começar pela regra única e acrescentar depois, se a necessidade aparecer.
 
 ---
 
@@ -254,6 +256,23 @@ ADD COLUMN TP_AUTOAPROVACAO Char(1) NOT NULL DEFAULT 'P' CHECK (TP_AUTOAPROVACAO
 - **Política da instituição já existente:** `INSTITUICAO.SN_PERMITIR_DESTINATARIOS_UNICOS = false` obriga cada etapa a ter ao menos uma regra **não nominal** (grupo ou tag). Manter a política e refleti-la na UX: ao escolher uma pessoa específica em "Quem executa", o painel avisa e a validação da publicação (T06) aponta a pendência.
 - **Fotografia da resolução:** `PROCESSO_ETAPA_CANDIDATOS (ID_PROCESSO_ETAPA, ID_USUARIO_SISTEMA, DT_RESOLUCAO, CD_REGRA)`. Grava quem era elegível no momento em que a etapa ficou disponível. Mudanças futuras nos vínculos não reescrevem a história.
 
+- **Escada por tempo: responsável → substituto → gestor — DECIDIDO (23/11/2026).** Substitui o cadastro de ausências (M-07, descartado): o sistema não depende de alguém avisar que vai faltar, e cobre também quem está presente mas não faz.
+  1. O modelador pode definir, em cada etapa, **substitutos** além dos responsáveis, com as mesmas formas de regra (pessoa, grupo ou tag). As regras de destinatário ganham um **papel**: responsável ou substituto. A tag de sistema `substituto` permite dizer "o substituto do grupo X" sem nomear ninguém.
+  2. **Quando o prazo da etapa vence, o substituto é acionado e recebe o mesmo prazo de novo**, contado a partir do vencimento. Se também vencer, a etapa sobe para o **gestor do processo**. Ex.: 2 dias úteis → substituto no fim do 2º dia útil, gestor no fim do 4º. Não há coluna de prazo nova no protocolo.
+  3. Sem prazo na etapa: sem escalada automática. Sem substituto definido: no vencimento a etapa vai direto para o gestor.
+  4. **Acionar acrescenta, não move:** o substituto (ou o gestor) passa a ver a etapa em "Para assumir"; o responsável continua podendo concluí-la. Quem assumir fica com a etapa, e o anterior é avisado.
+  5. O **gestor pode agir a qualquer momento**, sem esperar a escada: **devolver à fila**, **transferir** para outro elegível ou **assumir ele mesmo**, mesmo sem ser elegível. Motivo obrigatório; tudo no histórico do processo.
+  6. **Notificações** em cada degrau: substituto acionado, etapa chegou ao gestor, tarefa assumida por outro.
+  - Escolha do modelador: **vários responsáveis** (todos veem desde o início, sem atraso) servem a trabalho que qualquer um faz; **responsável + substituto** serve a etapa com dono. O painel da etapa mostra o custo ("com substituto, o gestor é acionado em até 2× o prazo") e avisa quando só uma pessoa é nomeada.
+  - Impacto: em `PROCESSO_ETAPAS`, o limite do substituto (calculado pelo banco com `calcular_limite` a partir de `DT_LIMITE`) e o degrau atual; na aplicação, uma **rotina agendada** que verifica vencimentos e sobe a escada (peça nova). Estrutura exata a escrever com o restante do M-05.
+  - A opção `S` (substituto) de `TP_AUTOAPROVACAO` será revista na discussão do M-05.
+- **Etapa sem ninguém para executar — DECIDIDO (23/11/2026).** Quando a resolução das regras de uma etapa não encontra nenhum usuário (grupo desfalcado, sem gestor, sem lotados etc.):
+  1. a etapa vai **direto para o gestor do processo**, que fica com ela em "Para fazer";
+  2. o sistema gera **alerta para o gestor do processo e para os administradores do sistema**, dizendo qual etapa, qual regra e qual grupo ficou sem ninguém.
+  - Regra única da instituição: substitui a política por etapa `TP_SEM_DESTINATARIO` proposta acima (as opções "sobe um nível" e "bloqueia" saem).
+  - Não há subida automática na hierarquia de grupos para achar alguém.
+  - **Indicador preventivo — DECIDIDO (23/11/2026):** as telas de cadastro mostram antes do problema: selo "Sem gestor" no departamento sem gestor (no organograma) e um painel de **pendências de cadastro** que lista, entre outras, os grupos usados por protocolos publicados que não têm ninguém para a regra que os usa. Indicador calculado em consulta; não é restrição do banco (a empresa cria o grupo antes de vincular as pessoas).
+
 ### M-06 · Organização: hierarquia de grupos e tags de sistema
 
 > **Diretriz de produto (Carlos, 20/11/2026):** toda decisão de modelo precisa fazer sentido para qualquer tipo de empresa; exemplos de saúde servem para testar, não para definir.
@@ -266,6 +285,7 @@ ALTER TABLE Cadastro.GRUPOS
   ADD CONSTRAINT ck_grupo_superior CHECK (ID_GRUPO_SUPERIOR IS NULL OR ID_GRUPO_SUPERIOR <> ID_GRUPO);
 ```
 - **Regra do ArgousForms:** cada grupo responde a **no máximo um** grupo. O superior é **opcional** (topo da organização, comissões, grupos de projeto).
+- **Só departamentos têm superior — DECIDIDO (23/11/2026):** `ID_GRUPO_SUPERIOR` só em grupo com a tag `departamento`, e o superior também precisa ser `departamento`. Comitês, projetos, brigadas e afins ficam no mesmo cadastro, sem superior (na tela, numa faixa "fora da hierarquia" abaixo do organograma); sua coordenação é o vínculo `gestor` no próprio grupo. Tirar a tag `departamento` de um grupo com superior ou subordinados é bloqueado.
 - Por trigger: **sem ciclos**; o superior precisa estar ativo; **não se desativa um grupo com subordinados ativos** — a tela lista os subordinados para serem movidos ou desligados da hierarquia.
 - É a hierarquia usada para "subir níveis", "gestor do grupo acima" e alçada.
 - **Sem tabela de relações entre grupos** (`GRUPO_RELACOES` descartada): as demais características de um grupo são **tags de grupo** (`GRUPO_TAGS`, já existente). Consequência aceita na v1: não há relação dirigida entre dois grupos ("X apoia Y"); se surgir a necessidade, a tabela entra depois sem afetar a hierarquia.
@@ -286,7 +306,7 @@ ALTER TABLE Cadastro.TAGS
   | `departamento` | grupo | marca os grupos que são setores da estrutura |
   | `lotacao` | vínculo | setor **oficial** da pessoa; só em grupo `departamento`; **no máximo uma lotação ativa por pessoa** (índice único); define o grupo de origem do processo |
   | `gestor` | vínculo | gestor do grupo ("gestor do setor de origem", subida na hierarquia) |
-  | `substituto` | vínculo | responde pelo gestor nas ausências (M-07) |
+  | `substituto` | vínculo | substituto designado no grupo; usado na escada por tempo (M-05) para "o substituto do grupo X" |
   | `supervisor` | vínculo | nível intermediário entre gestor e equipe |
 
 - **Grupo de origem do processo:** `PROCESSOS.ID_GRUPO_ORIGEM Integer NULL` = lotação de quem inicia, gravada no início e imutável. Sem lotação → nulo; regras que dependem da origem seguem a política de etapa sem destinatário (M-05). Pessoa cedida a outro setor abre processos em nome da lotação (escolha de setor fica para depois, se necessária).
@@ -294,16 +314,9 @@ ALTER TABLE Cadastro.TAGS
 - **Tag sensível — DECIDIDO (20/11/2026):** `TAGS.SN_RESTRITA` existe **apenas como aviso de cuidado**. Quando marcada, as telas que aplicam ou mostram a tag exibem um alerta de dado sensível (LGPD). **Não há controle de visibilidade na v1.** O cadastro de tags orienta a não criar tags que revelem dados pessoais sensíveis (saúde, deficiência, religião, filiação sindical etc.). Controle de visibilidade e auditoria de quem aplica fica para versão futura, se necessário.
 - Proteção: as tags de sistema não podem ser excluídas nem desativadas, e o código e as aplicações não mudam; só `DS_NOME_EXIBICAO` é editável. Mesmo padrão de `validar_papel`.
 
-### M-07 · Ausências e delegação — visão de equipe
+### M-07 · Ausências e delegação — DESCARTADO (23/11/2026)
 
-```sql
-CREATE TABLE Cadastro.AUSENCIAS (
-  ID_AUSENCIA UUID PRIMARY KEY, ID_USUARIO_SISTEMA UUID NOT NULL,
-  DT_INICIO timestamptz NOT NULL, DT_FIM timestamptz NOT NULL CHECK (DT_FIM > DT_INICIO),
-  ID_USUARIO_DELEGADO UUID NULL,                       -- se nulo: substituto do grupo
-  ID_USUARIO_REGISTROU UUID NOT NULL, DT_INCLUSAO timestamptz NOT NULL, DT_CANCELAMENTO timestamptz NULL);
--- Não registra o motivo da ausência (LGPD: pode revelar saúde).
-```
+Sem tabela `AUSENCIAS` e sem cadastro de ausências. A cobertura de quem falta é feita pela **escada por tempo** do M-05 (responsável → substituto → gestor).
 
 ### M-08 · Partes condicionais e estilos — T11, T12
 
@@ -392,11 +405,41 @@ ALTER TABLE Cadastro.INSTITUICAO ADD COLUMN SN_MODULO_VIGENCIA Boolean NOT NULL 
 
 ### M-14 · Tipos de valor que faltam
 
-- **Opção única:** a coluna atual é `CD_OPCAO Text` (chave da opção; decisão do Carlos no DDL de 19/11/2026). `VL_OPCAO` fica obsoleto e será removido.
-- **Múltipla escolha:** ainda a definir (ver notas do antigo T02 em `Tickets/_arquivo/`).
+- **Opção única (O) — DECIDIDO:** `PROCESSO_VARIAVEL_VALORES.CD_OPCAO` guarda a chave escolhida; `VL_OPCAO` removido em 23/11/2026.
+- **Múltipla escolha (C) — DECIDIDO (23/11/2026):** uma linha por opção marcada em `PROCESSO_VARIAVEL_OPCOES (ID_PROCESSO_ETAPA, ID_VARIAVEL, CD_OPCAO)`, ligada à linha de `PROCESSO_VARIAVEL_VALORES` da passagem, que fica com `CD_OPCAO` nulo. Seleção vazia = linha em `VALORES` sem opções; obrigatoriedade validada pela aplicação. Validar que a chave existe na definição da variável fica com a aplicação.
 - **Anexo como campo:** `VL_ARQUIVO_VERSAO UUID` com FK para `Docs.ARQUIVO_VERSOES`.
 - **Pessoa/perfil como campo:** `VL_USUARIO UUID`.
 - Documentar os códigos de `TP_DADO` (`S, I, R, M, V, B, O, D, H, T`) e mapear para os tipos da tela 06.
+
+### M-15 · Atendimento externo (formulário público) — TEMA NOVO, a desenhar
+
+Casos: pedido de orçamento, pedido de compra, denúncia a comitê de conduta. Quem preenche **não tem cadastro** nem é Pessoa.
+- Protocolo marcado como **de início público**: gera link ou página; a identificação vem **nos campos do próprio formulário**.
+- Ao enviar, o externo recebe o **número do processo e uma chave de acompanhamento**; com eles vê a situação e as **mensagens que a equipe publicar** para ele (nunca campos internos).
+- Processo iniciado por externo: sem usuário iniciador; `ID_GRUPO_ORIGEM` nulo.
+- Propostas a decidir: identificação opcional (anonimato, típico de canal de conduta); formulário de complemento enviado pela equipe; limite de envios e verificação anti-robô; **o mesmo mecanismo de link com chave** para parecerista externo e signatário.
+
+### M-16 · Pessoas, usuários e convite — DECIDIDO e escrito nos scripts (23/11/2026)
+
+- **Pessoa não age no sistema.** `PESSOAS` é um contato com identificação (nome, CPF, e-mail, telefone): quem assina um documento, parecerista externo etc. Não tem lotação, vínculos nem tags. Responde à antiga pergunta aberta 2.
+- **Usuário é quem age:** organograma, lotação, vínculos, tags, execução de etapas.
+- **Todo usuário tem cadastro nas duas tabelas** (`USUARIOS_SISTEMA.ID_PESSOA`, já existente e único). Pessoa cadastrada não vira usuário por isso. Reforça a correção P-06 (fonte única dos dados pessoais em `PESSOAS`).
+- **Convite:** a instituição insere colaboradores numa tela (ou pela API, por exemplo a partir do RH) informando e-mail ou celular; o sistema gera e envia um link. O pré-cadastro pode ser mínimo (nome e e-mail) ou completo, inclusive lotação e grupos.
+- **Ao aceitar**, o usuário cria a senha, configura os dois fatores e pode corrigir nome, data de nascimento e seus dados cadastrais.
+- **E-mail e celular institucionais:** cada um tem, por usuário, uma marca "institucional" (gerenciado pela empresa). Institucional: só a empresa altera (tela ou API). Particular (ex.: terceirizado com e-mail próprio, celular pessoal): o usuário altera.
+- **Troca de e-mail ou celular feita pelo usuário** só vale depois de **confirmada por código** enviado ao novo endereço ou número; o antigo recebe aviso.
+- **Webhook:** toda alteração feita pelo usuário gera aviso à instituição informando o que mudou. Usa o contrato proposto de `EVENTO` (`WEBHOOK_EXEMPLO.md`: mesma assinatura HMAC, entrega assíncrona por *outbox*, ao menos uma vez, deduplicação por `idEvento`), com um tipo de evento de usuário alterado e somente os campos alterados.
+- **E-mail obrigatório — DECIDIDO (23/11/2026):** o login continua pelo e-mail; o celular é canal adicional (convite e códigos). Sem usuário só com celular na v1.
+- **P-06 corrigido agora — DECIDIDO (23/11/2026):** nome e data de nascimento ficam só em `PESSOAS`; saem de `USUARIOS_SISTEMA`. A aplicação passa a ler o nome do usuário pela pessoa.
+- **Estrutura proposta para o CASE (23/11/2026):** `USUARIOS_SISTEMA` + `DS_CELULAR Varchar(30) NULL` (único quando preenchido), `SN_EMAIL_INSTITUCIONAL Boolean NOT NULL DEFAULT true`, `SN_CELULAR_INSTITUCIONAL Boolean NOT NULL DEFAULT false`; `CONFIRMACOES_EMAIL` + `TP_CANAL Char(1) NOT NULL DEFAULT 'E'` (`E`/`C`) e `DS_EMAIL` → `DS_DESTINO`. Situação do usuário derivada, sem coluna: convidado = sem senha; ativo = com senha e sem `DT_EXCLUSAO`; inativo = com `DT_EXCLUSAO`.
+- **Meu perfil (telas 41–43 do canvas) — DECIDIDO (23/11/2026):**
+  - **Foto** em `PESSOAS.ID_FOTO UUID NULL`, **sem FK**: `_id` da imagem no GridFS (mesmo mecanismo dos documentos), **fora da árvore de Documentos**, com metadados `tipo: FOTO_PESSOA`, `idPessoa`, `contentType` e data. Sem histórico: trocar grava um UUID novo e apaga a imagem antiga; remover apaga e deixa nulo. Antes de gravar: só JPEG, PNG ou WebP, com limite de tamanho, reduzida (cerca de 512×512) e **sem metadados EXIF** (fotos de celular podem trazer a localização GPS).
+  - **Celular particular sem SMS — DECIDIDO (23/11/2026):** até existir provedor de SMS, a troca feita pelo usuário é confirmada por código enviado ao **e-mail atual** dele; com SMS, o código vai ao número novo.
+  - **Trocar a senha encerra as demais conexões** do usuário.
+  - **Encerrar uma conexão desfaz a confiança naquele dispositivo**: o próximo acesso por ele pede o código de novo.
+  - O menu da conta mantém Dados cadastrais, Trocar senha, Conexões ativas e Sair; "Dados cadastrais" abre o perfil.
+- Ciclo de vida a mostrar na tela: **convidado** (reenviar, cancelar), **ativo**, **inativo** (histórico preservado). Convite em lote pela tela, equivalente à API.
+- **Situação atual do banco (verificada em 23/11/2026):** `USUARIOS_SISTEMA` não tem celular nem marcas de institucional; não há tabela de convite (existe `CONFIRMACOES_EMAIL`, só para e-mail); nome e nascimento continuam duplicados (P-06). A estrutura será proposta junto com o desenho das telas de cadastro.
 
 ---
 
@@ -405,7 +448,7 @@ ALTER TABLE Cadastro.INSTITUICAO ADD COLUMN SN_MODULO_VIGENCIA Boolean NOT NULL 
 | Etapa | Mudanças | Por quê nesta ordem |
 |---|---|---|
 | 1 | P-01 a P-18 | Correções independentes, de baixo risco e sem mudar comportamento. |
-| 2 | M-06, M-07 | A organização é a base das regras de rota. |
+| 2 | M-06, M-16 | A organização e o cadastro de usuários são a base das regras de rota. |
 | 3 | M-01 (concentrador, prazo, resultado), M-03, M-05 | O núcleo do fluxo. |
 | 4 | M-02, M-04, M-13, M-14 | Documentos da etapa e formulários. |
 | 5 | M-08, M-09 | Modelos e estilos. |
@@ -419,11 +462,10 @@ Em todas: scripts **idempotentes**, com `BEGIN`/`COMMIT`, sem apagar dados, e co
 ## 7. Perguntas abertas
 
 1. **Multiempresa:** um banco (ou schema) por cliente? Como serão atualizadas as estruturas e o catálogo central (coleção de estilos, loja, tags de sistema)?
-2. **`PESSOAS` × `USUARIOS_SISTEMA`:** existirão pessoas sem usuário (no futuro, participantes externos)? Isso afeta P-06.
-3. **`PessoaPais` (P-03):** uma identificação por país foi intencional?
-4. **Consultas:** para que serve `ID_USUARIO_APROVADOR`?
-5. **`VARIAVEIS_INSTITUICAO`:** são os "campos da empresa" (razão social, CNPJ…)? Se forem, entram na Biblioteca › Campos como origem **"Da empresa"**. A UX ainda não os mostrava.
-6. **Códigos de domínio:** posso receber (ou você confirma) a lista dos `TP_*` sem `CHECK` (P-12)?
+2. **`PessoaPais` (P-03):** uma identificação por país foi intencional?
+3. **Consultas:** para que serve `ID_USUARIO_APROVADOR`?
+4. **`VARIAVEIS_INSTITUICAO`:** são os "campos da empresa" (razão social, CNPJ…)? Se forem, entram na Biblioteca › Campos como origem **"Da empresa"**. A UX ainda não os mostrava.
+5. **Códigos de domínio:** posso receber (ou você confirma) a lista dos `TP_*` sem `CHECK` (P-12)?
 
 ---
 
@@ -442,3 +484,9 @@ Em todas: scripts **idempotentes**, com `BEGIN`/`COMMIT`, sem apagar dados, e co
 | 1.3 | 20/11/2026 | M-03 (número do processo), M-01 (b) (prazo da etapa) e M-13 (prazo do parecer) decididos e escritos nos scripts oficiais e em `ajustes/2026-11-20-adequar-numero-prazo.sql`; testes em `testes/testar-numero-prazo.sql`. |
 | 1.3.1 | 20/11/2026 | M-06 (a) decidido: hierarquia por `GRUPOS.ID_GRUPO_SUPERIOR` opcional (no máximo um superior, sem ciclos, sem desativar grupo com subordinados ativos); `GRUPO_RELACOES` descartada, características de grupo como tags. M-06 (b) tags de sistema em discussão. |
 | 1.3.2 | 20/11/2026 | M-06 (b): tags de sistema decididas (`departamento`, `lotacao`, `gestor`, `substituto`, `supervisor`); lotação única por pessoa define `PROCESSOS.ID_GRUPO_ORIGEM`. Diretriz: o modelo deve servir a qualquer tipo de empresa. `SN_RESTRITA` só como aviso de cuidado (sem controle de visibilidade na v1). |
+| 1.4 | 23/11/2026 | Base real sincronizada com os scripts oficiais (`ajustes/2026-11-23-sincronizar-base-com-oficial.sql`). `VL_OPCAO` removido. Formulários: scripts ao abrir/fechar; por campo no formulário: scripts on focus/change/blur, nome alternativo e texto de ajuda. Múltipla escolha (C) com `PROCESSO_VARIAVEL_OPCOES`; `CD_OPCAO` só em opção única. |
+| 1.5 | 23/11/2026 | M-05: etapa sem ninguém para executar vai para o gestor do processo, com alerta ao gestor e aos administradores (substitui `TP_SEM_DESTINATARIO`), com indicador preventivo nas telas de cadastro; diretriz KISS; escada por tempo responsável → substituto → gestor (substituto recebe o mesmo prazo; acionar acrescenta, não move; ações do gestor; notificações). M-06: tag `substituto` mantida com novo significado. M-07 descartado (sem cadastro de ausências). Novo M-15 (atendimento externo, a desenhar). Novo M-16 (pessoas × usuários, convite, e-mail e celular institucionais, confirmação de troca, aviso por webhook). Pergunta aberta 2 respondida. |
+| 1.5.1 | 23/11/2026 | M-06 (a): só departamentos têm superior (e o superior também é departamento); demais grupos ficam sem superior. Telas de cadastro desenhadas no canvas (página 7 · Organização e acessos). |
+| 1.5.2 | 23/11/2026 | M-16: e-mail obrigatório (celular é canal adicional); P-06 corrigido (nome e nascimento só em `PESSOAS`); estrutura proposta para o CASE. |
+| 1.5.3 | 23/11/2026 | M-16: meu perfil — foto em `PESSOAS.ID_FOTO` (armazenamento de arquivos, fora de Documentos); trocar a senha encerra as outras conexões; encerrar conexão desfaz a confiança no dispositivo. |
+| 1.6 | 23/11/2026 | M-06 e M-16 escritos nos scripts oficiais a partir do DDL do CASE: `estrutura-inicial.sql` e `estrutura-processos.sql` (colunas, `LotacaoUnicaPorUsuario`), `regras/validar-organizacao.sql` (novo), tags de sistema em `regras/validar-alteracao-tags.sql`, `definir_grupo_origem` em `regras/validar-processos.sql`, `cargas/carga-tags-sistema.sql` (novo), `ajustes/2026-11-23-adequar-organizacao-usuarios.sql` e `testes/testar-organizacao.sql` (24 casos). Foto: `PESSOAS.ID_FOTO`, sem FK. `PESSOAS.DT_NASCIMENTO` passa a `Date`. |

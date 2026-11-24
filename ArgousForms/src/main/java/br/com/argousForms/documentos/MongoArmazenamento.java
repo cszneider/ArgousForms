@@ -70,6 +70,18 @@ public final class MongoArmazenamento implements AutoCloseable {
 		bucket.downloadToStream( new BsonString( idVersao.toString() ), destino );
 	}
 
+	public void enviarFotoPessoa( UUID idFoto, UUID idPessoa, InputStream conteudo ) {
+
+		Document metadados = new Document( "tipo", "FOTO_PESSOA" ).append( "idPessoa", idPessoa.toString() )
+			.append( "contentType", "image/jpeg" ).append( "dataEnvio", new java.util.Date() );
+		bucket.uploadFromStream( new BsonString( idFoto.toString() ), "foto-perfil.jpg", conteudo, new GridFSUploadOptions().metadata( metadados ) );
+	}
+
+	public boolean fotoPessoaExiste( UUID idFoto ) {
+
+		return bucket.find( new Document( "_id", new BsonString( idFoto.toString() ) ).append( "metadata.tipo", "FOTO_PESSOA" ) ).first() != null;
+	}
+
 	@Override
 	public void close() {
 

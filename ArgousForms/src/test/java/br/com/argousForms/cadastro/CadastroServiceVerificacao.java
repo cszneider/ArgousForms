@@ -32,7 +32,7 @@ import quatro.negocio.ErroDeNegocio;
 public final class CadastroServiceVerificacao {
 
 	private static final String EMAIL = "pessoa@example.com";
-	private static final String SENHA = " senha de teste ";
+	private static final String SENHA = " Senha#123 teste ";
 
 	public static void main(String[] args) throws Exception {
 		ConfirmacaoEmail provisoria = new ConfirmacaoEmail();
@@ -52,7 +52,6 @@ public final class CadastroServiceVerificacao {
 		exigir(c.repo.estado.usuario.getDsEmail().equals(EMAIL), "Normalização de e-mail");
 		exigir( c.repo.estado.pessoa != null && c.repo.estado.pessoa.getIdPessoa().equals( c.repo.estado.usuario.getIdPessoa() ), "Pessoa deve estar vinculada ao usuário" );
 		exigir( "Pessoa".equals( c.repo.estado.pessoa.getDsNomePessoa() ) && EMAIL.equals( c.repo.estado.pessoa.getDsEndEmail() ), "Dados mínimos da Pessoa" );
-		exigir(c.repo.estado.usuario.getDsNome().equals("Pessoa"), "Normalização de nome");
 		exigir(SenhaSegura.confere(SENHA, c.repo.estado.usuario.getCdHashSenha()), "Hash de senha verificável");
 		exigir(!SenhaSegura.confere(SENHA.strip(), c.repo.estado.usuario.getCdHashSenha()), "Não alterar espaços da senha");
 			exigir(!c.repo.estado.vinculo.isSnEmailVerificado(), "Novo usuário deve estar pendente");
@@ -62,7 +61,7 @@ public final class CadastroServiceVerificacao {
 		exigir(c.codigo.matches("[0-9]{8}") && !c.atual().getCdHashToken().equals(c.codigo), "Persistir somente hash do código");
 		exigir(new CodigoConfirmacao(new byte[32]).confere(resultado.idConfirmacao(), c.repo.estado.usuario.getIdUsuarioSistema(), EMAIL, c.codigo, c.atual().getCdHashToken()), "Hash deve usar o UUID gerado na inclusão");
 		exigir(c.atual().getDtValidade().getTimeInMillis() - c.relogio.millis() == 600_000, "Validade de dez minutos");
-		erro("CADASTRO_INDISPONIVEL", () -> c.service.cadastrar("Outro", EMAIL, "outra senha"));
+		erro("CADASTRO_INDISPONIVEL", () -> c.service.cadastrar("Outro", EMAIL, "Outra#123 senha"));
 		exigir(SenhaSegura.confere(SENHA, c.repo.estado.usuario.getCdHashSenha()), "Duplicidade não pode substituir senha");
 		c.service.confirmar(EMAIL, resultado.idConfirmacao(), c.codigo);
 		exigir(c.repo.estado.vinculo.isSnEmailVerificado() && c.atual().getDtConfirmacao() != null, "Confirmação atômica");

@@ -375,7 +375,7 @@ public final class NotificacoesService {
 	private String nomeUsuario( Conexao conexao, UUID idUsuario ) throws Exception {
 
 		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement(
-			"select DS_NOME from Cadastro.USUARIOS_SISTEMA where ID_USUARIO_SISTEMA = ?" ) ) {
+			"select coalesce(nullif(btrim(pessoa.DS_NOME_SOCIAL), ''), pessoa.DS_NOME_PESSOA) from Cadastro.USUARIOS_SISTEMA u join Cadastro.PESSOAS pessoa on pessoa.ID_PESSOA = u.ID_PESSOA where u.ID_USUARIO_SISTEMA = ?" ) ) {
 			consulta.setObject( 1, idUsuario );
 			try ( ResultSet linha = consulta.executeQuery() ) { return linha.next() ? linha.getString( 1 ) : "outro participante"; }
 		}

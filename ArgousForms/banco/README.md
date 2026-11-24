@@ -12,13 +12,14 @@
 | `testes/` | Testes de integridade; terminam em `ROLLBACK`. | Quando necessário |
 | `ajustes/` | Scripts que levaram a base existente de uma versão a outra, nomeados `AAAA-MM-DD-objetivo.sql`. Índice e situação em `ajustes/LEIA-ME.md`. | Não, em banco novo |
 | `exportados-case/` | DDLs originais exportados pelo CASE, preservados como histórico. | **Nunca** |
+| `exportados-banco/` | `pg_dump --schema-only` da base real, datados, para comparar a base com os scripts oficiais. Só estrutura, sem dados. | **Nunca** |
 | `ferramentas/` | `preprocessar_ddl.py`. | — |
 | `DDL.md` | Diferenças a preservar em relação aos exports do CASE e pendências de regras. | — |
 | `modelo-de-dados.md` | Avaliação do modelo e plano de evolução (decisões numeradas M-xx, P-xx). | — |
 
 **Banco novo, ordem de execução** (proprietário dos schemas, distinto de `carlos`):
-`estrutura/estrutura-inicial.sql` → `estrutura/estrutura-docs.sql` → `regras/validar-pais-identificacao.sql` → `regras/validar-aplicacoes-tags.sql` → `regras/validar-alteracao-tags.sql` → `cargas/carga-manual-teste.sql` → `cargas/carga-manual-tipos-identificacao.sql` → `regras/validar-papeis-perfis.sql` → `estrutura/estrutura-processos.sql` → `estrutura/estrutura-notificacoes.sql` → `regras/validar-processos.sql` → `regras/validar-vinculos-organizacao.sql`. Depois da instituição e do primeiro administrador: `cargas/carga-manual-raiz-2026-10-15.sql`.
-Essa sequência foi executada do zero em PostgreSQL 16 em 20/11/2026, seguida de `testes/testar-processos.sql` e `testes/testar-fluxo-resultado.sql` (todos os casos "ok").
+`estrutura/estrutura-inicial.sql` → `estrutura/estrutura-docs.sql` → `regras/validar-pais-identificacao.sql` → `regras/validar-aplicacoes-tags.sql` → `regras/validar-alteracao-tags.sql` → `cargas/carga-manual-teste.sql` → `cargas/carga-manual-tipos-identificacao.sql` → `regras/validar-papeis-perfis.sql` → `estrutura/estrutura-processos.sql` → `estrutura/estrutura-notificacoes.sql` → `regras/validar-processos.sql` → `regras/validar-vinculos-organizacao.sql` → `regras/validar-organizacao.sql` → `cargas/carga-tags-sistema.sql`. Depois da instituição e do primeiro administrador: `cargas/carga-manual-raiz-2026-10-15.sql`.
+Essa sequência foi executada do zero em PostgreSQL 16 em 23/11/2026, seguida de `testes/testar-organizacao.sql`, `testes/testar-opcoes.sql`, `testes/testar-fluxo-resultado.sql` e `testes/testar-numero-prazo.sql` (todos os casos "ok"). Os testes rodam em qualquer cliente (psql ou DBeaver, como script).
 
 Este diretório reunirá os scripts SQL do ArgousForms, incluindo a criação das tabelas e as regras implementadas por restrições, funções e triggers. Os scripts deverão identificar claramente a versão da estrutura a que pertencem e a ordem em que devem ser executados.
 

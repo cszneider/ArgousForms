@@ -161,7 +161,7 @@ public final class NovaVersaoProtocoloService {
 
 	private void copiarCamposFormulario( Conexao conexao, UUID origem, UUID destino ) throws Exception {
 
-		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_VARIAVEL, TP_ACESSO, NR_ORDEM, SN_OBRIGATORIA, TP_APRESENTACAO from Processos.FORMULARIO_VARIAVEIS where ID_FORMULARIO = ?" ) ) {
+		try ( PreparedStatement consulta = conexao.getConnection().prepareStatement( "select ID_VARIAVEL, TP_ACESSO, NR_ORDEM, SN_OBRIGATORIA, TP_APRESENTACAO, DS_NOME_ALTERNATIVO, DS_TEXTO_AJUDA from Processos.FORMULARIO_VARIAVEIS where ID_FORMULARIO = ?" ) ) {
 			consulta.setObject( 1, origem );
 			try ( ResultSet linhas = consulta.executeQuery() ) {
 				while( linhas.next() ) {
@@ -172,6 +172,8 @@ public final class NovaVersaoProtocoloService {
 					campo.setNrOrdem( linhas.getInt( 3 ) );
 					campo.setSnObrigatoria( linhas.getBoolean( 4 ) );
 					campo.setTpApresentacao( linhas.getString( 5 ) );
+					campo.setDsNomeAlternativo( linhas.getString( 6 ) );
+					campo.setDsTextoAjuda( linhas.getString( 7 ) );
 					new FormularioVariavelNegocio( conexao, campo ).insere();
 				}
 			}
